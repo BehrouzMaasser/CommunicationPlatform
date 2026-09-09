@@ -73,16 +73,17 @@ cancel_pending_friend_request
 
 ## 3.2 FriendshipService
 
-Public operations:
+## 3.2 FriendshipService
+
+Public operation:
 
 ```text
-create_friendship
 remove_friendship
 ```
 
-Internal helper methods may exist, but they are not part of the service contract and must not become required presentation-layer APIs.
+Friendship creation is not a standalone public application operation in V1.
 
----
+A friendship may be created only from the successful `FriendRequestService.accept_friend_request(...)` workflow. The acceptance service may call an internal/private friendship-creation helper so canonical ordering and persistence logic stay centralized without allowing callers to bypass the pending-request invariant.
 
 # 4. Friend Request Rules
 
@@ -183,58 +184,58 @@ The event must contain enough information for downstream consumers to identify t
 ```python
 FriendRequestService.accept_friend_request(
     current_user=current_user,
-    friend_request_id=friend_request_id,
+    request_id=request_id,
 )
 ```
 
 ## Authorization
 
-Only the request recipient may accept the request.
-
-```text
-friend_request.recipient == current_user
-```
-
-must be true.
+Only the request recipient may accept the pending request.
 
 ## Responsibilities
 
-The service must:
+The service must execute the acceptance as one application transaction:
 
-1. Resolve the friend request.
-2. Verify that the current user is its recipient.
-3. Verify that the friendship does not already exist.
-4. Create the friendship.
-5. Remove the friend request.
-6. Perform the operation atomically.
-7. Return the resulting friendship or another explicitly defined success result.
+1. Load and lock the pending `FriendRequest` where appropriate.
+2. Verify that `current_user` is the recipient.
+3. Revalidate that sender and recipient are distinct.
+4. Revalidate that no Friendship already exists for the pair.
+5. Create the canonical Friendship through an internal/private friendship helper.
+6. Delete the accepted `FriendRequest`.
+7. Commit the transaction.
+8. Publish the resulting application events only after successful commit.
 
-The friendship creation and friend-request deletion must occur within the same database transaction.
+Conceptually:
 
-The service must not delete the request and then create the friendship in separate transactions.
+```text
+accept_friend_request(request_id)
+        |
+        +-- validate pending request + authorization
+        +-- BEGIN TRANSACTION
+        +-- internal _create_friendship(sender, recipient)
+        +-- delete FriendRequest
+        +-- COMMIT
+        +-- publish accepted/friendship events
+```
+
+No external caller may create a Friendship directly and thereby bypass the friend-request acceptance rule.
 
 ## Successful Result
 
-Returns:
+The operation returns the resulting Friendship or an application result containing that Friendship.
 
-```text
-Friendship
-```
+After success, the accepted `FriendRequest` no longer exists.
 
-## Event
+## Events
 
-After the transaction successfully commits:
+After successful transaction commit, the application may publish:
 
 ```text
 FriendRequestAccepted
 FriendshipCreated
 ```
 
-may be emitted as separate events if both events are required by consumers.
-
-The exact event payload is defined by the Events Contract.
-
----
+These describe the same committed workflow from two domain perspectives and must not be emitted before commit.
 
 # 7. Rejecting a Friend Request
 
@@ -344,75 +345,31 @@ is emitted.
 
 # 9. Creating a Friendship
 
-## Operation
+Friendship creation is an internal domain step of friend-request acceptance, not a public V1 application command.
+
+A lower-level helper may exist, for example:
 
 ```python
-FriendshipService.create_friendship(
+FriendshipService._create_friendship(
     user_a=user_a,
     user_b=user_b,
 )
 ```
 
-This operation is primarily a domain operation and is normally invoked by the friend-request acceptance flow.
+or an equivalent private function/repository operation.
 
-## Rules
+Its purpose is to centralize:
 
-A friendship:
+1. self-friendship rejection
+2. canonical pair ordering
+3. duplicate protection
+4. persistence of the Friendship row
 
-- cannot exist between a user and themselves
-- must exist only once for a pair of users
-- is symmetric from the domain perspective
-- must not depend on request direction
+It must only be invoked from a workflow that has already established the legal reason for creating the friendship, which in V1 is successful acceptance of a pending FriendRequest.
 
-The persistence model uses a canonical ordering for the two users.
+The database remains the final protection against duplicate canonical friendship pairs under concurrency.
 
-Conceptually:
-
-```text
-user_1 < user_2
-```
-
-The service is responsible for normalizing the pair before persistence.
-
-Therefore:
-
-```text
-create_friendship(A, B)
-```
-
-and:
-
-```text
-create_friendship(B, A)
-```
-
-must identify the same friendship.
-
-The database must enforce uniqueness of the canonical pair.
-
-## Responsibilities
-
-The service must:
-
-1. Reject self-friendship.
-2. Normalize the two users into canonical order.
-3. Ensure the friendship does not already exist.
-4. Create the friendship.
-5. Return the created friendship.
-
-Database constraints must remain the final protection against duplicate friendships under concurrent requests.
-
-## Event
-
-After successful transaction commit:
-
-```text
-FriendshipCreated
-```
-
-is emitted.
-
----
+A direct public `create_friendship(A, B)` application operation must not be exposed in V1.
 
 # 10. Removing a Friendship
 
@@ -732,7 +689,7 @@ The recommended implementation order is:
 1. Finalize the `Friendship` model contract.
 2. Implement the `Friendship` model and database constraints.
 3. Define the Friends exception hierarchy and error codes.
-4. Implement `FriendshipService.create_friendship`.
+4. Implement the internal canonical friendship-creation helper used only by request acceptance.
 5. Implement `FriendshipService.remove_friendship`.
 6. Implement `FriendRequestService.send_friend_request`.
 7. Implement `FriendRequestService.accept_friend_request`.

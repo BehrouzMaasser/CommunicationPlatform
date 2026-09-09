@@ -547,9 +547,9 @@ Only an accepted `Friendship` creates a contact relationship.
 
 # 16. Friendship and Direct Messaging
 
-Friendship and direct conversation are separate domain concepts.
+Friendship and direct conversation are separate domain concepts, but Friendship is the eligibility requirement for initiating a new DM in V1.
 
-Being friends does not automatically create a direct conversation.
+Being friends does not automatically create a DirectConversation:
 
 ```text
 Friendship
@@ -557,11 +557,17 @@ Friendship
 DirectConversation
 ```
 
-Likewise, removing a friendship does not delete or modify an existing direct conversation.
+Instead:
 
-The direct messaging domain controls direct conversation membership and message access.
+```text
+No existing DM + current Friendship
+        ↓
+may create DirectConversation
+```
 
----
+Once the DirectConversation has been created, removing the Friendship does not delete or modify that existing DirectConversation and does not revoke either participant's access to its existing DM history.
+
+The direct-messaging domain remains responsible for conversation membership and message authorization.
 
 # 17. Friendship and Group Invitations
 

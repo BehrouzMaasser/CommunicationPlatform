@@ -124,9 +124,11 @@ Registration creates a new `User`.
 
 A successful registration does not implicitly grant access to any conversation, group, friendship, or other user-owned resource.
 
-Registration is implemented as a Django view rather than a DRF API view in V1.
+Registration is implemented as an ordinary Django view using Django Forms and server-rendered templates in V1.
 
-The exact URL and template behavior are defined by the presentation/application routing configuration.
+Register/login/logout are intentionally outside the JSON REST API contract for V1. A JSON/SPA authentication interface may be introduced later without changing the session-based authentication model.
+
+The exact URL, template, and redirect behavior are defined by the presentation/application routing configuration.
 
 ---
 
@@ -422,7 +424,7 @@ Those questions must not be solved by the authentication subsystem.
 
 # 16. REST Authentication Operations
 
-The V1 authentication API must provide operations corresponding to:
+The V1 authentication surface must provide operations corresponding to:
 
 ```text
 Register
@@ -431,11 +433,11 @@ Logout
 Current authenticated user
 ```
 
-The authentication operations are implemented through Django views and Django Forms in V1. The REST API uses the resulting Django session for authenticated application requests.
+`Register`, `Login`, and `Logout` are ordinary Django presentation-layer operations in V1. They are not `/api/v1/` JSON endpoints.
 
-The authentication implementation must not expose Django's internal authentication implementation directly as the public API.
+The application REST API uses the resulting Django session for authenticated resource requests.
 
----
+A JSON/SPA authentication API may be added in a later version, but it must reuse the same authentication/session rules rather than creating a second identity model.
 
 # 17. Authentication Presentation Boundary
 

@@ -15,7 +15,6 @@ V1 focuses exclusively on text communication and provides:
 * message delivery/read state
 * typing indicators
 * online/offline presence
-* last-online information
 * future desktop-client compatibility
 
 Voice rooms, voice calls, video, screen sharing, message reactions, and end-to-end encryption implementation are outside V1.
@@ -240,7 +239,7 @@ The server is authoritative for:
 * delivery state
 * read state
 * message immutability
-* DM permanent-deletion rules
+* V1 message immutability and no-deletion rules
 
 ---
 
@@ -250,26 +249,18 @@ A direct conversation is a persistent resource shared by exactly two users.
 
 There is exactly one DirectConversation for an unordered pair of users.
 
-A participant's DM visibility is participant-specific.
+Creating the first DirectConversation for a pair requires an existing Friendship.
 
-Therefore:
+Once the DirectConversation exists, removing that friendship does not delete the DirectConversation, its messages, or participant access to the existing DM.
 
-```text
-DirectConversation
-   |
-   +-- Participant A -> visible/hidden
-   +-- Participant B -> visible/hidden
-```
+V1 does not support:
 
-Hiding a DM does not delete the conversation or its messages.
+* participant-specific DM hiding
+* DM restoration
+* message deletion
+* mutual history deletion
 
-Restoring the DM reuses the same conversation.
-
-Sending a new message to a hidden DM restores that participant's visibility and uses the existing conversation.
-
-Permanent deletion of DM messages is a domain operation requiring a deletion request from both participants. When the condition is satisfied, all messages in that DM and their dependent attachments are permanently removed; the DirectConversation remains.
-
----
+These may be introduced in a later version without changing the permanent DirectConversation identity.
 
 # 8. Group Messaging Architecture
 
@@ -303,31 +294,46 @@ Group message delivery/read state is tracked per recipient.
 
 # 9. Attachments
 
-Attachments are first-class V1 resources associated with messages.
+Attachments are first-class V1 message payloads.
 
-The preferred conceptual flow is:
+A persisted attachment belongs to exactly one Message.
+
+V1 intentionally avoids a separate permanent draft-attachment model. Attachment-bearing messages are created using an atomic multipart HTTP operation:
 
 ```text
 Client
    |
-   | upload attachment
+   | multipart message request
+   | (optional text + one or more files)
    v
-Attachment resource
+Message Creation Service
    |
-   | attachment_id
+   +-- validate authorization and payload
+   +-- create Message
+   +-- create MessageAttachment row(s)
+   |
    v
-Create message
+COMMIT
+   |
+   v
+message.created realtime event
 ```
+
+A valid message may contain:
+
+* text only
+* attachments only
+* text and attachments
+
+A message with neither text nor attachments is invalid.
+
+Binary attachment data is not transported over WebSocket in V1. WebSocket message creation is therefore text-only; attachment-bearing messages use REST and still produce the normal realtime message event after commit.
 
 Attachment access is always subject to authorization through the owning message and conversation.
 
 The API must not expose internal storage paths as authorization mechanisms.
 
-When a message is permanently deleted, its dependent attachment data must also be cleaned up.
-
 When a group is deleted, its dependent messages and attachments are deleted as part of the group deletion operation.
-
----
 
 # 10. Message State Architecture
 
@@ -370,12 +376,6 @@ ONLINE
 OFFLINE
 ```
 
-The platform also records:
-
-```text
-last_online_at
-```
-
 Presence is connection-oriented.
 
 A user with at least one active authenticated realtime connection is online.
@@ -384,15 +384,13 @@ A user becomes offline when their final active realtime connection is gone.
 
 Redis may track active connections and transient presence state.
 
-The database may persist `last_online_at`.
+V1 does not persist or expose a last-online timestamp.
 
 Presence is not an authorization mechanism.
 
----
-
 # 12. Client Architecture
 
-The web client is a separate application from Django.
+The main application client is a React + TypeScript application served separately from Django application views. In V1, register/login/logout are provided by ordinary Django views and templates; after authentication, the React client uses the resulting Django session for REST and WebSocket access. A JSON/SPA authentication presentation may be introduced later.
 
 The client contains conceptual modules for:
 

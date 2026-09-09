@@ -6,7 +6,7 @@ This document defines the V1 HTTP/REST API for the communication platform.
 
 The REST API is responsible for:
 
-* authentication-related HTTP operations
+* session-authenticated application resources
 * user resources
 * friendships and friend requests
 * direct conversation management
@@ -17,7 +17,6 @@ The REST API is responsible for:
 * message creation where appropriate
 * attachments
 * message replies
-* conversation restoration
 * persistent resource state
 
 Realtime communication is handled through WebSockets and is defined separately.
@@ -228,134 +227,13 @@ The API must not expose:
 
 # 7. Authentication Endpoints
 
-Authentication endpoints manage the user's authentication session.
+Register, login, and logout are not JSON REST endpoints in V1.
 
-Authentication endpoints are not themselves subject to authentication unless explicitly stated.
+They are implemented through ordinary Django views, Django Forms, server-rendered templates, and Django session authentication as defined by `authentication.md`.
 
-## 7.1 Register
+The REST API receives the authenticated Django session cookie on subsequent requests.
 
-```http
-POST /api/v1/auth/register/
-```
-
-Creates a new user account.
-
-Request:
-
-```json
-{
-    "email": "alice@example.com",
-    "username": "alice",
-    "password": "password"
-}
-```
-
-Required fields:
-
-* `email`
-* `username`
-* `password`
-
-The email address must be unique.
-
-The username must be unique.
-
-The password must be stored using Django's password hashing mechanism.
-
-A successful registration returns:
-
-```text
-201 Created
-```
-
-Registration does not automatically create:
-
-* friendships
-* direct conversations
-* group conversations
-* messages
-* attachments
-
-The registration response must not contain:
-
-* password
-* password hash
-* session credentials
-
-## 7.2 Login
-
-```http
-POST /api/v1/auth/login/
-```
-
-Authenticates a user using:
-
-```text
-email
-password
-```
-
-Request:
-
-```json
-{
-    "email": "alice@example.com",
-    "password": "password"
-}
-```
-
-A successful login establishes an authenticated Django session.
-
-Successful response:
-
-```text
-200 OK
-```
-
-The response may contain the authenticated user's account representation.
-
-The response must not contain:
-
-* password
-* password hash
-* session credentials
-
-Invalid credentials result in:
-
-```text
-401 Unauthorized
-```
-
-The API must not authenticate a user using username as the authentication identifier.
-
-## 7.3 Logout
-
-```http
-POST /api/v1/auth/logout/
-```
-
-Authentication required.
-
-Terminates the current authenticated session.
-
-Successful response:
-
-```text
-204 No Content
-```
-
-Logout does not:
-
-* delete the user
-* delete friendships
-* delete conversations
-* delete messages
-* remove group membership
-* delete attachments
-
-It only terminates the current authentication session.
-
----
+A future version may add JSON/SPA authentication endpoints, but such endpoints are outside the V1 REST contract.
 
 # 8. Users
 
@@ -496,9 +374,9 @@ Successful response:
 200 OK
 ```
 
-The request becomes accepted and a friendship is established.
+Acceptance creates the mutual Friendship and deletes the pending FriendRequest row.
 
-The friendship is mutual.
+No persistent accepted-request status is stored.
 
 ---
 
@@ -516,9 +394,23 @@ Successful response:
 204 No Content
 ```
 
-No friendship is established.
+The pending FriendRequest row is deleted. No friendship is established.
 
----
+## 13.1 Cancel Sent Friend Request
+
+```http
+DELETE /api/v1/friend-requests/{request_id}/
+```
+
+Only the sender of the pending request may cancel it.
+
+Successful response:
+
+```text
+204 No Content
+```
+
+Cancellation deletes the pending FriendRequest row and does not create a Friendship.
 
 # 14. Friends
 
@@ -536,7 +428,7 @@ The response contains public friend information required by the client.
 
 # 15. Friendship Removal
 
-V1 may support removing an established friendship through:
+V1 supports removing an established friendship through:
 
 ```http
 DELETE /api/v1/friends/{user_id}/
@@ -575,13 +467,11 @@ Request:
 }
 ```
 
-The server identifies the unique DirectConversation belonging to the authenticated user and target user.
+If a DirectConversation already exists for the authenticated user and target user, the existing conversation is returned.
 
-If it already exists, the existing conversation is returned.
+If no DirectConversation exists, the server may create one only if the two users are currently friends.
 
-A second DirectConversation must never be created for the same pair of users.
-
-If the authenticated user's DM participation is hidden, the operation restores their visibility.
+A second DirectConversation must never be created for the same unordered pair.
 
 Example response:
 
@@ -590,15 +480,13 @@ Example response:
     "id": "dm-id",
     "participant": {
         "id": "user-id",
-        "display_name": "Bob",
+        "username": "bob",
         "avatar": null
     }
 }
 ```
 
-The endpoint therefore has get-or-create semantics at the domain level.
-
----
+The endpoint therefore has get-or-create semantics while enforcing Friendship as the V1 initiation requirement.
 
 # 18. List DMs
 
@@ -606,11 +494,9 @@ The endpoint therefore has get-or-create semantics at the domain level.
 GET /api/v1/dms/
 ```
 
-Returns direct conversations visible to the authenticated user.
+Returns all DirectConversations in which the authenticated user is a participant.
 
-A DM hidden by the authenticated user is excluded from the normal list.
-
-The other participant's deletion/visibility state does not affect whether the conversation appears to the authenticated user.
+V1 has no hidden/restored DM state.
 
 Pagination applies.
 
@@ -620,80 +506,27 @@ Recommended ordering:
 most recently active first
 ```
 
-The exact activity calculation is defined by the implementation.
-
----
-
 # 19. Retrieve DM
 
 ```http
 GET /api/v1/dms/{dm_id}/
 ```
 
-Returns the DM metadata.
+Returns DM metadata.
 
 The authenticated user must be one of the two participants.
 
-A hidden DM may either:
+Friendship is not required for access once the DirectConversation already exists.
 
-1. return `404 Not Found` because it is not currently visible to the user, or
-2. be explicitly restored before access.
+# 20. DM Hiding
 
-The API contract must use one consistent behavior.
+There is no endpoint for hiding or participant-specific deletion of a DM in V1.
 
-The recommended behavior is:
+# 21. DM Restoration
 
-> A hidden DM is not accessible through ordinary retrieval until restored.
+There is no DM restoration endpoint in V1 because no hidden DM state exists.
 
----
-
-# 20. Hide DM
-
-```http
-DELETE /api/v1/dms/{dm_id}/
-```
-
-This does **not** delete the DirectConversation.
-
-It sets the authenticated participant's conversation visibility to hidden.
-
-The other participant is unaffected.
-
-Successful response:
-
-```text
-204 No Content
-```
-
-The following must remain unchanged:
-
-* DirectConversation identity
-* other participant's visibility
-* messages
-* attachments
-* message history
-
----
-
-# 21. Restore DM
-
-```http
-POST /api/v1/dms/{dm_id}/restore/
-```
-
-Restores the authenticated user's visibility of the DM.
-
-Successful response:
-
-```text
-200 OK
-```
-
-The existing DirectConversation is reused.
-
-No new conversation is created.
-
----
+DM hiding/restoration may be introduced in a future API version.
 
 # 22. DM Messages
 
@@ -741,7 +574,23 @@ The final pagination strategy must support:
 POST /api/v1/dms/{dm_id}/messages/
 ```
 
-Request:
+The authenticated user must be a participant of the DM.
+
+Friendship is not required to continue using an already-existing DirectConversation.
+
+The endpoint accepts either JSON for text-only messages or multipart form data for messages containing attachments.
+
+Valid payloads are:
+
+```text
+text only
+attachment(s) only
+text + attachment(s)
+```
+
+At least one of non-empty `content` or one attachment is required.
+
+Example text-only request:
 
 ```json
 {
@@ -750,11 +599,7 @@ Request:
 }
 ```
 
-A message may contain zero or more attachments.
-
-The authenticated user must be a participant of the DM.
-
-A hidden DM is automatically restored when the user intentionally sends a new message to it, according to the domain contract.
+For an attachment-bearing request, files and optional `content`/`reply_to` are submitted in the same multipart message-creation operation.
 
 Successful response:
 
@@ -762,75 +607,25 @@ Successful response:
 201 Created
 ```
 
-The created message is immutable.
-
----
+The created message and attachments are immutable.
 
 # 25. Message Editing
 
 There is no endpoint for message editing.
 
-The following is invalid:
-
-```http
-PATCH /api/v1/dms/{dm_id}/messages/{message_id}/
-```
-
-and:
-
-```http
-PUT /api/v1/dms/{dm_id}/messages/{message_id}/
-```
-
-Message content cannot be changed after creation.
-
----
+`PATCH` or `PUT` of an existing message is invalid in V1.
 
 # 26. DM Message Deletion
 
-Individual unilateral message deletion is not supported.
+DM message deletion is not supported in V1.
 
-There is no:
-
-```http
-DELETE /api/v1/dms/{dm_id}/messages/{message_id}/
-```
-
-that immediately deletes a message.
-
-Permanent deletion requires agreement from both DM participants.
-
----
+There is no endpoint for unilateral message deletion, mutual deletion, or whole-history deletion.
 
 # 27. DM Message Deletion Request
 
-```http
-POST /api/v1/dms/{dm_id}/message-deletion-requests/
-```
+There is no DM message-deletion-request resource in V1.
 
-The authenticated participant requests permanent deletion of the DM message history.
-
-Request:
-
-```json
-{}
-```
-
-The request does not delete any messages immediately. Once **both DM participants have submitted the deletion request**, all messages in the DirectConversation are permanently deleted, together with their dependent attachments and recipient-state records.
-
-V1 does not support selecting individual DM messages for mutual permanent deletion.
-
-The DirectConversation itself remains and keeps its existing identity.
-
-Successful response:
-
-```text
-204 No Content
-```
-
-If the other participant has not yet requested deletion, the conversation and all messages remain unchanged.
-
----
+Mutual DM history deletion may be considered for a future API version.
 
 # 28. Message Replies
 
@@ -1042,13 +837,13 @@ A revoked link cannot subsequently authorize membership.
 POST /api/v1/groups/{group_id}/leave/
 ```
 
-A member may leave voluntarily.
+An active member may leave the group.
 
-If the member is the owner and other members remain, the operation is rejected until ownership is transferred.
+If an ordinary member leaves, only that membership is removed.
 
-If the leaving member is the final active member, the group is deleted.
+If the current owner leaves, the group is immediately disbanded, even if other members remain. The group and dependent group data are deleted according to the domain deletion rules, and affected connected clients receive the realtime group-deletion event.
 
----
+Ownership is never transferred automatically.
 
 # 40. Remove Group Member
 
@@ -1142,7 +937,21 @@ Messages are immutable.
 POST /api/v1/groups/{group_id}/messages/
 ```
 
-Request:
+The sender must be an active group member.
+
+As with DM messages, the endpoint accepts JSON for text-only messages or multipart form data for attachment-bearing messages.
+
+Valid payloads are:
+
+```text
+text only
+attachment(s) only
+text + attachment(s)
+```
+
+At least one of non-empty `content` or one attachment is required.
+
+Example text-only request:
 
 ```json
 {
@@ -1151,15 +960,13 @@ Request:
 }
 ```
 
-The sender must be an active group member.
-
 Successful response:
 
 ```text
 201 Created
 ```
 
----
+The created message and attachments are immutable.
 
 # 46. Group Message Deletion
 
@@ -1175,27 +982,25 @@ If the group itself is deleted, its messages are deleted as dependent data.
 
 # 47. Attachments
 
-Attachments are first-class V1 resources.
+Attachments are created as part of message creation in V1.
 
-The preferred upload flow is:
-
-```text
-1. Upload attachment
-2. Receive attachment identifier
-3. Create message referencing attachment
-```
-
-Potential endpoint:
+There is no standalone pre-upload endpoint such as:
 
 ```http
 POST /api/v1/attachments/
 ```
 
-The exact upload mechanism may use multipart upload or another storage strategy.
+Instead, attachment-bearing message endpoints accept multipart form data containing:
 
-The implementation must not expose internal storage paths.
+* optional non-empty text `content`
+* optional `reply_to`
+* one or more files
 
----
+At least one of text content or a file is required.
+
+The application operation creates the Message and its `MessageAttachment` rows together. A failed operation must not leave a valid empty Message or an authorized orphan attachment resource.
+
+Binary files are not transported over WebSocket in V1.
 
 # 48. Attachment Retrieval
 
@@ -1203,40 +1008,17 @@ The implementation must not expose internal storage paths.
 GET /api/v1/attachments/{attachment_id}/
 ```
 
-Access requires authorization through the attachment's message and messaging context.
+Access requires authorization through the attachment's owning message and messaging context.
 
-The API must not rely solely on obscurity of attachment identifiers.
-
----
+The API must not rely solely on obscurity of attachment identifiers and must not expose internal storage paths as authorization mechanisms.
 
 # 49. Attachment Deletion
 
-There is no ordinary client-facing attachment deletion operation.
+There is no ordinary client-facing attachment deletion operation in V1.
 
-Attachments are deleted as part of their owning message/context lifecycle.
+Because V1 messages are immutable and not individually deletable, message attachments remain with their owning messages.
 
-For example:
-
-```text
-DM message permanently deleted
-        |
-        v
-associated attachments deleted
-```
-
-or:
-
-```text
-group disbanded
-        |
-        v
-group messages deleted
-        |
-        v
-associated attachments deleted
-```
-
----
+Attachments are deleted when their owning group/context is legitimately destroyed, such as group disbanding.
 
 # 50. Message Representation
 
@@ -1249,7 +1031,7 @@ Conceptually:
     "id": "message-id",
     "sender": {
         "id": "user-id",
-        "display_name": "Alice",
+        "username": "alice",
         "avatar": null
     },
     "content": "Hello 👋",
@@ -1345,30 +1127,11 @@ The REST API exposes the persisted result but does not allow arbitrary clients t
 
 # 55. Presence
 
-Presence is primarily realtime.
+Presence is primarily realtime in V1.
 
-REST may expose the latest persisted presence information where useful.
+The REST API does not expose a `last_online_at` value or last-online history.
 
-Potential endpoint:
-
-```http
-GET /api/v1/users/{user_id}/presence/
-```
-
-The response may contain:
-
-```json
-{
-    "status": "OFFLINE",
-    "last_online_at": "2026-09-02T17:45:00Z"
-}
-```
-
-The server remains authoritative.
-
-The exact public visibility rules for presence should be finalized in the WebSocket/security contract.
-
----
+A dedicated REST presence endpoint is not required for V1. Current `ONLINE` / `OFFLINE` state is distributed by the realtime layer where authorized and needed by the client.
 
 # 56. Typing Indicators
 
@@ -1393,7 +1156,7 @@ The separation is:
 
 | Capability            |        REST |                          WebSocket |
 | --------------------- | ----------: | ---------------------------------: |
-| Authentication        |         Yes |      Uses authenticated connection |
+| Authentication        | Django views/session | Uses authenticated session |
 | User profiles         |         Yes |                    Optional events |
 | Friend requests       |         Yes |             Optional notifications |
 | Friendship            |         Yes |             Optional notifications |
@@ -1507,7 +1270,7 @@ The following operations must execute transactionally:
 * accepting a friend request and creating friendship
 * creating a DM if one does not exist
 * sending a message with attachments
-* mutual permanent DM message deletion
+* DM message/history deletion
 * accepting a group invitation and creating membership
 * transferring group ownership
 * removing a group member
@@ -1586,7 +1349,7 @@ For example:
 {
     "sender": {
         "id": "123",
-        "display_name": "Alice"
+        "username": "alice"
     }
 }
 ```
@@ -1619,7 +1382,10 @@ The REST API does not provide endpoints for:
 * screen sharing
 * message reactions
 * message editing
-* unilateral message deletion
+* message deletion
+* DM hiding/restoration
+* last-online history
+* JSON authentication endpoints for register/login/logout
 * end-to-end encryption management
 
 These capabilities may receive separate API contracts in future versions.

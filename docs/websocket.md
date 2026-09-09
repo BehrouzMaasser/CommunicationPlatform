@@ -352,7 +352,6 @@ The server stops delivering conversation-specific realtime events to that connec
 Unsubscribing does not:
 
 * leave a group
-* hide a DM
 * change membership
 * change read state
 
@@ -390,9 +389,13 @@ Conversation IDs must never function as authorization credentials.
 
 # 15. Message Creation
 
-V1 supports realtime message creation through WebSocket.
+A client may create a text message through WebSocket using:
 
-Client event:
+```text
+message.create
+```
+
+Example:
 
 ```json
 {
@@ -401,30 +404,17 @@ Client event:
     "payload": {
         "conversation_type": "dm",
         "conversation_id": "dm-id",
-        "content": "Hello!",
-        "reply_to": null,
-        "attachment_ids": []
+        "content": "Hello",
+        "reply_to": null
     }
 }
 ```
 
-Group example:
+V1 WebSocket message creation is text-only because binary attachments are created through multipart REST message creation.
 
-```json
-{
-    "type": "message.create",
-    "request_id": "request-uuid",
-    "payload": {
-        "conversation_type": "group",
-        "conversation_id": "group-id",
-        "content": "Anyone playing tonight?",
-        "reply_to": null,
-        "attachment_ids": []
-    }
-}
-```
+Therefore a WebSocket `message.create` command must contain non-empty text content.
 
----
+Attachment-only and text-plus-attachment messages use REST; after commit they are broadcast through the same `message.created` event used for text messages.
 
 # 16. Message Creation Processing
 
@@ -575,7 +565,7 @@ Example:
             "id": "message-id",
             "sender": {
                 "id": "user-id",
-                "display_name": "Alice"
+                "username": "alice"
             },
             "content": "Hello!",
             "created_at": "2026-09-02T20:00:00Z",
@@ -907,20 +897,14 @@ No persistent database record is required.
 
 # 33. Presence
 
-V1 presence states:
+V1 presence states are:
 
 ```text
 ONLINE
 OFFLINE
 ```
 
-The system also exposes:
-
-```text
-last_online_at
-```
-
----
+V1 does not expose or persist `last_online_at`.
 
 # 34. Presence Connection Semantics
 
@@ -936,17 +920,7 @@ When the user's last active connection disappears:
 ONLINE -> OFFLINE
 ```
 
-This means:
-
-```text
-one connection closes
-```
-
-does not necessarily mean the user is offline.
-
-Only the loss of the user's final active connection transitions them to offline.
-
----
+Closing one of several active connections does not make the user offline.
 
 # 35. Presence Event
 
@@ -959,42 +933,20 @@ Example:
     "timestamp": "2026-09-02T20:00:00Z",
     "payload": {
         "user_id": "user-id",
-        "status": "ONLINE",
-        "last_online_at": null
+        "status": "ONLINE"
     }
 }
 ```
 
-When going offline:
-
-```json
-{
-    "type": "presence.updated",
-    "event_id": "event-uuid",
-    "timestamp": "2026-09-02T20:05:00Z",
-    "payload": {
-        "user_id": "user-id",
-        "status": "OFFLINE",
-        "last_online_at": "2026-09-02T20:05:00Z"
-    }
-}
-```
-
----
+The payload contains current presence only.
 
 # 36. Presence Visibility
 
-A user must only receive presence information for users they are authorized to observe.
+Presence events must not be broadcast globally by default.
 
-At minimum, this includes relevant communication relationships such as:
+The realtime layer must apply a centralized authorization policy before sending a user's current `ONLINE` / `OFFLINE` state to another user.
 
-* friends
-* DM participants
-* active group members
-
-The exact visibility policy must be centralized rather than implemented independently by each consumer.
-
----
+The exact observer set is a presentation/privacy policy rather than a persistence concern and may be tightened without changing the presence-state model. V1 does not expose historical last-online information.
 
 # 37. Conversation Membership Events
 
@@ -1006,6 +958,7 @@ Example:
 group.member_added
 group.member_removed
 group.owner_changed
+group.deleted
 ```
 
 Example:
@@ -1019,7 +972,7 @@ Example:
         "group_id": "group-id",
         "user": {
             "id": "user-id",
-            "display_name": "Alice"
+            "username": "alice"
         }
     }
 }
@@ -1045,7 +998,7 @@ The server must not rely on the client unsubscribing voluntarily.
 
 # 39. Group Leaving
 
-When a member leaves:
+When an ordinary member leaves:
 
 ```text
 group.member_removed
@@ -1055,9 +1008,15 @@ is emitted to the remaining members.
 
 The leaving user's connection loses access to the group.
 
-If the user was the final member, the group is deleted according to the domain contract.
+When the owner leaves, the group is disbanded according to the domain contract. All affected connected members receive:
 
----
+```text
+group.deleted
+```
+
+and their connections immediately lose authorization to the group's realtime channel.
+
+The server must not rely on clients voluntarily unsubscribing.
 
 # 40. Ownership Transfer
 
@@ -1086,23 +1045,49 @@ Example:
 
 ---
 
-# 41. Friend Request Events
+## 40.1 Group Deletion / Disbanding
 
-Friend requests may be delivered realtime.
+Whenever a group is deleted—whether because the owner explicitly disbands it or because the owner leaves—the server emits:
+
+```text
+group.deleted
+```
+
+to affected connected members after the deletion transaction commits.
 
 Example:
+
+```json
+{
+    "type": "group.deleted",
+    "event_id": "event-uuid",
+    "timestamp": "2026-09-02T20:00:00Z",
+    "payload": {
+        "group_id": "group-id"
+    }
+}
+```
+
+After this event, affected connections must no longer be authorized to subscribe to or receive events from that group.
+
+---
+
+# 41. Friend Request Events
+
+Friend-request changes may be delivered realtime as notifications.
+
+V1 event types are:
 
 ```text
 friend_request.created
 friend_request.accepted
 friend_request.rejected
+friend_request.cancelled
 ```
 
-These are notifications rather than conversation events.
+`friend_request.cancelled` is emitted to the recipient after the sender successfully cancels a pending request.
 
-Persistence remains handled by the domain/application layer.
-
----
+These events are notifications rather than persistence commands. The application/domain operation must complete successfully before the event is published.
 
 # 42. Group Invitation Events
 
@@ -1398,22 +1383,11 @@ Otherwise the operation fails.
 
 # 54. Attachment Validation
 
-When creating a message with attachments:
+Binary attachments are not created or attached through WebSocket commands in V1.
 
-```json
-{
-    "attachment_ids": [
-        "attachment-1",
-        "attachment-2"
-    ]
-}
-```
+A WebSocket `message.create` command is text-only and must not contain `attachment_ids` or binary file data.
 
-the server must verify that the authenticated user is authorized to attach those resources.
-
-The client cannot attach an arbitrary attachment ID belonging to another context.
-
----
+Attachment-bearing messages are created through multipart REST message creation. Once committed, their attachment metadata is included in the normal `message.created` event so subscribed clients can render the message without a separate realtime upload protocol.
 
 # 55. Immutable Messages
 
@@ -1425,11 +1399,9 @@ message.update
 message.delete
 ```
 
-V1 permanent DM message deletion is not a WebSocket command. It is a REST/application operation requiring a deletion request from both DM participants.
-
 Messages are immutable after creation.
 
----
+V1 has no direct-message mutual deletion or history-deletion command. Message deletion may be introduced only in a future protocol version with a corresponding domain contract.
 
 # 56. No Reactions
 
@@ -1493,7 +1465,7 @@ Ephemeral state such as connection presence and typing state may use Redis.
 
 # 59. Presence Storage
 
-Presence is connection-oriented.
+Presence is connection-oriented and ephemeral in V1.
 
 Redis may track:
 
@@ -1501,30 +1473,9 @@ Redis may track:
 user -> active connections
 ```
 
-For example:
+The user is considered online while at least one authenticated realtime connection exists and offline when the final connection disappears.
 
-```text
-user-123
-    |
-    +-- connection-A
-    +-- connection-B
-```
-
-The user is considered online while at least one active connection exists.
-
-When the final connection disappears:
-
-```text
-user-123
-    |
-    X
-```
-
-the user becomes offline.
-
-`last_online_at` is persisted according to the application's persistence policy.
-
----
+V1 does not persist a `last_online_at` timestamp.
 
 # 60. Typing Storage
 
@@ -1676,6 +1627,7 @@ presence.updated
 group.member_added
 group.member_removed
 group.owner_changed
+group.deleted
 ```
 
 ### Friend requests
@@ -1684,6 +1636,7 @@ group.owner_changed
 friend_request.created
 friend_request.accepted
 friend_request.rejected
+friend_request.cancelled
 ```
 
 ### Group invitations

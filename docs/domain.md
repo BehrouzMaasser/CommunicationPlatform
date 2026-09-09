@@ -66,23 +66,21 @@ V1 includes:
 
 * user accounts
 * friendships
-* friend requests
-* direct conversations
+* friend requests, including sender cancellation while pending
+* friendship-gated initiation of direct conversations
 * group conversations
 * group ownership
 * group invitations
 * invitation links
 * group membership management
 * immutable messages
-* message attachments
+* text-only, attachment-only, and text-with-attachment messages
 * Unicode/emoji message content
-* replies
+* replies, including replies to replies
 * message delivery state
 * message read state
 * typing indicators
 * online/offline presence
-* last-online timestamp
-* per-user conversation visibility for DMs
 
 ## 2.2 Explicit V1 exclusions
 
@@ -94,12 +92,19 @@ The following are not implemented in V1:
 * screen sharing
 * message reactions
 * message editing
-* ordinary unilateral message deletion
-* group-message deletion
+* message deletion
+* DM hiding or participant-specific conversation removal
+* DM restoration
+* last-online timestamps/history
 * end-to-end encryption implementation
+* JSON/SPA authentication endpoints for register/login/logout
 
 The architecture must remain compatible with future introduction of:
 
+* DM hiding/restoration
+* message/history deletion policies
+* JSON/SPA authentication endpoints
+* last-online timestamps
 * voice communication
 * media communication
 * reactions
@@ -109,8 +114,6 @@ The architecture must remain compatible with future introduction of:
 * desktop clients
 * mobile clients
 
----
-
 # 3. User
 
 A `User` represents an authenticated person using the platform.
@@ -118,27 +121,29 @@ A `User` represents an authenticated person using the platform.
 A user has:
 
 * unique identity
+* unique username used as the public application identifier
 * authentication credentials
-* display name
 * optional avatar
 * account state
 * creation timestamp
 
+The domain does not define a separate `display_name` field in V1. Public user representations use `username`.
+
 A user may:
 
-* establish friendships
+* establish friendships through the friend-request acceptance workflow
 * send friend requests
-* accept friend requests
-* participate in direct conversations
+* cancel their own pending friend requests
+* accept or reject incoming friend requests
+* initiate direct conversations with friends
+* participate in existing direct conversations
 * participate in group conversations
 * send messages
 * receive messages
-* upload attachments
+* send attachments as part of messages
 * reply to messages
 
 A user is the fundamental identity used throughout the domain.
-
----
 
 # 4. Friendship
 
@@ -186,22 +191,17 @@ The domain must not represent this as two unrelated friendships.
 
 # 5. Friend Request
 
-A friend request represents a request by one user to establish a friendship with another user.
+A friend request represents a pending request by one user to establish a friendship with another user.
 
 A request has:
 
 * requester
 * recipient
 * creation timestamp
-* state
 
-Initial states are:
+`FriendRequest` has no persistent status field in V1.
 
-```text
-PENDING
-ACCEPTED
-REJECTED
-```
+The existence of the row means the request is pending.
 
 A request is directional:
 
@@ -211,64 +211,48 @@ Alice -> Bob
 
 means Alice requested friendship with Bob.
 
-After acceptance, the resulting friendship is mutual.
+The lifecycle is represented by persistence operations rather than status values:
+
+```text
+send       -> create FriendRequest
+accept     -> create Friendship and delete FriendRequest
+reject     -> delete FriendRequest
+cancel     -> delete FriendRequest
+```
+
+After acceptance, the resulting `Friendship` is the authoritative representation of the accepted relationship.
 
 The system must prevent:
 
 * a user requesting friendship with themselves
-* duplicate active requests for the same pair
-* establishing duplicate friendships between the same pair of users
+* duplicate pending requests for the same relationship
+* friend requests between users who are already friends
+* duplicate friendships between the same pair of users
 
-If two users are already friends, another friend request between them is invalid.
+Only the recipient may accept or reject a pending request.
 
-The exact behavior for cancelling a pending request may be defined by the application service contract.
-
----
+Only the sender may cancel a pending request.
 
 # 6. Presence
 
-Presence represents a user's current availability to the realtime system.
+Presence represents whether a user currently has at least one authenticated realtime connection.
 
-V1 supports:
+V1 presence states are:
 
 ```text
 ONLINE
 OFFLINE
 ```
 
-A user may be authenticated while offline.
+Presence is connection-oriented and ephemeral.
 
-Therefore:
+A user becomes `ONLINE` when their first authenticated realtime connection becomes active and becomes `OFFLINE` when their final authenticated realtime connection ends.
 
-```text
-authenticated != online
-```
+V1 does not persist or expose `last_online_at`.
 
-Presence is primarily realtime state.
+Presence should not be treated as a permanent user preference or as an authorization mechanism.
 
-The domain also stores:
-
-```text
-last_online_at
-```
-
-which records the most recent time the system determined that the user went offline.
-
-Conceptually:
-
-```text
-User
- |
- +-- current presence
- |
- +-- last_online_at
-```
-
-Presence should not be treated as a permanent user preference.
-
-The server is authoritative for presence.
-
----
+The server is authoritative for current presence.
 
 # 7. Direct Messaging
 
@@ -276,18 +260,20 @@ Direct messaging is a distinct domain concept from group chats.
 
 A `DirectConversation` represents a private conversation between exactly two users.
 
+A new direct conversation may be initiated only when the two users are currently friends.
+
 Example:
 
 ```text
-DirectConversation #1
-
-Alice
-Bob
+Friendship(Alice, Bob)
+        |
+        v
+DirectConversation(Alice, Bob)
 ```
 
-A direct conversation always has exactly two distinct participants.
+Once a DirectConversation exists, removing the friendship does not delete the conversation, its messages, or either participant's access to that existing conversation.
 
----
+A direct conversation always has exactly two distinct participants.
 
 # 8. Direct Conversation Uniqueness
 
@@ -351,49 +337,31 @@ DirectConversation
  +-- Participant -> Bob
 ```
 
-The participant record may contain user-specific conversation state.
+V1 does not include participant-specific hidden/deleted/restored conversation state.
 
-In particular, it contains whether the user has locally hidden/deleted the conversation.
-
-Conceptually:
-
-```text
-deleted_at
-```
-
-means:
-
-> This participant has removed the conversation from their visible DM history.
-
-It does not mean:
-
-> The DirectConversation itself has been deleted.
-
----
+A participant record therefore must not be required solely to implement DM visibility. If a participant model is retained for extensibility or other per-user conversation state, no V1 field may imply that a participant can hide or restore the conversation.
 
 # 10. Direct Conversation Deletion
 
-Direct conversation deletion is not supported in V1.
+Direct conversation hiding or participant-specific deletion is not supported in V1.
 
-A participant cannot delete or hide a DM conversation for themselves.
+A participant cannot remove a DM from only their own history.
 
-The DirectConversation remains available to both participants according to the conversation authorization rules.
+The DirectConversation remains available to both participants according to the normal conversation authorization rules.
 
-The DirectConversation itself is a persistent resource and is not deleted through a participant-level conversation deletion action.
+The DirectConversation itself is a persistent resource and is not deleted merely because communication stops or the users cease to be friends.
+
+DM hiding/restoration may be introduced in a later version, but no V1 persistence or API contract should depend on it.
 
 # 11. Direct Conversation Restoration
 
-Direct conversation restoration is not supported in V1 because participant-level DM deletion or hiding is not supported.
-
-The existing DirectConversation is reused whenever the same pair of users communicates again.
+Direct conversation restoration is not supported in V1 because there is no hidden/deleted participant state.
 
 # 12. Reopening a Deleted DM
 
 There is no deleted or hidden DM state in V1.
 
-If two users communicate again, the existing DirectConversation for that pair must be reused.
-
-The system must not create another DirectConversation for the same pair of users.
+Whenever the same pair communicates through an existing DM, the same DirectConversation is reused.
 
 # 13. Permanent Direct Conversation Identity
 
@@ -401,23 +369,21 @@ Direct conversations are persistent domain resources.
 
 They are not deleted as a result of:
 
-* a participant ending communication with the other participant;
-* a friendship being removed;
-* the conversation becoming temporarily inactive.
+* friendship removal
+* temporary inactivity
+* either participant stopping communication
 
-There is exactly one DirectConversation for a given pair of users.
-
-The conversation's identity remains stable for that pair of users.
+There is exactly one DirectConversation for a given pair of users, and its identity remains stable.
 
 # 14. Direct Message Deletion
 
 Direct messages cannot be deleted in V1.
 
-There is no participant-level message deletion mechanism and no mutually requested DM message-deletion mechanism in V1.
+There is no unilateral message deletion, mutual message deletion, or whole-history deletion mechanism.
 
-Message content is therefore immutable after creation.
+Message content and attachments therefore remain immutable for the lifetime of the DirectConversation in V1.
 
-The DirectConversation itself remains persistent.
+Future versions may introduce explicit deletion policies without changing the permanent identity of the DirectConversation.
 
 # 15. Group Conversations
 
@@ -751,9 +717,7 @@ The group must not remain as an orphaned database record.
 
 # 28. Message
 
-A message represents an immutable unit of text communication.
-
-A message belongs to exactly one messaging context:
+A message represents an immutable communication unit inside exactly one messaging context:
 
 ```text
 DirectConversation
@@ -769,12 +733,24 @@ A message has at minimum:
 
 * unique identifier
 * sender
-* content
+* optional Unicode text content
 * creation timestamp
 
-Messages are immutable.
+A message may be:
 
----
+* text-only
+* attachment-only
+* text plus one or more attachments
+
+A message must contain at least one meaningful payload:
+
+```text
+non-empty content OR at least one attachment
+```
+
+A message with neither text nor attachments is invalid.
+
+Messages are immutable after creation.
 
 # 29. Message Creation
 
@@ -794,9 +770,13 @@ sender ∈ active GroupMembership
 
 The server is authoritative for this check.
 
-The client must never be trusted to determine whether a sender belongs to the communication context.
+Message creation must validate the complete payload before committing the message. For attachment-bearing messages, the V1 transport uses an atomic multipart HTTP operation that creates the Message and its MessageAttachment rows as one application operation.
 
----
+Binary attachment data is not sent through the WebSocket protocol in V1.
+
+After a successful message commit, the same realtime `message.created` event is emitted regardless of whether the message was created through REST or WebSocket.
+
+The client must never be trusted to determine whether a sender belongs to the communication context.
 
 # 30. Message Editing
 
@@ -819,7 +799,7 @@ This means the domain does not need an edited-message state.
 
 # 31. Message Content and Emojis
 
-Message content is Unicode text.
+Message text content, when present, is Unicode text.
 
 Emoji characters are therefore ordinary valid message content.
 
@@ -831,11 +811,11 @@ Hello 👋
 🔥 Great!
 ```
 
+Text content may be empty only when the message contains at least one attachment.
+
 No separate emoji domain model is required.
 
 Emoji rendering is a client responsibility.
-
----
 
 # 32. Message Attachments
 
@@ -848,37 +828,38 @@ Conceptually:
 ```text
 Message
  |
- +-- Attachment
- +-- Attachment
- +-- Attachment
+ +-- MessageAttachment
+ +-- MessageAttachment
 ```
 
-An attachment represents a file associated with a message.
+`MessageAttachment` is a child of `Message`; no separate permanent draft-upload domain model is required in V1.
 
 An attachment has at minimum:
 
 * unique identifier
-* message
+* owning message
 * stored file reference
 * original filename
 * MIME type
 * file size
 * creation timestamp
 
-The attachment system must support arbitrary file types unless a later security or product contract restricts them.
+An attachment-only message is valid.
 
----
+The V1 client submits attachment-bearing messages using multipart HTTP message creation. The server validates the text/files together and creates the message and attachment metadata as one application operation. If the operation fails, it must not leave a valid empty Message or an authorized orphan attachment resource.
+
+The exact physical file-storage backend is an infrastructure concern.
 
 # 33. Attachment Ownership
 
-An attachment belongs to its message.
+Every persisted `MessageAttachment` belongs to exactly one persisted Message.
 
 The message belongs to its messaging context.
 
 Therefore:
 
 ```text
-Attachment
+MessageAttachment
     |
     v
 Message
@@ -890,8 +871,6 @@ DirectConversation / GroupConversation
 Attachment authorization follows the authorization rules of the associated message.
 
 A user who cannot access the message must not be able to retrieve its attachment merely by knowing its identifier.
-
----
 
 # 34. Message Replies
 
@@ -938,19 +917,23 @@ The server must enforce this invariant.
 
 # 35. Nested Replies
 
-V1 supports replies but does not require a separate threading system.
+Nested replies are allowed in V1.
 
-A reply may reference another message.
+A reply may itself be the target of another reply.
 
-Whether replies to replies are allowed is a domain decision that should be kept simple in V1.
+Example:
 
-The recommended initial rule is:
+```text
+Message #1
+    |
+    +-- Message #5 (reply_to #1)
+            |
+            +-- Message #9 (reply_to #5)
+```
 
-> A message may reply to any message in the same communication context, including another reply.
+The same-context authorization rule always applies: every `reply_to` target must belong to the same DM or group as the new message.
 
-This keeps the domain model simple while allowing the client to present replies without introducing a separate thread entity.
-
----
+The domain does not impose a maximum reply depth in V1.
 
 # 36. Message Delivery State
 
@@ -1170,8 +1153,6 @@ The following domain information is persistent:
 User
 FriendRequest
 Friendship
-Presence.last_online_at
-
 DirectConversation
 DirectConversationParticipant
 DirectMessage
@@ -1229,7 +1210,6 @@ A client must never be trusted to determine whether a user is allowed to:
 * remove a group member
 * transfer ownership
 * disband a group
-* restore a DM
 
 Authorization checks must be performed server-side.
 
@@ -1314,8 +1294,8 @@ The following invariants must hold:
 2. The two participants are unique as an unordered pair.
 3. A pair of users can have exactly one DirectConversation.
 4. A DirectConversation is not deleted through normal user conversation deletion.
-5. Hiding a DM is participant-specific.
-6. Restoring a DM does not create a new DirectConversation.
+5. V1 has no participant-specific hide/restore state.
+6. Friendship removal does not delete an existing DirectConversation.
 
 ---
 
@@ -1330,7 +1310,7 @@ The following invariants must hold:
 5. Only the owner may transfer ownership.
 6. Only the owner may disband the group.
 7. Ownership transfer assigns ownership to an existing active member.
-8. An owner must transfer ownership before leaving a non-empty group.
+8. If the owner leaves, the group is disbanded regardless of how many other members remain.
 9. If no active members remain, the group is deleted.
 10. Disbanding deletes the entire group and its dependent data.
 
@@ -1346,8 +1326,8 @@ The following invariants must hold:
 4. A reply target must belong to the same messaging context.
 5. A message cannot have recipient state for an unauthorized recipient.
 6. A message cannot be marked read for a recipient before it is delivered to that recipient.
-7. Permanent deletion of DM messages requires a request from both DM participants.
-8. When the mutual DM deletion condition is satisfied, all messages in that DM are permanently deleted.
+7. A message must contain non-empty text or at least one attachment.
+8. DM and group messages cannot be deleted individually or through a mutual-history deletion flow in V1.
 9. A message's client-side `SENDING`/`FAILED` state is not authoritative persisted state.
 
 ---
@@ -1359,8 +1339,8 @@ The following invariants must hold:
 1. Every attachment belongs to exactly one message.
 2. An attachment cannot be accessed independently of message authorization.
 3. Attachment metadata must remain consistent with the stored file.
-4. Deleting a message that owns attachments must not leave unauthorized orphaned attachment data.
-5. Permanent message deletion must include the corresponding attachment cleanup.
+4. Group/context deletion must cascade to the attachments owned by messages in that deleted context.
+5. Future message-deletion features, if introduced, must clean up the corresponding attachments without leaving orphaned authorized resources.
 
 ---
 
@@ -1370,7 +1350,7 @@ The following invariants must hold:
 
 1. A user has at most one current presence state.
 2. Current online/offline state is realtime state.
-3. `last_online_at` represents the latest known transition to offline.
+3. V1 does not persist a last-online timestamp.
 4. Presence must not be used as an authorization mechanism.
 
 A user being online does not imply permission to access any resource.
@@ -1413,45 +1393,25 @@ For group conversations, `DELIVERED` and `READ` are evaluated independently for 
 
 # 56. DM Message Deletion Lifecycle
 
-DM message deletion is distinct from DM conversation deletion.
+V1 has no DM message-deletion lifecycle.
 
-```text
-Conversation deletion by Alice
-        |
-        v
-Alice hides conversation
-        |
-        +---- messages remain
-        |
-        v
-Conversation remains
-```
+After a DM message is successfully created, it remains part of the DirectConversation history for V1.
 
-Permanent message deletion:
+There is no:
 
-```text
-Alice requests deletion
-        |
-        v
-Pending mutual deletion
-        |
-        | Bob also requests deletion
-        v
-All DM messages permanently deleted
-        |
-        +---- attachments deleted
-```
+* unilateral message deletion
+* mutual message deletion
+* mutual whole-history deletion
+* participant-specific DM hiding/restoration
 
-The DirectConversation remains after the messages are deleted.
-
----
+These capabilities may be considered for a future version and must be specified explicitly before implementation.
 
 # 57. Group Deletion Lifecycle
 
-A group may be deleted in two ways:
+A group may be deleted in V1 when:
 
 ```text
-Owner disbands group
+Owner explicitly disbands group
         |
         v
 Delete group and dependent data
@@ -1460,7 +1420,19 @@ Delete group and dependent data
 or:
 
 ```text
-Last member leaves
+Owner leaves group
+        |
+        v
+Disband group regardless of remaining members
+        |
+        v
+Delete group and dependent data
+```
+
+or, where applicable:
+
+```text
+Final active member leaves
         |
         v
 No active membership remains
@@ -1468,6 +1440,8 @@ No active membership remains
         v
 Delete group and dependent data
 ```
+
+Group deletion removes the group, memberships, invitations, messages, recipient-state rows, and message attachments according to the persistence contract.
 
 The deletion must be atomic from the domain's perspective.
 
