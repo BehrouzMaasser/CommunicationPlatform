@@ -1,0 +1,93 @@
+{% extends "base.html" %}
+
+{% block title %}
+Dashboard
+{% endblock %}
+
+{% block content %}
+
+<div class="page-header">
+
+    <h1>
+        Welcome {{ request.user.email }}
+    </h1>
+
+    <p class="page-description">
+        Job Application Tracking Dashboard
+    </p>
+
+</div>
+
+<div class="grid">
+
+    <div class="card">
+        <h3>Account</h3>
+        <p>User settings and preferences.</p>
+
+        <br>
+
+        <a class="btn btn-primary"
+            href="{% url 'user-settings' %}">
+            Settings
+        </a>
+    </div>
+
+    <div class="card">
+        <h3>Workspaces</h3>
+        <p>Manage workspaces.</p>
+
+        <br>
+
+        <a
+            class="btn btn-primary"
+            href="{% url 'workspace-list-web' %}"
+        >
+            Open
+        </a>
+    </div>
+
+    <div class="card">
+        <h3>Companies</h3>
+        <p>Manage companies.</p>
+
+        <br>
+
+        <a
+            class="btn btn-primary"
+            href="{% url 'company-list-web' %}"
+        >
+            Open
+        </a>
+    </div>
+
+    <div class="card">
+        <h3>Applications</h3>
+        <p>Track applications.</p>
+
+        <br>
+
+        <a
+            class="btn btn-primary"
+            href="{% url 'job-application-list-web' %}"
+        >
+            Open
+        </a>
+    </div>
+
+    <div class="card">
+        <h3>Documents</h3>
+        <p>Manage documents.</p>
+
+        <br>
+
+        <a
+            class="btn btn-primary"
+            href="{% url 'document-list-web' %}"
+        >
+            Open
+        </a>
+    </div>
+
+</div>
+
+{% endblock %}
