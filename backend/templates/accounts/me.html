@@ -1,93 +1,111 @@
 {% extends "base.html" %}
 
+
 {% block title %}
-Dashboard
+My account · Communication Platform
 {% endblock %}
+
 
 {% block content %}
 
-<div class="page-header">
+<section class="page-section">
 
-    <h1>
-        Welcome {{ request.user.email }}
-    </h1>
+    <div class="container">
 
-    <p class="page-description">
-        Job Application Tracking Dashboard
-    </p>
+        <div class="page-heading">
 
-</div>
+            <h1>My account</h1>
 
-<div class="grid">
+            <p class="text-body-secondary mb-0">
+                Your Communication Platform account information.
+            </p>
 
-    <div class="card">
-        <h3>Account</h3>
-        <p>User settings and preferences.</p>
+        </div>
 
-        <br>
 
-        <a class="btn btn-primary"
-            href="{% url 'user-settings' %}">
-            Settings
-        </a>
+        <div class="row">
+
+            <div class="col-12 col-lg-8">
+
+                <div class="card shadow-sm">
+
+                    <div class="card-body p-4">
+
+                        <div class="mb-4">
+
+                            <h2 class="h5 mb-3">
+                                Account details
+                            </h2>
+
+                            <div class="row g-3">
+
+                                <div class="col-12">
+
+                                    <div class="border rounded-3 p-3">
+
+                                        <div class="text-body-secondary small mb-1">
+                                            Username
+                                        </div>
+
+                                        <div class="fw-semibold">
+                                            {{ user.username }}
+                                        </div>
+
+                                    </div>
+
+                                </div>
+
+
+                                <div class="col-12">
+
+                                    <div class="border rounded-3 p-3">
+
+                                        <div class="text-body-secondary small mb-1">
+                                            Email
+                                        </div>
+
+                                        <div class="fw-semibold">
+                                            {{ user.email }}
+                                        </div>
+
+                                    </div>
+
+                                </div>
+
+                            </div>
+
+                        </div>
+
+
+                        <div class="border-top pt-4">
+
+                            <form
+                                method="post"
+                                action="{% url 'auth-logout' %}"
+                            >
+                                {% csrf_token %}
+
+                                <button
+                                    type="submit"
+                                    class="btn btn-outline-danger"
+                                >
+                                    Log out
+                                </button>
+
+                            </form>
+
+                        </div>
+
+                    </div>
+
+                </div>
+
+            </div>
+
+        </div>
+
     </div>
 
-    <div class="card">
-        <h3>Workspaces</h3>
-        <p>Manage workspaces.</p>
-
-        <br>
-
-        <a
-            class="btn btn-primary"
-            href="{% url 'workspace-list-web' %}"
-        >
-            Open
-        </a>
-    </div>
-
-    <div class="card">
-        <h3>Companies</h3>
-        <p>Manage companies.</p>
-
-        <br>
-
-        <a
-            class="btn btn-primary"
-            href="{% url 'company-list-web' %}"
-        >
-            Open
-        </a>
-    </div>
-
-    <div class="card">
-        <h3>Applications</h3>
-        <p>Track applications.</p>
-
-        <br>
-
-        <a
-            class="btn btn-primary"
-            href="{% url 'job-application-list-web' %}"
-        >
-            Open
-        </a>
-    </div>
-
-    <div class="card">
-        <h3>Documents</h3>
-        <p>Manage documents.</p>
-
-        <br>
-
-        <a
-            class="btn btn-primary"
-            href="{% url 'document-list-web' %}"
-        >
-            Open
-        </a>
-    </div>
-
-</div>
+</section>
 
 {% endblock %}

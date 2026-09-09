@@ -1,4 +1,5 @@
 from django.contrib.auth import authenticate, get_user_model, logout
+from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError
 from django.db.models import Q
 
@@ -31,6 +32,13 @@ class AuthenticationService:
             email=email,
             username=username,
         )
+
+        try:
+            validate_password(password, user=user)
+        except ValidationError as exc:
+            raise ValidationError(
+                {"password": exc.messages}
+            ) from exc
 
         user.set_password(password)
         user.save()

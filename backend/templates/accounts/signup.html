@@ -1,122 +1,85 @@
-{% load static %}
-<!DOCTYPE html>
-<html lang="en">
-<head>
+{% extends "base.html" %}
 
-    <meta charset="UTF-8">
 
-    <meta
-        name="viewport"
-        content="width=device-width, initial-scale=1"
-    >
+{% block title %}
+Create account · Communication Platform
+{% endblock %}
 
-    <title>Create Account</title>
 
-    <link
-        rel="stylesheet"
-        href="{% static 'css/app.css' %}"
-    >
+{% block content %}
 
-</head>
-<body>
+<section class="auth-section">
 
-<div class="auth-layout">
+    <div class="container">
 
-    <div class="auth-card">
+        <div class="row justify-content-center">
 
-        <div class="auth-header">
+            <div class="col-12 col-sm-10 col-md-8 col-lg-6">
 
-            <h1>Job App Manager</h1>
+                <div class="auth-card p-4 p-md-5">
 
-            <p>
-                Create your account
-            </p>
+                    <header class="auth-card-header">
 
-        </div>
+                        <h1>Create your account</h1>
 
-        {% if messages %}
+                        <p>
+                            Join Communication Platform
+                        </p>
 
-            {% for message in messages %}
+                    </header>
 
-                <div class="message error">
-                    {{ message }}
+                    {% include "forms/non_field_errors.html" with form=form %}
+
+                    <form
+                        method="post"
+                        novalidate
+                    >
+
+                        {% csrf_token %}
+
+
+                        {% include "forms/field.html" with field=form.email %}
+
+                        {% include "forms/field.html" with field=form.username %}
+
+                        {% include "forms/field.html" with field=form.password %}
+
+                        {% include "forms/field.html" with field=form.confirm_password wrapper_class="mb-4" %}
+
+
+                        <button
+                            type="submit"
+                            class="btn btn-primary w-100 py-2"
+                        >
+                            Create account
+                        </button>
+
+                    </form>
+
+
+                    <div class="text-center mt-4">
+
+                        <span class="text-body-secondary">
+                            Already have an account?
+                        </span>
+
+                        <a
+                            href="{% url 'auth-login' %}"
+                            class="text-decoration-none"
+                        >
+                            Log in
+                        </a>
+
+                    </div>
+
                 </div>
 
-            {% endfor %}
-
-        {% endif %}
-
-        <form method="post" class="app-form">
-
-            {% csrf_token %}
-
-            <div class="form-group">
-
-                <label for="email">
-                    Email
-                </label>
-
-                <input
-                    id="email"
-                    type="email"
-                    name="email"
-                    required
-                >
-
             </div>
-
-            <div class="form-group">
-
-                <label for="password">
-                    Password
-                </label>
-
-                <input
-                    id="password"
-                    type="password"
-                    name="password"
-                    required
-                >
-
-            </div>
-
-            <div class="form-group">
-
-                <label for="confirm_password">
-                    Confirm Password
-                </label>
-
-                <input
-                    id="confirm_password"
-                    type="password"
-                    name="confirm_password"
-                    required
-                >
-
-            </div>
-
-            <button
-                type="submit"
-                class="btn btn-primary auth-submit"
-            >
-                Create Account
-            </button>
-
-        </form>
-
-        <div class="auth-footer">
-
-            Already have an account?
-
-            <a href="{% url 'login' %}">
-                Login
-            </a>
 
         </div>
 
     </div>
 
-</div>
+</section>
 
-</body>
-</html>
+{% endblock %}

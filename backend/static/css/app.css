@@ -1,0 +1,75 @@
+:root {
+    --app-max-content-width: 1200px;
+}
+
+body {
+    background:
+        radial-gradient(
+            circle at top left,
+            rgba(13, 110, 253, 0.08),
+            transparent 35rem
+        ),
+        var(--bs-body-bg);
+}
+
+.navbar-brand {
+    letter-spacing: -0.025em;
+}
+
+.auth-section {
+    min-height: calc(100vh - 140px);
+    display: flex;
+    align-items: center;
+    padding: 3rem 0;
+}
+
+.auth-card {
+    width: 100%;
+    max-width: 460px;
+
+    border: 1px solid var(--bs-border-color);
+    border-radius: 1rem;
+
+    background: var(--bs-body-bg);
+
+    box-shadow:
+        0 1rem 3rem rgba(0, 0, 0, 0.08);
+}
+
+.auth-card-header {
+    text-align: center;
+    padding-bottom: 1rem;
+}
+
+.auth-card-header h1 {
+    font-size: 1.75rem;
+    font-weight: 700;
+    letter-spacing: -0.035em;
+}
+
+.auth-card-header p {
+    color: var(--bs-secondary-color);
+    margin-bottom: 0;
+}
+
+.form-control:focus {
+    box-shadow:
+        0 0 0 0.25rem rgba(13, 110, 253, 0.12);
+}
+
+.page-section {
+    padding: 3rem 0;
+}
+
+.page-heading {
+    margin-bottom: 2rem;
+}
+
+.page-heading h1 {
+    font-weight: 700;
+    letter-spacing: -0.035em;
+}
+
+.card {
+    border-color: var(--bs-border-color);
+}

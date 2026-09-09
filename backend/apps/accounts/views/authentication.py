@@ -94,4 +94,4 @@ class LogoutView(LoginRequiredMixin, View):
 
         AuthenticationService.logout(request=request)
 
-        return redirect("login")
+        return redirect("auth-login")
