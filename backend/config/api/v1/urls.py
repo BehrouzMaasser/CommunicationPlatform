@@ -9,5 +9,9 @@ urlpatterns = [
     path(
         "",
         include("apps.conversations.api.v1.urls"),
-    )
+    ),
+    path(
+        "",
+        include("apps.messaging.api.v1.urls"),
+    ),
 ]
