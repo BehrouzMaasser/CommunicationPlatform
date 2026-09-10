@@ -15,12 +15,19 @@ class MessageSelector:
 
     @staticmethod
     def _base_queryset() -> QuerySet[Message]:
-        return Message.objects.select_related(
-            "sender",
-            "reply_to",
-            "reply_to__sender",
-            "direct_conversation",
-            "group_conversation",
+        return (
+            Message.objects
+            .select_related(
+                "sender",
+                "reply_to",
+                "reply_to__sender",
+                "direct_conversation",
+                "group_conversation",
+            )
+            .prefetch_related(
+                "attachments",
+                "reply_to__attachments",
+            )
         )
 
     @classmethod

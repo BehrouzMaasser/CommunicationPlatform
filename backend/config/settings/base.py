@@ -60,6 +60,7 @@ INSTALLED_APPS = [
     'apps.friendships',
     'apps.conversations',
     'apps.messaging',
+    'apps.attachments',
 ]
 
 REST_FRAMEWORK = {

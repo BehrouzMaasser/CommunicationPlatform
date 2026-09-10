@@ -3,6 +3,10 @@ from rest_framework.exceptions import NotFound
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from apps.attachments.exceptions import AttachmentsError
+from apps.attachments.services import (
+    MessageAttachmentService,
+)
 from apps.conversations.selectors import (
     DirectConversationSelector,
     GroupConversationSelector,
@@ -16,7 +20,6 @@ from apps.messaging.api.v1.serializers import (
 )
 from apps.messaging.exceptions import MessagingError
 from apps.messaging.selectors import MessageSelector
-from apps.messaging.services import MessageService
 
 
 def _get_accessible_direct_conversation_or_404(
@@ -51,6 +54,19 @@ def _get_accessible_group_or_404(
     return group
 
 
+def _message_create_error_response(exc):
+    if isinstance(exc, MessagingError):
+        return messaging_error_response(exc)
+
+    # Attachment validation errors are client payload errors.
+    return Response(
+        {
+            "detail": exc.message,
+        },
+        status=status.HTTP_400_BAD_REQUEST,
+    )
+
+
 class DirectMessageListCreateView(
     mixins.ListModelMixin,
     generics.GenericAPIView,
@@ -70,12 +86,17 @@ class DirectMessageListCreateView(
             conversation=conversation,
         )
 
+    def get_serializer_context(self):
+        return {
+            **super().get_serializer_context(),
+            "request": self.request,
+        }
+
     def get(self, request, conversation_id):
         return self.list(request)
 
     def post(self, request, conversation_id):
-        # Do the visibility check first so unknown/inaccessible DMs are
-        # indistinguishable at the HTTP boundary.
+        # Preserve private-resource semantics before payload validation.
         self._get_conversation()
 
         input_serializer = MessageCreateSerializer(
@@ -85,22 +106,35 @@ class DirectMessageListCreateView(
             raise_exception=True,
         )
 
+        files = request.FILES.getlist(
+            "attachments"
+        )
+
         try:
-            message = MessageService.create_text_message(
-                current_user=request.user,
-                direct_conversation_id=conversation_id,
-                content=input_serializer.validated_data[
-                    "content"
-                ],
-                reply_to_id=input_serializer.validated_data.get(
-                    "reply_to_id"
-                ),
+            message = (
+                MessageAttachmentService
+                .create_message_with_attachments(
+                    current_user=request.user,
+                    direct_conversation_id=conversation_id,
+                    content=input_serializer.validated_data[
+                        "content"
+                    ],
+                    files=files,
+                    reply_to_id=(
+                        input_serializer
+                        .validated_data
+                        .get("reply_to_id")
+                    ),
+                )
             )
-        except MessagingError as exc:
-            return messaging_error_response(exc)
+        except (MessagingError, AttachmentsError) as exc:
+            return _message_create_error_response(exc)
 
         output_serializer = MessageSerializer(
             message,
+            context={
+                "request": request,
+            },
         )
 
         return Response(
@@ -128,11 +162,16 @@ class GroupMessageListCreateView(
             group=group,
         )
 
+    def get_serializer_context(self):
+        return {
+            **super().get_serializer_context(),
+            "request": self.request,
+        }
+
     def get(self, request, group_id):
         return self.list(request)
 
     def post(self, request, group_id):
-        # Current membership is required both for visibility and sending.
         self._get_group()
 
         input_serializer = MessageCreateSerializer(
@@ -142,22 +181,35 @@ class GroupMessageListCreateView(
             raise_exception=True,
         )
 
+        files = request.FILES.getlist(
+            "attachments"
+        )
+
         try:
-            message = MessageService.create_text_message(
-                current_user=request.user,
-                group_id=group_id,
-                content=input_serializer.validated_data[
-                    "content"
-                ],
-                reply_to_id=input_serializer.validated_data.get(
-                    "reply_to_id"
-                ),
+            message = (
+                MessageAttachmentService
+                .create_message_with_attachments(
+                    current_user=request.user,
+                    group_id=group_id,
+                    content=input_serializer.validated_data[
+                        "content"
+                    ],
+                    files=files,
+                    reply_to_id=(
+                        input_serializer
+                        .validated_data
+                        .get("reply_to_id")
+                    ),
+                )
             )
-        except MessagingError as exc:
-            return messaging_error_response(exc)
+        except (MessagingError, AttachmentsError) as exc:
+            return _message_create_error_response(exc)
 
         output_serializer = MessageSerializer(
             message,
+            context={
+                "request": request,
+            },
         )
 
         return Response(
@@ -179,6 +231,9 @@ class MessageDetailView(APIView):
 
         serializer = MessageSerializer(
             message,
+            context={
+                "request": request,
+            },
         )
 
         return Response(

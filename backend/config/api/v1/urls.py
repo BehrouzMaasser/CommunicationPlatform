@@ -14,4 +14,8 @@ urlpatterns = [
         "",
         include("apps.messaging.api.v1.urls"),
     ),
+    path(
+        "",
+        include("apps.attachments.api.v1.urls"),
+    ),
 ]
