@@ -1,3 +1,99 @@
+from django.conf import settings
 from django.db import models
+from django.db.models import F, Q
+from django.utils import timezone
 
-# Create your models here.
+
+class DirectConversation(models.Model):
+
+    user_1 = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="direct_conversations_as_user_1",
+    )
+
+    user_2 = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="direct_conversations_as_user_2",
+    )
+
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    last_activity_at = models.DateTimeField(default=timezone.now, db_index=True)
+
+    class Meta:
+        constraints = [
+            models.CheckConstraint(
+                condition=Q(user_1__lt=F("user_2")),
+                name="direct_conversation_pair_is_canonical",
+            ),
+            models.UniqueConstraint(
+                fields=["user_1", "user_2"],
+                name="unique_direct_conversation_pair",
+            ),
+        ]
+
+    def __str__(self):
+        return f"DM: {self.user_1.username} <-> {self.user_2.username}"
+
+
+class GroupConversation(models.Model):
+
+    name = models.CharField(max_length=25)
+
+    members = models.ManyToManyField(
+        settings.AUTH_USER_MODEL,
+        through="GroupMembership",
+        related_name="group_conversations",
+    )
+
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    last_activity_at = models.DateTimeField(default=timezone.now, db_index=True)
+
+    def __str__(self):
+        return self.name
+
+
+class GroupMembership(models.Model):
+
+    class Role(models.TextChoices):
+        OWNER = "OWNER", "Owner"
+        MEMBER = "MEMBER", "Member"
+
+    group = models.ForeignKey(
+        GroupConversation,
+        on_delete=models.CASCADE,
+        related_name="memberships",
+    )
+
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="group_memberships",
+    )
+
+    role = models.CharField(
+        max_length=6,
+        choices=Role.choices,
+        default=Role.MEMBER,
+    )
+
+    joined_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["group", "user"],
+                name="unique_group_membership",
+            ),
+            models.UniqueConstraint(
+                fields=["group"],
+                condition=Q(role="OWNER"),
+                name="unique_group_owner",
+            ),
+        ]
+
+    def __str__(self):
+        return f"{self.user.username} in {self.group.name} ({self.role})"

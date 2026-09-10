@@ -58,6 +58,7 @@ INSTALLED_APPS = [
     # Local
     'apps.accounts',
     'apps.friendships',
+    'apps.conversations'
 ]
 
 REST_FRAMEWORK = {
