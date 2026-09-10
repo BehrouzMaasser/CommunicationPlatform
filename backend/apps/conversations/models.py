@@ -97,3 +97,69 @@ class GroupMembership(models.Model):
 
     def __str__(self):
         return f"{self.user.username} in {self.group.name} ({self.role})"
+
+
+class GroupInvitation(models.Model):
+
+    group = models.ForeignKey(
+        GroupConversation,
+        on_delete=models.CASCADE,
+        related_name="invitations",
+    )
+    invited_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="sent_group_invitations",
+    )
+    recipient = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="received_group_invitations",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [
+            models.CheckConstraint(
+                condition=~Q(invited_by=F("recipient")),
+                name="group_invitation_users_are_different",
+            ),
+            models.UniqueConstraint(
+                fields=["group", "recipient"],
+                name="unique_pending_group_invitation",
+            ),
+        ]
+
+    def __str__(self):
+        return (
+            f"{self.invited_by.username} invited "
+            f"{self.recipient.username} to {self.group.name}"
+        )
+
+
+class GroupInvitationLink(models.Model):
+
+    group = models.ForeignKey(
+        GroupConversation,
+        on_delete=models.CASCADE,
+        related_name="invitation_links",
+    )
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="created_group_invitation_links",
+    )
+    token_hash = models.CharField(
+        max_length=64,
+        unique=True,
+        editable=False,
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    expires_at = models.DateTimeField(db_index=True)
+    revoked_at = models.DateTimeField(
+        null=True,
+        blank=True,
+    )
+
+    def __str__(self):
+        return f"Invitation link for {self.group.name}"

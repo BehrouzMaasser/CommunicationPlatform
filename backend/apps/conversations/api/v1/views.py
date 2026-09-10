@@ -10,6 +10,9 @@ from apps.conversations.api.v1.serializers import (
     DirectConversationCreateSerializer,
     DirectConversationSerializer,
     GroupConversationSerializer,
+    GroupInvitationCreateSerializer,
+    GroupInvitationLinkCreateResponseSerializer,
+    GroupInvitationSerializer,
     GroupMembershipSerializer,
     GroupNameSerializer,
 )
@@ -17,10 +20,13 @@ from apps.conversations.exceptions import ConversationsError
 from apps.conversations.selectors import (
     DirectConversationSelector,
     GroupConversationSelector,
+    GroupInvitationSelector,
 )
 from apps.conversations.services import (
     DirectConversationService,
     GroupConversationService,
+    GroupInvitationLinkService,
+    GroupInvitationService,
 )
 
 
@@ -304,6 +310,204 @@ class GroupMemberDeleteView(APIView):
                 current_user=request.user,
                 group_id=group_id,
                 member_user_id=user_id,
+            )
+        except ConversationsError as exc:
+            return conversations_error_response(exc)
+
+        return Response(
+            status=status.HTTP_204_NO_CONTENT,
+        )
+
+
+# ---------------------------------------------------------------------
+# Direct group invitations
+# ---------------------------------------------------------------------
+
+
+class GroupInvitationCreateView(APIView):
+
+    def post(self, request, group_id):
+        # Preserve private-group existence semantics:
+        # outsider -> 404, member-but-not-owner -> service returns 403.
+        _get_accessible_group_or_404(
+            user=request.user,
+            group_id=group_id,
+        )
+
+        input_serializer = GroupInvitationCreateSerializer(
+            data=request.data,
+        )
+        input_serializer.is_valid(
+            raise_exception=True,
+        )
+
+        try:
+            invitation = GroupInvitationService.create_invitation(
+                current_user=request.user,
+                group_id=group_id,
+                target_user_id=(
+                    input_serializer
+                    .validated_data["user_id"]
+                ),
+            )
+        except ConversationsError as exc:
+            return conversations_error_response(exc)
+
+        output_serializer = GroupInvitationSerializer(
+            invitation,
+        )
+
+        return Response(
+            output_serializer.data,
+            status=status.HTTP_201_CREATED,
+        )
+
+
+class GroupInvitationListView(generics.ListAPIView):
+    serializer_class = GroupInvitationSerializer
+
+    def get_queryset(self):
+        return GroupInvitationSelector.list_incoming(
+            user=self.request.user,
+        )
+
+
+class GroupInvitationAcceptView(APIView):
+
+    def post(self, request, invitation_id):
+        invitation = GroupInvitationSelector.get_for_recipient(
+            user=request.user,
+            invitation_id=invitation_id,
+        )
+
+        if invitation is None:
+            raise NotFound
+
+        try:
+            membership = GroupInvitationService.accept_invitation(
+                current_user=request.user,
+                invitation_id=invitation_id,
+            )
+        except ConversationsError as exc:
+            return conversations_error_response(exc)
+
+        output_serializer = GroupMembershipSerializer(
+            membership,
+        )
+
+        return Response(
+            output_serializer.data,
+            status=status.HTTP_200_OK,
+        )
+
+
+class GroupInvitationRejectView(APIView):
+
+    def post(self, request, invitation_id):
+        invitation = GroupInvitationSelector.get_for_recipient(
+            user=request.user,
+            invitation_id=invitation_id,
+        )
+
+        if invitation is None:
+            raise NotFound
+
+        try:
+            GroupInvitationService.reject_invitation(
+                current_user=request.user,
+                invitation_id=invitation_id,
+            )
+        except ConversationsError as exc:
+            return conversations_error_response(exc)
+
+        return Response(
+            status=status.HTTP_204_NO_CONTENT,
+        )
+
+
+# ---------------------------------------------------------------------
+# Group invitation links
+# ---------------------------------------------------------------------
+
+
+class GroupInvitationLinkCreateView(APIView):
+
+    def post(self, request, group_id):
+        _get_accessible_group_or_404(
+            user=request.user,
+            group_id=group_id,
+        )
+
+        try:
+            link, token = GroupInvitationLinkService.create_link(
+                current_user=request.user,
+                group_id=group_id,
+            )
+        except ConversationsError as exc:
+            return conversations_error_response(exc)
+
+        output_serializer = (
+            GroupInvitationLinkCreateResponseSerializer(
+                {
+                    "id": link.pk,
+                    "token": token,
+                    "created_at": link.created_at,
+                    "expires_at": link.expires_at,
+                }
+            )
+        )
+
+        return Response(
+            output_serializer.data,
+            status=status.HTTP_201_CREATED,
+        )
+
+
+class GroupInvitationLinkJoinView(APIView):
+
+    def post(self, request, token):
+        try:
+            membership, created = (
+                GroupInvitationLinkService.join_with_token(
+                    current_user=request.user,
+                    token=token,
+                )
+            )
+        except ConversationsError as exc:
+            return conversations_error_response(exc)
+
+        output_serializer = GroupMembershipSerializer(
+            membership,
+        )
+
+        return Response(
+            output_serializer.data,
+            status=(
+                status.HTTP_201_CREATED
+                if created
+                else status.HTTP_200_OK
+            ),
+        )
+
+
+class GroupInvitationLinkRevokeView(APIView):
+
+    def delete(
+        self,
+        request,
+        group_id,
+        link_id,
+    ):
+        _get_accessible_group_or_404(
+            user=request.user,
+            group_id=group_id,
+        )
+
+        try:
+            GroupInvitationLinkService.revoke_link(
+                current_user=request.user,
+                group_id=group_id,
+                link_id=link_id,
             )
         except ConversationsError as exc:
             return conversations_error_response(exc)

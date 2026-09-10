@@ -52,3 +52,38 @@ class GroupOwnerCannotBeRemoved(ConversationsError):
 class InvalidGroupName(ConversationsError):
     code = "invalid_group_name"
     default_message = "The group name must not be empty."
+
+
+class GroupInvitationTargetNotFound(ConversationsError):
+    code = "group_invitation_target_not_found"
+    default_message = "The target user does not exist."
+
+
+class GroupInvitationNotFound(ConversationsError):
+    code = "group_invitation_not_found"
+    default_message = "The group invitation does not exist."
+
+
+class GroupInvitationRecipientRequired(ConversationsError):
+    code = "group_invitation_recipient_required"
+    default_message = "Only the invitation recipient may perform this operation."
+
+
+class GroupInvitationAlreadyPending(ConversationsError):
+    code = "group_invitation_already_pending"
+    default_message = "A group invitation is already pending for this user."
+
+
+class FriendshipRequiredForGroupInvitation(ConversationsError):
+    code = "friendship_required_for_group_invitation"
+    default_message = "The group owner may directly invite only their friends."
+
+
+class GroupInvitationLinkNotFound(ConversationsError):
+    code = "group_invitation_link_not_found"
+    default_message = "The group invitation link does not exist."
+
+
+class InvalidGroupInvitationLink(ConversationsError):
+    code = "invalid_group_invitation_link"
+    default_message = "The invitation link is invalid, expired, or revoked."

@@ -4,6 +4,7 @@ from apps.accounts.api.v1.serializers import PublicUserSerializer
 from apps.conversations.models import (
     DirectConversation,
     GroupConversation,
+    GroupInvitation,
     GroupMembership,
 )
 
@@ -72,3 +73,49 @@ class GroupMembershipSerializer(serializers.ModelSerializer):
             "joined_at",
         )
         read_only_fields = fields
+
+
+class GroupInvitationCreateSerializer(serializers.Serializer):
+    user_id = serializers.IntegerField(
+        min_value=1,
+    )
+
+
+class GroupInvitationSerializer(serializers.ModelSerializer):
+    group = GroupConversationSerializer(
+        read_only=True,
+    )
+    invited_by = PublicUserSerializer(
+        read_only=True,
+    )
+    recipient = PublicUserSerializer(
+        read_only=True,
+    )
+
+    class Meta:
+        model = GroupInvitation
+        fields = (
+            "id",
+            "group",
+            "invited_by",
+            "recipient",
+            "created_at",
+        )
+        read_only_fields = fields
+
+
+class GroupInvitationLinkCreateResponseSerializer(
+    serializers.Serializer
+):
+    id = serializers.IntegerField(
+        read_only=True,
+    )
+    token = serializers.CharField(
+        read_only=True,
+    )
+    created_at = serializers.DateTimeField(
+        read_only=True,
+    )
+    expires_at = serializers.DateTimeField(
+        read_only=True,
+    )
