@@ -1,11 +1,22 @@
-from django.contrib.auth import authenticate, get_user_model, logout
-from django.core.exceptions import ValidationError
+from django.contrib.auth import get_user_model
+from django.db import IntegrityError, transaction
 from django.db.models import Q
 
-from backend.apps.friendships.models import (
+from apps.friendships.exceptions import (
+    FriendRequestAlreadyPending,
+    FriendRequestNotFound,
+    FriendRequestRecipientRequired,
+    FriendRequestSenderRequired,
+    SelfFriendRequestNotAllowed,
+    TargetUserNotFound,
+    UsersAlreadyFriends,
+)
+from apps.friendships.models import (
     FriendRequest,
     Friendship,
 )
+from apps.friendships.services.friendship import FriendshipService
+
 
 User = get_user_model()
 
@@ -13,99 +24,154 @@ User = get_user_model()
 class FriendRequestService:
 
     @staticmethod
-    def send_friend_request(*, current_user: User, target_user_id: int) -> FriendRequest:
+    def _pending_request_query(*, user_a: User, user_b: User) -> Q:
+
+        return Q(sender=user_a, recipient=user_b) | Q(sender=user_b, recipient=user_a)
+
+    @staticmethod
+    def _friendship_exists(*, user_a: User, user_b: User) -> bool:
+
+        user_1_id = min(user_a.pk, user_b.pk)
+        user_2_id = max(user_a.pk, user_b.pk)
+
+        return Friendship.objects.filter(user_1_id=user_1_id, user_2_id=user_2_id).exists()
+
+    @staticmethod
+    def _get_friend_request_for_update(*, friend_request_id: int) -> FriendRequest:
+
+        try:
+            return (
+                FriendRequest.objects
+                .select_for_update()
+                .select_related(
+                    "sender",
+                    "recipient",
+                )
+                .get(pk=friend_request_id)
+            )
+        except FriendRequest.DoesNotExist as exc:
+            raise FriendRequestNotFound from exc
+
+    @classmethod
+    def send_friend_request(cls, *, current_user: User, target_user_id: int) -> FriendRequest:
 
         try:
             target_user = User.objects.get(pk=target_user_id)
-        except User.DoesNotExist:
-            raise InvalidProcess(code=TARGET_USER_NOT_FOUND)
+        except User.DoesNotExist as exc:
+            raise TargetUserNotFound from exc
 
-        if target_user.pk == current_user.pk:
-            raise BusinessRuleViolation(code=CANNOT_REQUEST_FRIENSSHIP_TO_SELF)
+        if current_user.pk == target_user.pk:
+            raise SelfFriendRequestNotAllowed
 
-        if FriendshipService.are_friends(user_a=current_user, user_b=target_user):
-            raise BusinessRuleViolation(code=USERS_ARE_ALREADY_FRIENDS)
+        with transaction.atomic():
+            if cls._friendship_exists(user_a=current_user, user_b=target_user):
+                raise UsersAlreadyFriends
 
-        if FriendRequest.objects.filter(recipient=current_user, sender=target_user).exists():
-            raise BusinessRuleViolation(code=RECIPIENT_ALREADY_SENT_A_FRIEND_REQUEST)
+            pending_query = cls._pending_request_query(
+                user_a=current_user,
+                user_b=target_user,
+            )
 
-        friend_request = FriendRequest(
-            sender=current_user,
-            recipient=target_user
-        )
+            if FriendRequest.objects.filter(pending_query).exists():
+                raise FriendRequestAlreadyPending
 
-        try:
-            friend_request.full_clean()
-            friend_request.save()
-        except ValidationError as e:
-            if e.code == "request_is_sent_and_is_pending":
-                raise BusinessRuleViolation(code=EXISTING_FRIEND_REQUEST_IS_ALREADY_PENDING)
+            try:
+                # Nested atomic block creates a savepoint so an
+                # IntegrityError from the database constraint does
+                # not break the surrounding transaction.
+                with transaction.atomic():
+                    friend_request = FriendRequest.objects.create(
+                        sender=current_user,
+                        recipient=target_user,
+                    )
 
-        # Probably notify the recipient using something
+            except IntegrityError as exc:
+                # Protect against concurrent attempts that passed
+                # the application-level existence check together.
+                if FriendRequest.objects.filter(pending_query).exists():
+                    raise FriendRequestAlreadyPending from exc
 
-        return friend_request
+                raise
 
-
-    @staticmethod
-    def cancel_pending_friend_request(*, current_user: User, friend_request_id: int) -> None:
-
-        # Probably notify the recipient using something (remove the friend request from other side)
-
-        friend_request = FriendRequestService.get_friend_request(friend_request_id=friend_request_id)
-
-        if friend_request.sender.pk != current_user.pk:
-            raise InvalidProcess(code=ONLY_FRIEND_REQUEST_SENDER_CAN_CANCEL)
-
-        if not FriendRequestService.remove_friend_request_if_users_are_friends(current_user=current_user, friend_request=friend_request):
-            friend_request.delete()
-
-
-    @staticmethod
-    def accept_friend_request(*, current_user: User, friend_request_id: int) -> None:
-
-        # Probably notify the sender using something (remove the friend request from other side)
-
-        friend_request = FriendRequestService.get_friend_request(friend_request_id=friend_request_id)
-
-        if friend_request.recipient.pk != current_user.pk:
-            raise InvalidProcess(code=ONLY_FRIEND_REQUEST_RECIPIENT_CAN_ACCEPT)
-
-        if not FriendRequestService.remove_friend_request_if_users_are_friends(current_user=current_user, friend_request=friend_request):
-            friend_request.delete()
-
-        # Probably start the friendship
-        FriendshipService.create(current_a=friend_request.recipient, user_b=friend_request.sender)
-
-    @staticmethod
-    def reject_friend_request(*, current_user: User, friend_request_id: int) -> None:
-
-        # Probably notify the sender using something (remove the friend request from other side)
-
-        friend_request = FriendRequestService.get_friend_request(friend_request_id=friend_request_id)
-
-        if friend_request.recipient.pk != current_user.pk:
-            raise InvalidProcess(code=ONLY_FRIEND_REQUEST_RECIPIENT_CAN_REJECT)
-
-        if not FriendRequestService.remove_friend_request_if_users_are_friends(current_user=current_user, friend_request=friend_request):
-            friend_request.delete()
-
-    @staticmethod
-    def get_friend_request(*, friend_request_id: int) -> FriendRequest:
-
-        try:
-            friend_request = FriendRequest.objects.get(pk=friend_request_id)
-        except FriendRequest.DoesNotExist:
-            raise InvalidProcess(code=TARGET_FRIEND_REQUEST_NOT_FOUND)
+            # Later:
+            # transaction.on_commit(
+            #     lambda: publish FriendRequestCreated(...)
+            # )
 
         return friend_request
 
-    @staticmethod
-    def remove_friend_request_if_users_are_friends(current_user: User, friend_request: FriendRequest, raise_error: bool = True) -> bool:
+    @classmethod
+    def accept_friend_request(cls, *, current_user: User, friend_request_id: int) -> Friendship:
 
-        if FriendshipService.are_friends(user_a=current_user, user_b=friend_request.recipient):
+        with transaction.atomic():
+            friend_request = (
+                cls._get_friend_request_for_update(
+                    friend_request_id=friend_request_id,
+                )
+            )
+
+            if friend_request.recipient_id != current_user.pk:
+                raise FriendRequestRecipientRequired
+
+            if friend_request.sender_id == friend_request.recipient_id:
+                raise SelfFriendRequestNotAllowed
+
+            if cls._friendship_exists(
+                user_a=friend_request.sender,
+                user_b=friend_request.recipient,
+            ):
+                raise UsersAlreadyFriends
+
+            friendship = FriendshipService._create_friendship(
+                user_a=friend_request.sender,
+                user_b=friend_request.recipient,
+            )
+
             friend_request.delete()
-            if raise_error:
-                raise InvalidProcess(code=USERS_ARE_ALREADY_FRIENDS)
-            return True
 
-        return False
+            # Later:
+            # transaction.on_commit(
+            #     lambda: publish FriendRequestAccepted(...)
+            # )
+            #
+            # transaction.on_commit(
+            #     lambda: publish FriendshipCreated(...)
+            # )
+
+        return friendship
+
+    @classmethod
+    def reject_friend_request(cls, *, current_user: User, friend_request_id: int) -> None:
+
+        with transaction.atomic():
+            friend_request = cls._get_friend_request_for_update(
+                friend_request_id=friend_request_id,
+            )
+
+            if friend_request.recipient_id != current_user.pk:
+                raise FriendRequestRecipientRequired
+
+            friend_request.delete()
+
+            # Later:
+            # transaction.on_commit(
+            #     lambda: publish FriendRequestRejected(...)
+            # )
+
+    @classmethod
+    def cancel_pending_friend_request(cls, *, current_user: User, friend_request_id: int) -> None:
+
+        with transaction.atomic():
+            friend_request = cls._get_friend_request_for_update(
+                friend_request_id=friend_request_id,
+            )
+
+            if friend_request.sender_id != current_user.pk:
+                raise FriendRequestSenderRequired
+
+            friend_request.delete()
+
+            # Later:
+            # transaction.on_commit(
+            #     lambda: publish FriendRequestCancelled(...)
+            # )

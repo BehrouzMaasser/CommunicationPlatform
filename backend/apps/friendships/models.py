@@ -1,6 +1,7 @@
 from django.conf import settings
 from django.db import models
-from django.db.models import Q
+from django.db.models import Q, F
+from django.db.models.functions import Least, Greatest
 
 
 class FriendRequest(models.Model):
@@ -26,8 +27,9 @@ class FriendRequest(models.Model):
                 violation_error_code="sender_is_the_recipient"
             ),
             models.UniqueConstraint(
-                fields=["sender", "recipient"],
-                name="unique_pending_friend_request",
+                Least("sender_id", "recipient_id"),
+                Greatest("sender_id", "recipient_id"),
+                name="unique_pending_friend_request_pair",
                 violation_error_code="request_is_sent_and_is_pending"
             ),
         ]
@@ -54,9 +56,10 @@ class Friendship(models.Model):
     class Meta:
         constraints = [
             models.CheckConstraint(
-                condition=~Q(user_1=models.F("user_2")),
-                name="friendship_users_are_different",
+                condition=Q(user_1__lt=F("user_2")),
+                name="friendship_pair_is_canonical",
             ),
+
             models.UniqueConstraint(
                 fields=["user_1", "user_2"],
                 name="unique_friendship_pair",
