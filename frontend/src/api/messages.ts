@@ -5,33 +5,14 @@ import {
 
 import type {
   Message,
+  MessageDraft,
   PaginatedMessages,
 } from '../types/messages'
 
 
-type SendDirectMessageInput = {
-  content: string
-  replyToId?: number
-  files?: File[]
-}
-
-
-export async function getDirectMessages(
-  conversationId: number,
-): Promise<Message[]> {
-  const response =
-    await apiGet<PaginatedMessages>(
-      `/api/v1/dms/${conversationId}/messages/`,
-    )
-
-  return response.results
-}
-
-
-export function sendDirectMessage(
-  conversationId: number,
-  input: SendDirectMessageInput,
-): Promise<Message> {
+function buildMessageBody(
+  input: MessageDraft,
+): Record<string, unknown> | FormData {
   const files = input.files ?? []
 
   if (files.length > 0) {
@@ -56,10 +37,7 @@ export function sendDirectMessage(
       )
     }
 
-    return apiPost<Message>(
-      `/api/v1/dms/${conversationId}/messages/`,
-      formData,
-    )
+    return formData
   }
 
   const body: Record<string, unknown> = {
@@ -70,8 +48,51 @@ export function sendDirectMessage(
     body.reply_to_id = input.replyToId
   }
 
+  return body
+}
+
+
+export async function getDirectMessages(
+  conversationId: number,
+): Promise<Message[]> {
+  const response =
+    await apiGet<PaginatedMessages>(
+      `/api/v1/dms/${conversationId}/messages/`,
+    )
+
+  return response.results
+}
+
+
+export function sendDirectMessage(
+  conversationId: number,
+  input: MessageDraft,
+): Promise<Message> {
   return apiPost<Message>(
     `/api/v1/dms/${conversationId}/messages/`,
-    body,
+    buildMessageBody(input),
+  )
+}
+
+
+export async function getGroupMessages(
+  groupId: number,
+): Promise<Message[]> {
+  const response =
+    await apiGet<PaginatedMessages>(
+      `/api/v1/groups/${groupId}/messages/`,
+    )
+
+  return response.results
+}
+
+
+export function sendGroupMessage(
+  groupId: number,
+  input: MessageDraft,
+): Promise<Message> {
+  return apiPost<Message>(
+    `/api/v1/groups/${groupId}/messages/`,
+    buildMessageBody(input),
   )
 }

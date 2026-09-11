@@ -383,27 +383,36 @@ function GroupDetailPage() {
           </div>
         </div>
 
-        {isOwner ? (
-          <button
-            className="btn btn-outline-danger"
-            disabled={busy !== null}
-            onClick={() =>
-              void handleDisband()
-            }
+        <div className="d-flex gap-2">
+          <Link
+            className="btn btn-primary"
+            to={`/groups/${group.id}/messages`}
           >
-            Disband
-          </button>
-        ) : (
-          <button
-            className="btn btn-outline-danger"
-            disabled={busy !== null}
-            onClick={() =>
-              void handleLeave()
-            }
-          >
-            Leave group
-          </button>
-        )}
+            Open chat
+          </Link>
+
+          {isOwner ? (
+            <button
+              className="btn btn-outline-danger"
+              disabled={busy !== null}
+              onClick={() =>
+                void handleDisband()
+              }
+            >
+              Disband
+            </button>
+          ) : (
+            <button
+              className="btn btn-outline-danger"
+              disabled={busy !== null}
+              onClick={() =>
+                void handleLeave()
+              }
+            >
+              Leave group
+            </button>
+          )}
+        </div>
       </div>
 
       {error && (

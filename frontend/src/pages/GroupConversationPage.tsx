@@ -8,31 +8,30 @@ import {
 } from 'react-router-dom'
 
 import { ApiError } from '../api/client'
+import { getGroup } from '../api/groups'
 import {
-  getDirectConversation,
-} from '../api/conversations'
-import { getFriends } from '../api/friendships'
-import {
-  getDirectMessages,
-  sendDirectMessage,
+  getGroupMessages,
+  sendGroupMessage,
 } from '../api/messages'
 
 import MessageComposer from '../components/messages/MessageComposer'
 import MessageThread from '../components/messages/MessageThread'
 
 import type {
-  DirectConversation,
-} from '../types/conversations'
+  GroupConversation,
+} from '../types/groups'
 import type {
   Message,
   MessageDraft,
 } from '../types/messages'
 
 
-function describeError(error: unknown): string {
+function describeError(
+  error: unknown,
+): string {
   if (error instanceof ApiError) {
     if (error.status === 404) {
-      return 'This direct conversation does not exist or you do not have access to it.'
+      return 'This group does not exist or you are not a current member.'
     }
 
     if (error.status === 401) {
@@ -50,17 +49,17 @@ function describeError(error: unknown): string {
 }
 
 
-function DirectConversationPage() {
-  const { conversationId } =
+function GroupConversationPage() {
+  const { groupId } =
     useParams<{
-      conversationId: string
+      groupId: string
     }>()
 
-  const parsedConversationId =
-    Number(conversationId)
+  const parsedGroupId =
+    Number(groupId)
 
-  const [conversation, setConversation] =
-    useState<DirectConversation | null>(
+  const [group, setGroup] =
+    useState<GroupConversation | null>(
       null,
     )
 
@@ -72,11 +71,6 @@ function DirectConversationPage() {
     setReplyingTo,
   ] =
     useState<Message | null>(null)
-
-  const [
-    canMessage,
-    setCanMessage,
-  ] = useState(false)
 
   const [loading, setLoading] =
     useState(true)
@@ -90,12 +84,12 @@ function DirectConversationPage() {
     async function load() {
       if (
         !Number.isInteger(
-          parsedConversationId,
+          parsedGroupId,
         ) ||
-        parsedConversationId <= 0
+        parsedGroupId <= 0
       ) {
         setError(
-          'Invalid conversation id.',
+          'Invalid group id.',
         )
         setLoading(false)
         return
@@ -103,37 +97,24 @@ function DirectConversationPage() {
 
       try {
         const [
-          conversationResult,
+          groupResult,
           messagesResult,
-          friendsResult,
         ] = await Promise.all([
-          getDirectConversation(
-            parsedConversationId,
+          getGroup(
+            parsedGroupId,
           ),
-          getDirectMessages(
-            parsedConversationId,
+          getGroupMessages(
+            parsedGroupId,
           ),
-          getFriends(),
         ])
 
         if (cancelled) {
           return
         }
 
-        setConversation(
-          conversationResult,
-        )
-
+        setGroup(groupResult)
         setMessages(
           messagesResult,
-        )
-
-        setCanMessage(
-          friendsResult.some(
-            (friend) =>
-              friend.id ===
-              conversationResult.other_user.id,
-          ),
         )
       } catch (requestError) {
         if (!cancelled) {
@@ -155,14 +136,14 @@ function DirectConversationPage() {
     return () => {
       cancelled = true
     }
-  }, [parsedConversationId])
+  }, [parsedGroupId])
 
   async function handleSend(
     input: MessageDraft,
   ) {
     const createdMessage =
-      await sendDirectMessage(
-        parsedConversationId,
+      await sendGroupMessage(
+        parsedGroupId,
         input,
       )
 
@@ -180,7 +161,7 @@ function DirectConversationPage() {
         <div
           className="spinner-border"
           role="status"
-          aria-label="Loading conversation"
+          aria-label="Loading group chat"
         />
       </div>
     )
@@ -188,20 +169,20 @@ function DirectConversationPage() {
 
   if (
     error ||
-    !conversation
+    !group
   ) {
     return (
       <section>
         <Link
           className="btn btn-link px-0 mb-3"
-          to="/messages"
+          to="/groups"
         >
-          ← Back to messages
+          ← Back to groups
         </Link>
 
         <div className="alert alert-danger">
           {error ??
-            'Conversation not found.'}
+            'Group not found.'}
         </div>
       </section>
     )
@@ -209,21 +190,30 @@ function DirectConversationPage() {
 
   return (
     <section>
-      <Link
-        className="btn btn-link px-0 mb-3"
-        to="/messages"
-      >
-        ← Back to messages
-      </Link>
+      <div className="d-flex justify-content-between align-items-center gap-3 mb-3">
+        <Link
+          className="btn btn-link px-0"
+          to={`/groups/${group.id}`}
+        >
+          ← Group details
+        </Link>
+
+        <Link
+          className="btn btn-outline-secondary btn-sm"
+          to="/groups"
+        >
+          All groups
+        </Link>
+      </div>
 
       <div className="card shadow-sm">
         <div className="card-header bg-white py-3">
           <h1 className="h4 mb-1">
-            @{conversation.other_user.username}
+            {group.name}
           </h1>
 
           <div className="small text-secondary">
-            Direct conversation #{conversation.id}
+            Group chat · Group #{group.id}
           </div>
         </div>
 
@@ -235,31 +225,22 @@ function DirectConversationPage() {
         >
           <MessageThread
             messages={messages}
-            onReply={
-              canMessage
-                ? (message) =>
-                    setReplyingTo(
-                      message,
-                    )
-                : undefined
+            onReply={(message) =>
+              setReplyingTo(
+                message,
+              )
             }
           />
         </div>
 
         <div className="card-footer bg-white py-3">
           <MessageComposer
-            placeholder={`Message @${conversation.other_user.username}`}
+            placeholder={`Message ${group.name}`}
             replyingTo={replyingTo}
             onCancelReply={() =>
               setReplyingTo(null)
             }
             onSend={handleSend}
-            disabled={!canMessage}
-            disabledMessage={
-              !canMessage
-                ? `You are no longer friends with @${conversation.other_user.username}. This conversation remains available as history, but new direct messages are disabled.`
-                : undefined
-            }
           />
         </div>
       </div>
@@ -268,4 +249,4 @@ function DirectConversationPage() {
 }
 
 
-export default DirectConversationPage
+export default GroupConversationPage

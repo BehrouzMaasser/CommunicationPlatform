@@ -26,6 +26,12 @@ export type Message = {
   created_at: string
 }
 
+export type MessageDraft = {
+  content: string
+  replyToId?: number
+  files?: File[]
+}
+
 export type PaginatedMessages = {
   count: number
   next: string | null
