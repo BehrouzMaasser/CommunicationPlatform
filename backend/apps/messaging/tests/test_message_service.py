@@ -8,6 +8,7 @@ from apps.conversations.services import (
 from apps.friendships.services import FriendshipService
 from apps.messaging.exceptions import (
     InvalidMessageContent,
+    FriendshipRequiredForDirectMessage,
     InvalidMessageContext,
     MessageContextNotFound,
     ReplyMessageNotFound,
@@ -84,21 +85,24 @@ class MessageServiceTests(TestCase):
             "Hello Bob",
         )
 
-    def test_direct_message_can_be_sent_after_unfriending(self):
+    def test_direct_message_is_blocked_after_unfriending(self):
         FriendshipService.remove_friendship(
             current_user=self.alice,
             friend_user_id=self.bob.pk,
         )
 
-        message = MessageService.create_text_message(
-            current_user=self.alice,
-            direct_conversation_id=self.direct_conversation.pk,
-            content="Existing DM still works",
-        )
+        with self.assertRaises(FriendshipRequiredForDirectMessage):
+            MessageService.create_text_message(
+                current_user=self.alice,
+                direct_conversation_id=self.direct_conversation.pk,
+                content="Blocked after unfriend",
+            )
 
-        self.assertEqual(
-            message.direct_conversation,
-            self.direct_conversation,
+        self.assertFalse(
+            Message.objects.filter(
+                sender=self.alice,
+                content="Blocked after unfriend",
+            ).exists()
         )
 
     def test_non_participant_cannot_send_direct_message(self):

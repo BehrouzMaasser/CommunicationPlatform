@@ -328,7 +328,7 @@ class AttachmentMessageCreateApiTests(AttachmentApiTestBase):
             ).exists()
         )
 
-    def test_dm_attachment_message_still_works_after_unfriending(self):
+    def test_dm_attachment_send_is_forbidden_after_unfriending(self):
         FriendshipService.remove_friendship(
             current_user=self.alice,
             friend_user_id=self.bob.pk,
@@ -349,7 +349,12 @@ class AttachmentMessageCreateApiTests(AttachmentApiTestBase):
             format="multipart",
         )
 
-        self.assertEqual(response.status_code, 201)
+        self.assertEqual(response.status_code, 403)
+        self.assertFalse(
+            Message.objects.filter(
+                sender=self.alice,
+            ).exists()
+        )
 
     def test_attachment_reply_in_same_context_is_created(self):
         parent = MessageService.create_text_message(

@@ -3,6 +3,7 @@ from rest_framework.response import Response
 
 from apps.messaging.exceptions import (
     InvalidMessageContent,
+    FriendshipRequiredForDirectMessage,
     InvalidMessageContext,
     MessageContextNotFound,
     MessageNotFound,
@@ -17,6 +18,9 @@ _EXCEPTION_STATUS_MAP = {
 
     InvalidMessageContent:
         status.HTTP_400_BAD_REQUEST,
+
+    FriendshipRequiredForDirectMessage:
+        status.HTTP_403_FORBIDDEN,
 
     MessageContextNotFound:
         status.HTTP_404_NOT_FOUND,

@@ -32,3 +32,8 @@ class ReplyMessageNotFound(MessagingError):
 class MessageNotFound(MessagingError):
     code = "message_not_found"
     default_message = "The message does not exist or is not accessible."
+
+
+class FriendshipRequiredForDirectMessage(MessagingError):
+    code = "friendship_required_for_direct_message"
+    default_message = "Users must be friends to send direct messages."

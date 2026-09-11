@@ -3,9 +3,9 @@ from tempfile import TemporaryDirectory
 from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
+from django.core.files.base import ContentFile
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase, override_settings
-from django.core.files.base import ContentFile
 
 from apps.attachments.exceptions import InvalidAttachment
 from apps.attachments.models import MessageAttachment
@@ -17,6 +17,7 @@ from apps.conversations.services import (
 from apps.friendships.services import FriendshipService
 from apps.messaging.exceptions import (
     InvalidMessageContent,
+    FriendshipRequiredForDirectMessage,
     MessageContextNotFound,
     ReplyMessageNotFound,
 )
@@ -174,20 +175,22 @@ class MessageAttachmentServiceTests(TestCase):
                 files=[self.upload()],
             )
 
-    def test_existing_dm_allows_attachment_after_unfriending(self):
+    def test_existing_dm_blocks_new_attachment_after_unfriending(self):
         FriendshipService.remove_friendship(
             current_user=self.alice,
             friend_user_id=self.bob.pk,
         )
 
-        message = MessageAttachmentService.create_message_with_attachments(
-            current_user=self.alice,
-            direct_conversation_id=self.dm.pk,
-            content="",
-            files=[self.upload()],
-        )
+        with self.assertRaises(FriendshipRequiredForDirectMessage):
+            MessageAttachmentService.create_message_with_attachments(
+                current_user=self.alice,
+                direct_conversation_id=self.dm.pk,
+                content="",
+                files=[self.upload()],
+            )
 
-        self.assertEqual(message.direct_conversation, self.dm)
+        self.assertFalse(Message.objects.exists())
+        self.assertFalse(MessageAttachment.objects.exists())
 
     def test_same_context_reply_with_attachment_is_allowed(self):
         parent = MessageService.create_text_message(

@@ -233,7 +233,7 @@ class DirectMessageApiTests(MessagingApiTestBase):
             Message.objects.exists()
         )
 
-    def test_direct_message_can_be_sent_after_unfriending(self):
+    def test_direct_message_send_is_forbidden_after_unfriending(self):
         FriendshipService.remove_friendship(
             current_user=self.alice,
             friend_user_id=self.bob.pk,
@@ -248,11 +248,17 @@ class DirectMessageApiTests(MessagingApiTestBase):
                     "conversation_id": self.direct_conversation.pk,
                 },
             ),
-            {"content": "Existing DM still works"},
+            {"content": "Blocked after unfriend"},
             format="json",
         )
 
-        self.assertEqual(response.status_code, 201)
+        self.assertEqual(response.status_code, 403)
+        self.assertFalse(
+            Message.objects.filter(
+                sender=self.alice,
+                content="Blocked after unfriend",
+            ).exists()
+        )
 
     def test_direct_outsider_cannot_send_message(self):
         self.login(self.charlie)

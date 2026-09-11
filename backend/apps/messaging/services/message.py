@@ -7,9 +7,11 @@ from apps.conversations.models import (
     GroupConversation,
     GroupMembership,
 )
+from apps.friendships.models import Friendship
 from apps.messaging.exceptions import (
     InvalidMessageContent,
     InvalidMessageContext,
+    FriendshipRequiredForDirectMessage,
     MessageContextNotFound,
     ReplyMessageNotFound,
 )
@@ -63,6 +65,26 @@ class MessageService:
 
         if conversation is None:
             raise MessageContextNotFound
+
+        other_user_id = (
+            conversation.user_2_id
+            if conversation.user_1_id == current_user.pk
+            else conversation.user_1_id
+        )
+
+        friendship_exists = Friendship.objects.filter(
+            Q(
+                user_1_id=current_user.pk,
+                user_2_id=other_user_id,
+            )
+            | Q(
+                user_1_id=other_user_id,
+                user_2_id=current_user.pk,
+            )
+        ).exists()
+
+        if not friendship_exists:
+            raise FriendshipRequiredForDirectMessage
 
         return conversation
 
