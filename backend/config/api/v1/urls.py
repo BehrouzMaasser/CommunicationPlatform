@@ -4,6 +4,10 @@ from django.urls import include, path
 urlpatterns = [
     path(
         "",
+        include("apps.accounts.api.v1.urls"),
+    ),
+    path(
+        "",
         include("apps.friendships.api.v1.urls"),
     ),
     path(
