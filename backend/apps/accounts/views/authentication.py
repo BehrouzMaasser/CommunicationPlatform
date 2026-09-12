@@ -17,7 +17,7 @@ class SignupView(View):
 
         if request.user.is_authenticated:
 
-            return redirect("users-me")
+            return redirect("/")
 
         return render(
             request,
@@ -41,7 +41,7 @@ class SignupView(View):
 
             login(request, user)
 
-            return redirect("users-me")
+            return redirect("/")
 
         except ValidationError as e:
             if hasattr(e, "message_dict"):
@@ -62,7 +62,7 @@ class LoginView(View):
 
         if request.user.is_authenticated:
 
-            return redirect("users-me")
+            return redirect("/")
 
         return render(request, self.template_name, {"form": UserLoginForm()})
 
@@ -81,7 +81,7 @@ class LoginView(View):
         if user:
             login(request, user)
 
-            return redirect("users-me")
+            return redirect("/")
 
         form.add_error(None, "Invalid credentials.")
 

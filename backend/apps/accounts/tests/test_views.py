@@ -44,7 +44,8 @@ class AccountViewTests(TestCase):
 
         self.assertRedirects(
             response,
-            reverse("users-me"),
+            "/",
+            fetch_redirect_response=False,
         )
 
         user = User.objects.get(
@@ -89,7 +90,8 @@ class AccountViewTests(TestCase):
 
         self.assertRedirects(
             response,
-            reverse("users-me"),
+            "/",
+            fetch_redirect_response=False,
         )
 
     # ------------------------------------------------------------------
@@ -118,7 +120,8 @@ class AccountViewTests(TestCase):
 
         self.assertRedirects(
             response,
-            reverse("users-me"),
+            "/",
+            fetch_redirect_response=False,
         )
 
         self.assertEqual(
@@ -151,7 +154,8 @@ class AccountViewTests(TestCase):
 
         self.assertRedirects(
             response,
-            reverse("users-me"),
+            "/",
+            fetch_redirect_response=False,
         )
 
     # ------------------------------------------------------------------
@@ -191,6 +195,10 @@ class AccountViewTests(TestCase):
             response.context["user"],
             self.user,
         )
+
+        self.assertContains(response, 'href="/friends"')
+        self.assertContains(response, 'href="/messages"')
+        self.assertContains(response, 'href="/groups"')
 
     # ------------------------------------------------------------------
     # Logout
