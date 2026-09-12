@@ -20,6 +20,7 @@ import type {
 type RealtimeContextValue = {
   client: RealtimeClient
   status: RealtimeStatus
+  currentUserId?: number
 }
 
 
@@ -31,12 +32,14 @@ const RealtimeContext =
 
 type RealtimeProviderProps = {
   enabled: boolean
+  currentUserId?: number
   children: ReactNode
 }
 
 
 export function RealtimeProvider({
   enabled,
+  currentUserId,
   children,
 }: RealtimeProviderProps) {
   const [client] =
@@ -69,11 +72,52 @@ export function RealtimeProvider({
     }
   }, [client, enabled])
 
+
+  useEffect(() => {
+    if (
+      !enabled ||
+      currentUserId === undefined
+    ) {
+      return
+    }
+
+    return client.onEvent<{
+      message: {
+        id: number
+        sender: {
+          id: number
+        }
+      }
+    }>(
+      'message.created',
+      ({ payload }) => {
+        if (
+          payload.message.sender.id
+          === currentUserId
+          ||
+          client.getStatus()
+          !== 'connected'
+        ) {
+          return
+        }
+
+        client.acknowledgeDelivered(
+          payload.message.id,
+        )
+      },
+    )
+  }, [
+    client,
+    currentUserId,
+    enabled,
+  ])
+
   return (
     <RealtimeContext.Provider
       value={{
         client,
         status,
+        currentUserId,
       }}
     >
       {children}

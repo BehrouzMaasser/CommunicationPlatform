@@ -239,6 +239,9 @@ function AppLayout() {
         authStatus ===
         'authenticated'
       }
+      currentUserId={
+        currentUser?.id
+      }
     >
       <AppLayoutContent
         authStatus={authStatus}

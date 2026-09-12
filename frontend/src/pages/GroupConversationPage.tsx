@@ -19,17 +19,22 @@ import {
 import MessageComposer from '../components/messages/MessageComposer'
 import MessageThread from '../components/messages/MessageThread'
 import {
+  applyDeliveredReceipt,
+  applyReadThroughReceipt,
   mergeMessage,
   mergeMessageList,
 } from '../components/messages/messageState'
 
 import {
   useConversationRealtimeSubscription,
+  useRealtime,
   useRealtimeEvent,
 } from '../realtime/RealtimeContext'
 
 import type {
   MessageCreatedPayload,
+  MessageDeliveredPayload,
+  MessageReadPayload,
 } from '../realtime/messageEvents'
 import type {
   GroupConversation,
@@ -71,6 +76,10 @@ type ConversationSubscribedPayload = {
 
 
 function GroupConversationPage() {
+  const {
+    client: realtimeClient,
+    status: realtimeStatus,
+  } = useRealtime()
   const navigate = useNavigate()
   const { groupId } =
     useParams<{
@@ -263,11 +272,98 @@ function GroupConversationPage() {
       ],
     )
 
+  const handleDelivered =
+    useCallback(
+      ({
+        payload,
+      }: {
+        payload:
+          MessageDeliveredPayload
+      }) => {
+        if (
+          payload.conversation_type
+            !== 'group'
+          ||
+          payload.conversation_id
+            !== parsedGroupId
+        ) {
+          return
+        }
+
+        setMessages(
+          (current) =>
+            applyDeliveredReceipt(
+              current,
+              {
+                messageId:
+                  payload.message_id,
+                userId:
+                  payload.user_id,
+                deliveredAt:
+                  payload.delivered_at,
+              },
+            ),
+        )
+      },
+      [parsedGroupId],
+    )
+
+  const handleRead =
+    useCallback(
+      ({
+        payload,
+      }: {
+        payload:
+          MessageReadPayload
+      }) => {
+        if (
+          payload.conversation_type
+            !== 'group'
+          ||
+          payload.conversation_id
+            !== parsedGroupId
+        ) {
+          return
+        }
+
+        setMessages(
+          (current) =>
+            applyReadThroughReceipt(
+              current,
+              {
+                throughMessageId:
+                  payload.message_id,
+                userId:
+                  payload.user_id,
+                readAt:
+                  payload.read_at,
+              },
+            ),
+        )
+      },
+      [parsedGroupId],
+    )
+
   useRealtimeEvent<
     MessageCreatedPayload
   >(
     'message.created',
     handleMessageCreated,
+  )
+
+
+  useRealtimeEvent<
+    MessageDeliveredPayload
+  >(
+    'message.delivered',
+    handleDelivered,
+  )
+
+  useRealtimeEvent<
+    MessageReadPayload
+  >(
+    'message.read',
+    handleRead,
   )
 
   useRealtimeEvent<
@@ -291,6 +387,49 @@ function GroupConversationPage() {
     'conversation.unsubscribed',
     handleUnsubscribed,
   )
+
+  useEffect(() => {
+    function markVisibleMessagesRead() {
+      if (
+        realtimeStatus !==
+          'connected'
+        ||
+        document.visibilityState
+          !== 'visible'
+        ||
+        messages.length === 0
+      ) {
+        return
+      }
+
+      const latest =
+        messages[
+          messages.length - 1
+        ]
+
+      realtimeClient.markReadThrough(
+        latest.id,
+      )
+    }
+
+    markVisibleMessagesRead()
+
+    document.addEventListener(
+      'visibilitychange',
+      markVisibleMessagesRead,
+    )
+
+    return () => {
+      document.removeEventListener(
+        'visibilitychange',
+        markVisibleMessagesRead,
+      )
+    }
+  }, [
+    messages,
+    realtimeClient,
+    realtimeStatus,
+  ])
 
   useConversationRealtimeSubscription(
     'group',

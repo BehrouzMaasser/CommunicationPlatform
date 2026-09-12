@@ -1,3 +1,5 @@
+import { useRealtime } from '../../realtime/RealtimeContext'
+
 import type {
   Message,
   MessageAttachment,
@@ -109,6 +111,9 @@ function MessageThread({
   messages,
   onReply,
 }: MessageThreadProps) {
+  const {
+    currentUserId,
+  } = useRealtime()
   if (messages.length === 0) {
     return (
       <div className="text-center py-5">
@@ -174,6 +179,33 @@ function MessageThread({
               )}
             </div>
           )}
+
+
+          {
+            message.sender.id ===
+              currentUserId &&
+            message.receipts.length > 0 && (
+              <div className="small text-secondary mt-2">
+                Delivered to{' '}
+                {
+                  message.receipts.filter(
+                    (receipt) =>
+                      receipt.delivered_at
+                      !== null,
+                  ).length
+                }
+                {' · '}
+                Read by{' '}
+                {
+                  message.receipts.filter(
+                    (receipt) =>
+                      receipt.read_at
+                      !== null,
+                  ).length
+                }
+              </div>
+            )
+          }
 
           {onReply && (
             <div className="mt-3">

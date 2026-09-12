@@ -114,9 +114,13 @@ class MessageCreatedRealtimeTests(
             "message.created",
         )
 
-        self.assertEqual(
+        self.assertCountEqual(
             kwargs["group_names"],
-            [f"dm.{self.dm.pk}"],
+            [
+                f"dm.{self.dm.pk}",
+                f"user.{self.alice.pk}",
+                f"user.{self.bob.pk}",
+            ],
         )
 
         payload = kwargs["payload"]
@@ -174,10 +178,12 @@ class MessageCreatedRealtimeTests(
             publish.call_args.kwargs
         )
 
-        self.assertEqual(
+        self.assertCountEqual(
             kwargs["group_names"],
             [
-                f"group.{self.group.pk}"
+                f"group.{self.group.pk}",
+                f"user.{self.alice.pk}",
+                f"user.{self.bob.pk}",
             ],
         )
         self.assertEqual(

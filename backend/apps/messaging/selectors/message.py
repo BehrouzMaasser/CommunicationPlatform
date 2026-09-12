@@ -25,8 +25,8 @@ class MessageSelector:
                 "group_conversation",
             )
             .prefetch_related(
-                "attachments",
-                "reply_to__attachments",
+                "receipts",
+                "receipts__user",
             )
         )
 

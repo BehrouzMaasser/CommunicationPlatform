@@ -17,6 +17,7 @@ from apps.messaging.exceptions import (
 )
 from apps.messaging.models import Message
 from apps.messaging.realtime import MessageRealtimePublisher
+from apps.messaging.services.receipt import MessageReceiptService
 
 
 User = get_user_model()
@@ -208,6 +209,10 @@ class MessageService:
                 group_conversation=group_conversation,
                 content=content,
                 reply_to=reply_to,
+            )
+
+            MessageReceiptService.initialize_for_message(
+                message=message,
             )
 
             context = (

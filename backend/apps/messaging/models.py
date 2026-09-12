@@ -9,7 +9,6 @@ from apps.conversations.models import (
 
 
 class Message(models.Model):
-
     sender = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.CASCADE,
@@ -94,4 +93,64 @@ class Message(models.Model):
         return (
             f"Message {self.pk} from "
             f"{self.sender.username} in {context}"
+        )
+
+
+
+class MessageReceipt(models.Model):
+    """
+    Persistent per-recipient state for a message.
+
+    Rows are created when the message is created, so the recipient set is
+    frozen at send time. The sender never receives a receipt row for their
+    own message.
+    """
+
+    message = models.ForeignKey(
+        Message,
+        on_delete=models.CASCADE,
+        related_name="receipts",
+    )
+
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="message_receipts",
+    )
+
+    delivered_at = models.DateTimeField(
+        null=True,
+        blank=True,
+    )
+
+    read_at = models.DateTimeField(
+        null=True,
+        blank=True,
+    )
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=[
+                    "message",
+                    "user",
+                ],
+                name="unique_message_receipt_user",
+            ),
+        ]
+
+        indexes = [
+            models.Index(
+                fields=[
+                    "user",
+                    "read_at",
+                ],
+                name="msg_receipt_user_read_idx",
+            ),
+        ]
+
+    def __str__(self):
+        return (
+            f"Receipt message={self.message_id} "
+            f"user={self.user_id}"
         )

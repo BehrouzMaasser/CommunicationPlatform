@@ -17,6 +17,8 @@ from apps.realtime.group_names import (
 from apps.realtime.subscriptions import (
     RealtimeSubscriptionSelector,
 )
+from apps.messaging.exceptions import MessagingError
+from apps.messaging.services.receipt import MessageReceiptService
 
 
 class RealtimeConsumer(
@@ -147,6 +149,26 @@ class RealtimeConsumer(
             )
             return
 
+        if (
+            command_type
+            == "message.delivered"
+        ):
+            await self._handle_message_delivered(
+                request_id=request_id,
+                payload=payload,
+            )
+            return
+
+        if (
+            command_type
+            == "message.read"
+        ):
+            await self._handle_message_read(
+                request_id=request_id,
+                payload=payload,
+            )
+            return
+
         await self._send_error(
             request_id=request_id,
             code="UNKNOWN_COMMAND",
@@ -155,6 +177,127 @@ class RealtimeConsumer(
                 "is not supported."
             ),
         )
+
+    @staticmethod
+    def _parse_message_id(
+        payload: dict[str, Any],
+    ) -> int | None:
+        message_id = payload.get(
+            "message_id"
+        )
+
+        if (
+            not isinstance(
+                message_id,
+                int,
+            )
+            or message_id <= 0
+        ):
+            return None
+
+        return message_id
+
+    @database_sync_to_async
+    def _mark_message_delivered(
+        self,
+        *,
+        message_id: int,
+    ) -> None:
+        (
+            MessageReceiptService
+            .mark_delivered(
+                current_user=self.user,
+                message_id=message_id,
+            )
+        )
+
+    @database_sync_to_async
+    def _mark_message_read(
+        self,
+        *,
+        message_id: int,
+    ) -> None:
+        (
+            MessageReceiptService
+            .mark_read_through(
+                current_user=self.user,
+                message_id=message_id,
+            )
+        )
+
+    async def _handle_message_delivered(
+        self,
+        *,
+        request_id: str | None,
+        payload: dict[str, Any],
+    ):
+        message_id = (
+            self._parse_message_id(
+                payload
+            )
+        )
+
+        if message_id is None:
+            await self._send_error(
+                request_id=request_id,
+                code="INVALID_COMMAND",
+                detail=(
+                    "A valid message_id "
+                    "is required."
+                ),
+            )
+            return
+
+        try:
+            await self._mark_message_delivered(
+                message_id=message_id,
+            )
+        except MessagingError:
+            await self._send_error(
+                request_id=request_id,
+                code="NOT_AUTHORIZED",
+                detail=(
+                    "You cannot acknowledge "
+                    "this message."
+                ),
+            )
+
+    async def _handle_message_read(
+        self,
+        *,
+        request_id: str | None,
+        payload: dict[str, Any],
+    ):
+        message_id = (
+            self._parse_message_id(
+                payload
+            )
+        )
+
+        if message_id is None:
+            await self._send_error(
+                request_id=request_id,
+                code="INVALID_COMMAND",
+                detail=(
+                    "A valid message_id "
+                    "is required."
+                ),
+            )
+            return
+
+        try:
+            await self._mark_message_read(
+                message_id=message_id,
+            )
+        except MessagingError:
+            await self._send_error(
+                request_id=request_id,
+                code="NOT_AUTHORIZED",
+                detail=(
+                    "You cannot mark "
+                    "this message read."
+                ),
+            )
 
     async def _handle_conversation_subscribe(
         self,
@@ -379,16 +522,17 @@ class RealtimeConsumer(
         self,
         event: dict[str, Any],
     ):
-        group_name = event[
-            "group_name"
+        group_name = event["group_name"]
+        conversation_type = event[
+            "conversation_type"
+        ]
+        conversation_id = event[
+            "conversation_id"
         ]
 
-        await (
-            self.channel_layer
-            .group_discard(
-                group_name,
-                self.channel_name,
-            )
+        await self.channel_layer.group_discard(
+            group_name,
+            self.channel_name,
         )
 
         self.subscribed_groups.discard(
@@ -403,14 +547,10 @@ class RealtimeConsumer(
                 ),
                 payload={
                     "conversation_type": (
-                        event[
-                            "conversation_type"
-                        ]
+                        conversation_type
                     ),
                     "conversation_id": (
-                        event[
-                            "conversation_id"
-                        ]
+                        conversation_id
                     ),
                     "reason": (
                         "access_revoked"

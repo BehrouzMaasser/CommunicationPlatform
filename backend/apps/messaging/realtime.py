@@ -4,17 +4,48 @@ from django.urls import reverse
 from apps.messaging.models import Message
 from apps.messaging.selectors import MessageSelector
 from apps.realtime.events import RealtimeEventType
-from apps.realtime.group_names import conversation_group_name
+from apps.realtime.group_names import (
+    conversation_group_name,
+    user_group_name,
+)
 from apps.realtime.publisher import RealtimePublisher
+
+
+def _iso(value) -> str:
+    return (
+        value.isoformat()
+        .replace("+00:00", "Z")
+    )
+
+
+def _conversation_identity(
+    message: Message,
+) -> tuple[str, int]:
+    if (
+        message.direct_conversation_id
+        is not None
+    ):
+        return (
+            "dm",
+            message.direct_conversation_id,
+        )
+
+    return (
+        "group",
+        message.group_conversation_id,
+    )
 
 
 class MessageRealtimePublisher:
     """
     Realtime adapter for persisted Message events.
 
-    The event payload is intentionally explicit rather than reusing a DRF
-    serializer. Realtime is its own external contract and should not silently
-    change just because a REST serializer changes later.
+    message.created is sent to:
+      - the conversation subscription group
+      - each original participant/recipient's personal user group
+
+    The SAME event envelope/event_id is fanned out to every target, so a chat
+    tab that belongs to both targets is deduplicated by RealtimeClient.
     """
 
     @staticmethod
@@ -25,23 +56,28 @@ class MessageRealtimePublisher:
         }
 
     @staticmethod
-    def _serialize_attachment(attachment) -> dict:
+    def _serialize_attachment(
+        attachment,
+    ) -> dict:
         return {
             "id": attachment.pk,
             "original_filename": (
                 attachment.original_filename
             ),
-            "mime_type": attachment.mime_type,
-            "size_bytes": attachment.size_bytes,
-            "created_at": (
+            "mime_type": (
+                attachment.mime_type
+            ),
+            "size_bytes": (
+                attachment.size_bytes
+            ),
+            "created_at": _iso(
                 attachment.created_at
-                .isoformat()
-                .replace("+00:00", "Z")
             ),
             "download_url": reverse(
                 "attachment-download",
                 kwargs={
-                    "attachment_id": attachment.pk,
+                    "attachment_id":
+                        attachment.pk,
                 },
             ),
         }
@@ -67,12 +103,44 @@ class MessageRealtimePublisher:
                 for attachment
                 in reply_to.attachments.all()
             ],
-            "created_at": (
+            "created_at": _iso(
                 reply_to.created_at
-                .isoformat()
-                .replace("+00:00", "Z")
             ),
         }
+
+    @classmethod
+    def _serialize_receipts(
+        cls,
+        message: Message,
+    ) -> list[dict]:
+        return [
+            {
+                "user":
+                    cls._serialize_user(
+                        receipt.user
+                    ),
+                "delivered_at": (
+                    _iso(
+                        receipt.delivered_at
+                    )
+                    if
+                    receipt.delivered_at
+                    is not None
+                    else None
+                ),
+                "read_at": (
+                    _iso(
+                        receipt.read_at
+                    )
+                    if
+                    receipt.read_at
+                    is not None
+                    else None
+                ),
+            }
+            for receipt
+            in message.receipts.all()
+        ]
 
     @classmethod
     def _serialize_message(
@@ -95,12 +163,48 @@ class MessageRealtimePublisher:
             "reply_to": cls._serialize_reply(
                 message.reply_to
             ),
-            "created_at": (
+            "receipts":
+                cls._serialize_receipts(
+                    message
+                ),
+            "created_at": _iso(
                 message.created_at
-                .isoformat()
-                .replace("+00:00", "Z")
             ),
         }
+
+    @staticmethod
+    def _created_group_names(
+        message: Message,
+    ) -> list[str]:
+        (
+            conversation_type,
+            conversation_id,
+        ) = _conversation_identity(
+            message
+        )
+
+        user_ids = {
+            message.sender_id,
+            *[
+                receipt.user_id
+                for receipt
+                in message.receipts.all()
+            ],
+        }
+
+        return [
+            conversation_group_name(
+                conversation_type,
+                conversation_id,
+            ),
+            *[
+                user_group_name(
+                    user_id
+                )
+                for user_id
+                in user_ids
+            ],
+        ]
 
     @classmethod
     def _publish_created(
@@ -118,19 +222,12 @@ class MessageRealtimePublisher:
         if message is None:
             return
 
-        if (
-            message.direct_conversation_id
-            is not None
-        ):
-            conversation_type = "dm"
-            conversation_id = (
-                message.direct_conversation_id
-            )
-        else:
-            conversation_type = "group"
-            conversation_id = (
-                message.group_conversation_id
-            )
+        (
+            conversation_type,
+            conversation_id,
+        ) = _conversation_identity(
+            message
+        )
 
         RealtimePublisher.publish(
             event_type=(
@@ -138,17 +235,66 @@ class MessageRealtimePublisher:
                 .MESSAGE_CREATED
             ),
             payload={
-                "conversation_type": (
-                    conversation_type
-                ),
-                "conversation_id": (
-                    conversation_id
-                ),
-                "message": (
+                "conversation_type":
+                    conversation_type,
+                "conversation_id":
+                    conversation_id,
+                "message":
                     cls._serialize_message(
                         message
-                    )
-                ),
+                    ),
+            },
+            group_names=(
+                cls._created_group_names(
+                    message
+                )
+            ),
+        )
+
+    @classmethod
+    def publish_created_after_commit(
+        cls,
+        *,
+        message_id: int,
+    ) -> None:
+        transaction.on_commit(
+            lambda:
+                cls._publish_created(
+                    message_id=message_id,
+                )
+        )
+
+
+class MessageReceiptRealtimePublisher:
+    """
+    Receipt updates go only to currently authorized conversation subscribers.
+
+    Persistence is the reconciliation path for users/tabs that were not
+    subscribed when the event happened.
+    """
+
+    @staticmethod
+    def _publish_after_commit(
+        *,
+        event_type: RealtimeEventType,
+        message: Message,
+        payload: dict,
+    ) -> None:
+        (
+            conversation_type,
+            conversation_id,
+        ) = _conversation_identity(
+            message
+        )
+
+        RealtimePublisher.publish_after_commit(
+            event_type=event_type,
+            payload={
+                "conversation_type":
+                    conversation_type,
+                "conversation_id":
+                    conversation_id,
+                **payload,
             },
             group_names=[
                 conversation_group_name(
@@ -159,13 +305,50 @@ class MessageRealtimePublisher:
         )
 
     @classmethod
-    def publish_created_after_commit(
+    def delivered_after_commit(
         cls,
         *,
-        message_id: int,
+        message: Message,
+        user_id: int,
+        delivered_at,
     ) -> None:
-        transaction.on_commit(
-            lambda: cls._publish_created(
-                message_id=message_id,
-            )
+        cls._publish_after_commit(
+            event_type=(
+                RealtimeEventType
+                .MESSAGE_DELIVERED
+            ),
+            message=message,
+            payload={
+                "message_id":
+                    message.pk,
+                "user_id":
+                    user_id,
+                "delivered_at":
+                    _iso(delivered_at),
+            },
+        )
+
+    @classmethod
+    def read_after_commit(
+        cls,
+        *,
+        message: Message,
+        user_id: int,
+        read_at,
+    ) -> None:
+        cls._publish_after_commit(
+            event_type=(
+                RealtimeEventType
+                .MESSAGE_READ
+            ),
+            message=message,
+            payload={
+                # Read-through watermark.
+                "message_id":
+                    message.pk,
+                "user_id":
+                    user_id,
+                "read_at":
+                    _iso(read_at),
+            },
         )

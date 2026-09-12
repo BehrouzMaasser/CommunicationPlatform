@@ -17,12 +17,19 @@ export type MessageReply = {
   created_at: string
 }
 
+export type MessageReceipt = {
+  user: PublicUser
+  delivered_at: string | null
+  read_at: string | null
+}
+
 export type Message = {
   id: number
   sender: PublicUser
   content: string
   attachments: MessageAttachment[]
   reply_to: MessageReply | null
+  receipts: MessageReceipt[]
   created_at: string
 }
 

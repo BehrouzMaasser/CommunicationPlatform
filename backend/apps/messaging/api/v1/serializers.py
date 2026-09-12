@@ -6,7 +6,7 @@ from apps.accounts.api.v1.serializers import (
 from apps.attachments.api.v1.serializers import (
     MessageAttachmentSerializer,
 )
-from apps.messaging.models import Message
+from apps.messaging.models import Message, MessageReceipt
 
 
 class MessageCreateSerializer(serializers.Serializer):
@@ -44,6 +44,21 @@ class MessageReplySerializer(serializers.ModelSerializer):
         read_only_fields = fields
 
 
+class MessageReceiptSerializer(serializers.ModelSerializer):
+    user = PublicUserSerializer(
+        read_only=True,
+    )
+
+    class Meta:
+        model = MessageReceipt
+        fields = (
+            "user",
+            "delivered_at",
+            "read_at",
+        )
+        read_only_fields = fields
+
+
 class MessageSerializer(serializers.ModelSerializer):
     sender = PublicUserSerializer(
         read_only=True,
@@ -52,6 +67,10 @@ class MessageSerializer(serializers.ModelSerializer):
         read_only=True,
     )
     attachments = MessageAttachmentSerializer(
+        many=True,
+        read_only=True,
+    )
+    receipts = MessageReceiptSerializer(
         many=True,
         read_only=True,
     )
@@ -64,6 +83,7 @@ class MessageSerializer(serializers.ModelSerializer):
             "content",
             "attachments",
             "reply_to",
+            "receipts",
             "created_at",
         )
         read_only_fields = fields

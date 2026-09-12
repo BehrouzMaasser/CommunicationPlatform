@@ -76,3 +76,100 @@ export function mergeMessageList(
 
   return merged
 }
+
+
+
+export function applyDeliveredReceipt(
+  messages: Message[],
+  {
+    messageId,
+    userId,
+    deliveredAt,
+  }: {
+    messageId: number
+    userId: number
+    deliveredAt: string
+  },
+): Message[] {
+  return messages.map(
+    (message) => {
+      if (
+        message.id !== messageId
+      ) {
+        return message
+      }
+
+      return {
+        ...message,
+        receipts:
+          message.receipts.map(
+            (receipt) =>
+              receipt.user.id ===
+                userId
+                ? {
+                    ...receipt,
+                    delivered_at:
+                      receipt
+                        .delivered_at
+                      ?? deliveredAt,
+                  }
+                : receipt,
+          ),
+      }
+    },
+  )
+}
+
+
+export function applyReadThroughReceipt(
+  messages: Message[],
+  {
+    throughMessageId,
+    userId,
+    readAt,
+  }: {
+    throughMessageId: number
+    userId: number
+    readAt: string
+  },
+): Message[] {
+  const throughIndex =
+    messages.findIndex(
+      (message) =>
+        message.id ===
+        throughMessageId,
+    )
+
+  if (throughIndex < 0) {
+    return messages
+  }
+
+  return messages.map(
+    (message, index) => {
+      if (index > throughIndex) {
+        return message
+      }
+
+      return {
+        ...message,
+        receipts:
+          message.receipts.map(
+            (receipt) =>
+              receipt.user.id ===
+                userId
+                ? {
+                    ...receipt,
+                    delivered_at:
+                      receipt
+                        .delivered_at
+                      ?? readAt,
+                    read_at:
+                      receipt.read_at
+                      ?? readAt,
+                  }
+                : receipt,
+          ),
+      }
+    },
+  )
+}

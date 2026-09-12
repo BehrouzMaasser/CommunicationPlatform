@@ -100,7 +100,7 @@ export class RealtimeClient {
 
     socket.addEventListener(
       'close',
-      (event) => {
+      () => {
         if (this.socket === socket) {
           this.socket = null
         }
@@ -108,13 +108,6 @@ export class RealtimeClient {
         this.setStatus(
           'disconnected',
         )
-
-        if (
-          event.code === 4401
-        ) {
-          this.manuallyStopped = true
-          return
-        }
 
         if (!this.manuallyStopped) {
           this.scheduleReconnect()
@@ -236,6 +229,28 @@ export class RealtimeClient {
           conversationType,
         conversation_id:
           conversationId,
+      },
+    )
+  }
+
+  acknowledgeDelivered(
+    messageId: number,
+  ): string {
+    return this.sendCommand(
+      'message.delivered',
+      {
+        message_id: messageId,
+      },
+    )
+  }
+
+  markReadThrough(
+    messageId: number,
+  ): string {
+    return this.sendCommand(
+      'message.read',
+      {
+        message_id: messageId,
       },
     )
   }
