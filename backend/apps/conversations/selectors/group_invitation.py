@@ -28,6 +28,26 @@ class GroupInvitationSelector:
             )
         )
 
+
+    @staticmethod
+    def list_for_group(
+        *,
+        group_id: int,
+    ) -> QuerySet[GroupInvitation]:
+        return (
+            GroupInvitation.objects
+            .filter(group_id=group_id)
+            .select_related(
+                "group",
+                "invited_by",
+                "recipient",
+            )
+            .order_by(
+                "-created_at",
+                "-pk",
+            )
+        )
+
     @staticmethod
     def get_for_recipient(
         *,

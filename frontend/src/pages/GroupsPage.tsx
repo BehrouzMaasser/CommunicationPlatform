@@ -1,5 +1,6 @@
 import {
   type FormEvent,
+  useCallback,
   useEffect,
   useState,
 } from 'react'
@@ -9,6 +10,7 @@ import {
 } from 'react-router-dom'
 
 import { ApiError } from '../api/client'
+import { useRealtimeEvent } from '../realtime/RealtimeContext'
 import {
   acceptGroupInvitation,
   createGroup,
@@ -46,16 +48,65 @@ function GroupsPage() {
   const [error, setError] =
     useState<string | null>(null)
 
-  async function refresh() {
-    const [groupData, invitationData] =
-      await Promise.all([
-        getGroups(),
-        getIncomingGroupInvitations(),
-      ])
+  const refresh =
+    useCallback(
+      async () => {
+        const [
+          groupData,
+          invitationData,
+        ] = await Promise.all([
+          getGroups(),
+          getIncomingGroupInvitations(),
+        ])
 
-    setGroups(groupData)
-    setInvitations(invitationData)
-  }
+        setGroups(groupData)
+        setInvitations(
+          invitationData,
+        )
+      },
+      [],
+    )
+
+  const handleRealtimeChange =
+    useCallback(
+      () => {
+        void refresh()
+      },
+      [refresh],
+    )
+
+  useRealtimeEvent(
+    'group_invitation.created',
+    handleRealtimeChange,
+  )
+  useRealtimeEvent(
+    'group_invitation.accepted',
+    handleRealtimeChange,
+  )
+  useRealtimeEvent(
+    'group_invitation.rejected',
+    handleRealtimeChange,
+  )
+  useRealtimeEvent(
+    'group.member_added',
+    handleRealtimeChange,
+  )
+  useRealtimeEvent(
+    'group.member_removed',
+    handleRealtimeChange,
+  )
+  useRealtimeEvent(
+    'group.member_left',
+    handleRealtimeChange,
+  )
+  useRealtimeEvent(
+    'group.renamed',
+    handleRealtimeChange,
+  )
+  useRealtimeEvent(
+    'group.deleted',
+    handleRealtimeChange,
+  )
 
   useEffect(() => {
     let cancelled = false

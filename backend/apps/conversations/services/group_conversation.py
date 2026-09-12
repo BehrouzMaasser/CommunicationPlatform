@@ -13,12 +13,24 @@ from apps.conversations.models import (
     GroupConversation,
     GroupMembership,
 )
+from apps.conversations.realtime import GroupRealtimePublisher
 
 
 User = get_user_model()
 
 
 class GroupConversationService:
+
+    @staticmethod
+    def _member_user_ids(*, group) -> list[int]:
+        return list(
+            GroupMembership.objects
+            .filter(group=group)
+            .values_list(
+                "user_id",
+                flat=True,
+            )
+        )
 
     @staticmethod
     def _get_group_for_update(
@@ -133,10 +145,15 @@ class GroupConversationService:
                 update_fields=["name"],
             )
 
-            # Later:
-            # transaction.on_commit(
-            #     lambda: publish GroupUpdated(...)
-            # )
+            audience_user_ids = cls._member_user_ids(
+                group=group,
+            )
+
+            GroupRealtimePublisher.renamed_after_commit(
+                group_id=group.pk,
+                name=group.name,
+                audience_user_ids=audience_user_ids,
+            )
 
         return group
 
@@ -173,12 +190,21 @@ class GroupConversationService:
             if membership.role == GroupMembership.Role.OWNER:
                 raise GroupOwnerCannotBeRemoved
 
+            group_id = group.pk
+            member_user_id = membership.user_id
+
             membership.delete()
 
-            # Later:
-            # transaction.on_commit(
-            #     lambda: publish GroupMemberRemoved(...)
-            # )
+            audience_user_ids = cls._member_user_ids(
+                group=group,
+            )
+
+            GroupRealtimePublisher.member_removed_after_commit(
+                group_id=group_id,
+                member_user_id=member_user_id,
+                audience_user_ids=audience_user_ids,
+            )
+
 
     @classmethod
     def leave_group(
@@ -204,16 +230,25 @@ class GroupConversationService:
             except GroupMembership.DoesNotExist as exc:
                 raise GroupMembershipNotFound from exc
 
+            group_id = group.pk
+
             if membership.role == GroupMembership.Role.OWNER:
                 cls._disband_group(group=group)
                 return
 
+            member_user_id = membership.user_id
+
             membership.delete()
 
-            # Later:
-            # transaction.on_commit(
-            #     lambda: publish GroupMemberLeft(...)
-            # )
+            audience_user_ids = cls._member_user_ids(
+                group=group,
+            )
+
+            GroupRealtimePublisher.member_left_after_commit(
+                group_id=group_id,
+                member_user_id=member_user_id,
+                audience_user_ids=audience_user_ids,
+            )
 
     @classmethod
     def disband_group(
@@ -234,8 +269,9 @@ class GroupConversationService:
 
             cls._disband_group(group=group)
 
-    @staticmethod
+    @classmethod
     def _disband_group(
+            cls,
             *,
             group: GroupConversation,
     ) -> None:
@@ -246,9 +282,15 @@ class GroupConversationService:
         is allowed.
         """
 
+        group_id = group.pk
+
+        audience_user_ids = cls._member_user_ids(
+            group=group,
+        )
+
         group.delete()
 
-        # Later:
-        # transaction.on_commit(
-        #     lambda: publish GroupDeleted(...)
-        # )
+        GroupRealtimePublisher.deleted_after_commit(
+            group_id=group_id,
+            audience_user_ids=audience_user_ids,
+        )

@@ -5,6 +5,7 @@ import {
 } from 'react'
 import {
   Link,
+  useNavigate,
   useParams,
 } from 'react-router-dom'
 
@@ -70,6 +71,7 @@ type ConversationSubscribedPayload = {
 
 
 function GroupConversationPage() {
+  const navigate = useNavigate()
   const { groupId } =
     useParams<{
       groupId: string
@@ -176,6 +178,91 @@ function GroupConversationPage() {
       ],
     )
 
+  const handleGroupRenamed =
+    useCallback(
+      ({
+        payload,
+      }: {
+        payload: {
+          group_id: number
+          name: string
+        }
+      }) => {
+        if (
+          payload.group_id !==
+          parsedGroupId
+        ) {
+          return
+        }
+
+        setGroup(
+          (current) =>
+            current
+              ? {
+                  ...current,
+                  name: payload.name,
+                }
+              : current,
+        )
+      },
+      [parsedGroupId],
+    )
+
+  const handleGroupDeleted =
+    useCallback(
+      ({
+        payload,
+      }: {
+        payload: {
+          group_id: number
+        }
+      }) => {
+        if (
+          payload.group_id ===
+          parsedGroupId
+        ) {
+          navigate('/groups')
+        }
+      },
+      [
+        navigate,
+        parsedGroupId,
+      ],
+    )
+
+  const handleUnsubscribed =
+    useCallback(
+      ({
+        payload,
+      }: {
+        payload: {
+          conversation_type:
+            'dm' | 'group'
+          conversation_id: number
+          reason?: string
+        }
+      }) => {
+        if (
+          payload
+            .conversation_type ===
+              'group'
+          &&
+          payload
+            .conversation_id ===
+              parsedGroupId
+          &&
+          payload.reason ===
+            'access_revoked'
+        ) {
+          navigate('/groups')
+        }
+      },
+      [
+        navigate,
+        parsedGroupId,
+      ],
+    )
+
   useRealtimeEvent<
     MessageCreatedPayload
   >(
@@ -188,6 +275,21 @@ function GroupConversationPage() {
   >(
     'conversation.subscribed',
     handleSubscribed,
+  )
+
+  useRealtimeEvent(
+    'group.renamed',
+    handleGroupRenamed,
+  )
+
+  useRealtimeEvent(
+    'group.deleted',
+    handleGroupDeleted,
+  )
+
+  useRealtimeEvent(
+    'conversation.unsubscribed',
+    handleUnsubscribed,
   )
 
   useConversationRealtimeSubscription(

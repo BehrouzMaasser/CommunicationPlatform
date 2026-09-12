@@ -17,6 +17,7 @@ from apps.conversations.services.group_conversation import (
     GroupConversationService,
 )
 from apps.friendships.selectors import FriendshipSelector
+from apps.conversations.realtime import GroupRealtimePublisher
 
 
 User = get_user_model()
@@ -99,10 +100,12 @@ class GroupInvitationService:
                     raise GroupInvitationAlreadyPending from exc
                 raise
 
-            # Later:
-            # transaction.on_commit(
-            #     lambda: publish GroupInvitationCreated(...)
-            # )
+            GroupRealtimePublisher.invitation_created_after_commit(
+                invitation_id=invitation.pk,
+                group_id=group.pk,
+                invited_by_id=current_user.pk,
+                recipient_id=target_user.pk,
+            )
 
         return invitation
 
@@ -131,6 +134,10 @@ class GroupInvitationService:
             ).exists():
                 raise UserAlreadyGroupMember
 
+            invitation_id = invitation.pk
+            invited_by_id = invitation.invited_by_id
+            recipient_id = invitation.recipient_id
+
             membership = GroupConversationService._add_member(
                 group=group,
                 user=current_user,
@@ -138,10 +145,27 @@ class GroupInvitationService:
 
             invitation.delete()
 
-            # Later:
-            # transaction.on_commit(
-            #     lambda: publish GroupInvitationAccepted(...)
-            # )
+            audience_user_ids = list(
+                GroupMembership.objects
+                .filter(group=group)
+                .values_list(
+                    "user_id",
+                    flat=True,
+                )
+            )
+
+            GroupRealtimePublisher.invitation_accepted_after_commit(
+                invitation_id=invitation_id,
+                group_id=group.pk,
+                invited_by_id=invited_by_id,
+                recipient_id=recipient_id,
+            )
+
+            GroupRealtimePublisher.member_added_after_commit(
+                group_id=group.pk,
+                member_user_id=current_user.pk,
+                audience_user_ids=audience_user_ids,
+            )
 
         return membership
 
@@ -160,9 +184,16 @@ class GroupInvitationService:
             if invitation.recipient_id != current_user.pk:
                 raise GroupInvitationRecipientRequired
 
+            invitation_id = invitation.pk
+            group_id = invitation.group_id
+            invited_by_id = invitation.invited_by_id
+            recipient_id = invitation.recipient_id
+
             invitation.delete()
 
-            # Later:
-            # transaction.on_commit(
-            #     lambda: publish GroupInvitationRejected(...)
-            # )
+            GroupRealtimePublisher.invitation_rejected_after_commit(
+                invitation_id=invitation_id,
+                group_id=group_id,
+                invited_by_id=invited_by_id,
+                recipient_id=recipient_id,
+            )

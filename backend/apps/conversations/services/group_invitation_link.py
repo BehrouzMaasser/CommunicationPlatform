@@ -19,6 +19,7 @@ from apps.conversations.models import (
 from apps.conversations.services.group_conversation import (
     GroupConversationService,
 )
+from apps.conversations.realtime import GroupRealtimePublisher
 
 
 User = get_user_model()
@@ -126,10 +127,20 @@ class GroupInvitationLinkService:
                 recipient=current_user,
             ).delete()
 
-            # Later:
-            # transaction.on_commit(
-            #     lambda: publish GroupMemberJoined(...)
-            # )
+            audience_user_ids = list(
+                GroupMembership.objects
+                .filter(group=group)
+                .values_list(
+                    "user_id",
+                    flat=True,
+                )
+            )
+
+            GroupRealtimePublisher.member_added_after_commit(
+                group_id=group.pk,
+                member_user_id=current_user.pk,
+                audience_user_ids=audience_user_ids,
+            )
 
         return membership, True
 

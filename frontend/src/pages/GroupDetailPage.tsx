@@ -1,5 +1,6 @@
 import {
   type FormEvent,
+  useCallback,
   useEffect,
   useMemo,
   useState,
@@ -17,6 +18,7 @@ import {
   disbandGroup,
   getGroup,
   getGroupMembers,
+  getGroupPendingInvitations,
   inviteUserToGroup,
   leaveGroup,
   removeGroupMember,
@@ -24,6 +26,12 @@ import {
   revokeGroupInvitationLink,
 } from '../api/groups'
 import { getCurrentUser } from '../api/session'
+import { useRealtimeEvent } from '../realtime/RealtimeContext'
+import type {
+  GroupInvitationEventPayload,
+  GroupMemberEventPayload,
+  GroupRenamedPayload,
+} from '../realtime/groupEvents'
 
 import type {
   GroupConversation,
@@ -79,13 +87,230 @@ function GroupDetailPage() {
       null,
     )
 
-  async function refreshMembers() {
-    setMembers(
-      await getGroupMembers(
-        parsedGroupId,
-      ),
+  const refreshGroupState =
+    useCallback(
+      async () => {
+        const [
+          groupResult,
+          memberResult,
+          pendingInvitationResult,
+        ] = await Promise.all([
+          getGroup(
+            parsedGroupId,
+          ),
+          getGroupMembers(
+            parsedGroupId,
+          ),
+          getGroupPendingInvitations(
+            parsedGroupId,
+          ).catch(() => []),
+        ])
+
+        setGroup(groupResult)
+        setMembers(memberResult)
+        setInvitedUserIds(
+          new Set(
+            pendingInvitationResult.map(
+              (invitation) =>
+                invitation.recipient.id,
+            ),
+          ),
+        )
+        setRenameText(
+          groupResult.name,
+        )
+      },
+      [parsedGroupId],
     )
-  }
+
+  const refreshMembers =
+    useCallback(
+      async () => {
+        setMembers(
+          await getGroupMembers(
+            parsedGroupId,
+          ),
+        )
+      },
+      [parsedGroupId],
+    )
+
+  const handleMemberChange =
+    useCallback(
+      ({
+        payload,
+      }: {
+        payload:
+          GroupMemberEventPayload
+      }) => {
+        if (
+          payload.group_id !==
+          parsedGroupId
+        ) {
+          return
+        }
+
+        setInvitedUserIds(
+          (current) => {
+            const next =
+              new Set(current)
+            next.delete(
+              payload.user_id,
+            )
+            return next
+          },
+        )
+
+        if (
+          payload.user_id ===
+          currentUser?.id
+        ) {
+          void getGroup(
+            parsedGroupId,
+          ).catch(() => {
+            navigate('/groups')
+          })
+          return
+        }
+
+        void refreshGroupState()
+      },
+      [
+        currentUser?.id,
+        navigate,
+        parsedGroupId,
+        refreshGroupState,
+      ],
+    )
+
+  const handleInvitationChange =
+    useCallback(
+      ({
+        type,
+        payload,
+      }: {
+        type: string
+        payload:
+          GroupInvitationEventPayload
+      }) => {
+        if (
+          payload.group_id !==
+          parsedGroupId
+        ) {
+          return
+        }
+
+        setInvitedUserIds(
+          (current) => {
+            const next =
+              new Set(current)
+
+            if (
+              type ===
+              'group_invitation.created'
+            ) {
+              next.add(
+                payload.recipient_id,
+              )
+            } else {
+              next.delete(
+                payload.recipient_id,
+              )
+            }
+
+            return next
+          },
+        )
+      },
+      [parsedGroupId],
+    )
+
+  const handleRenamed =
+    useCallback(
+      ({
+        payload,
+      }: {
+        payload:
+          GroupRenamedPayload
+      }) => {
+        if (
+          payload.group_id !==
+          parsedGroupId
+        ) {
+          return
+        }
+
+        setGroup(
+          (current) =>
+            current
+              ? {
+                  ...current,
+                  name: payload.name,
+                }
+              : current,
+        )
+        setRenameText(
+          payload.name,
+        )
+      },
+      [parsedGroupId],
+    )
+
+  const handleDeleted =
+    useCallback(
+      ({
+        payload,
+      }: {
+        payload: {
+          group_id: number
+        }
+      }) => {
+        if (
+          payload.group_id ===
+          parsedGroupId
+        ) {
+          navigate('/groups')
+        }
+      },
+      [
+        navigate,
+        parsedGroupId,
+      ],
+    )
+
+  useRealtimeEvent<GroupInvitationEventPayload>(
+    'group_invitation.created',
+    handleInvitationChange,
+  )
+  useRealtimeEvent<GroupInvitationEventPayload>(
+    'group_invitation.accepted',
+    handleInvitationChange,
+  )
+  useRealtimeEvent<GroupInvitationEventPayload>(
+    'group_invitation.rejected',
+    handleInvitationChange,
+  )
+
+  useRealtimeEvent(
+    'group.member_added',
+    handleMemberChange,
+  )
+  useRealtimeEvent(
+    'group.member_removed',
+    handleMemberChange,
+  )
+  useRealtimeEvent(
+    'group.member_left',
+    handleMemberChange,
+  )
+  useRealtimeEvent(
+    'group.renamed',
+    handleRenamed,
+  )
+  useRealtimeEvent(
+    'group.deleted',
+    handleDeleted,
+  )
 
   useEffect(() => {
     let cancelled = false
@@ -106,6 +331,7 @@ function GroupDetailPage() {
           memberResult,
           friendResult,
           userResult,
+          pendingInvitationResult,
         ] = await Promise.all([
           getGroup(parsedGroupId),
           getGroupMembers(
@@ -113,6 +339,9 @@ function GroupDetailPage() {
           ),
           getFriends(),
           getCurrentUser(),
+          getGroupPendingInvitations(
+            parsedGroupId,
+          ).catch(() => []),
         ])
 
         if (cancelled) {
@@ -123,6 +352,14 @@ function GroupDetailPage() {
         setMembers(memberResult)
         setFriends(friendResult)
         setCurrentUser(userResult)
+        setInvitedUserIds(
+          new Set(
+            pendingInvitationResult.map(
+              (invitation) =>
+                invitation.recipient.id,
+            ),
+          ),
+        )
         setRenameText(
           groupResult.name,
         )

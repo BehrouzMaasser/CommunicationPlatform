@@ -16,7 +16,10 @@ from apps.conversations.api.v1.serializers import (
     GroupMembershipSerializer,
     GroupNameSerializer,
 )
-from apps.conversations.exceptions import ConversationsError
+from apps.conversations.exceptions import (
+    ConversationsError,
+    GroupOwnerRequired,
+)
 from apps.conversations.selectors import (
     DirectConversationSelector,
     GroupConversationSelector,
@@ -28,6 +31,8 @@ from apps.conversations.services import (
     GroupInvitationLinkService,
     GroupInvitationService,
 )
+
+from apps.conversations.models import GroupMembership
 
 
 def _get_accessible_group_or_404(
@@ -200,7 +205,6 @@ class GroupConversationDetailView(APIView):
         )
 
     def delete(self, request, group_id):
-        # Hide the existence of groups from non-members.
         _get_accessible_group_or_404(
             user=request.user,
             group_id=group_id,
@@ -222,8 +226,6 @@ class GroupConversationDetailView(APIView):
 class GroupConversationRenameView(APIView):
 
     def patch(self, request, group_id):
-        # Outsiders should receive 404 rather than learning that
-        # the group exists.
         _get_accessible_group_or_404(
             user=request.user,
             group_id=group_id,
@@ -325,6 +327,44 @@ class GroupMemberDeleteView(APIView):
 
 
 class GroupInvitationCreateView(APIView):
+
+    def get(self, request, group_id):
+        group = _get_accessible_group_or_404(
+            user=request.user,
+            group_id=group_id,
+        )
+
+        is_owner = (
+            GroupMembership.objects
+            .filter(
+                group=group,
+                user=request.user,
+                role=GroupMembership.Role.OWNER,
+            )
+            .exists()
+        )
+
+        if not is_owner:
+            return conversations_error_response(
+                GroupOwnerRequired()
+            )
+
+        invitations = (
+            GroupInvitationSelector
+            .list_for_group(
+                group_id=group_id,
+            )
+        )
+
+        serializer = GroupInvitationSerializer(
+            invitations,
+            many=True,
+        )
+
+        return Response(
+            serializer.data,
+            status=status.HTTP_200_OK,
+        )
 
     def post(self, request, group_id):
         # Preserve private-group existence semantics:

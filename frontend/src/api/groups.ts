@@ -111,6 +111,17 @@ Promise<GroupInvitation[]> {
   )
 }
 
+export async function getGroupPendingInvitations(
+  groupId: number,
+): Promise<GroupInvitation[]> {
+  return unwrapList(
+    await apiGet<ListResponse<GroupInvitation>>(
+      `/api/v1/groups/${groupId}/invitations/`,
+    ),
+  )
+}
+
+
 export function inviteUserToGroup(
   groupId: number,
   userId: number,
