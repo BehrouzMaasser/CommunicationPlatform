@@ -98,7 +98,7 @@ ROOT_URLCONF = 'config.urls'
 TEMPLATES = [
     {
         'BACKEND': 'django.template.backends.django.DjangoTemplates',
-        'DIRS': [],
+        'DIRS': [BASE_DIR / 'templates'],
         'APP_DIRS': True,
         'OPTIONS': {
             'context_processors': [
@@ -177,7 +177,21 @@ USE_TZ = True
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/6.1/howto/static-files/
 
-STATIC_URL = 'static/'
+STATIC_URL = '/static/'
+
+STATICFILES_DIRS = [
+    BASE_DIR / 'static',
+]
+
+MEDIA_ROOT = BASE_DIR / 'media'
+MEDIA_URL = '/media/'
+
+MESSAGE_ATTACHMENT_MAX_SIZE_BYTES = int(
+    os.getenv('MESSAGE_ATTACHMENT_MAX_SIZE_BYTES', str(10 * 1024 * 1024))
+)
+MESSAGE_MAX_ATTACHMENTS = int(
+    os.getenv('MESSAGE_MAX_ATTACHMENTS', '5')
+)
 
 
 # Email

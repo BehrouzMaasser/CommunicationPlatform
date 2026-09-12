@@ -1,6 +1,7 @@
 from pathlib import Path
 from typing import Iterable
 
+from django.conf import settings
 from django.core.files import File
 from django.db import transaction
 
@@ -35,6 +36,11 @@ class MessageAttachmentService:
             or size < 0
         ):
             raise InvalidAttachment
+
+        if size > settings.MESSAGE_ATTACHMENT_MAX_SIZE_BYTES:
+            raise InvalidAttachment(
+                "Attachment exceeds the maximum allowed file size."
+            )
 
         original_filename = Path(name).name
 
@@ -103,6 +109,11 @@ class MessageAttachmentService:
         reply_to_id: int | None = None,
     ) -> Message:
         file_list = list(files)
+
+        if len(file_list) > settings.MESSAGE_MAX_ATTACHMENTS:
+            raise InvalidAttachment(
+                "Too many attachments in one message."
+            )
 
         if not isinstance(content, str):
             raise InvalidMessageContent

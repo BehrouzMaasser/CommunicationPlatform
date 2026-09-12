@@ -240,6 +240,35 @@ class MessageAttachmentServiceTests(TestCase):
 
         self.assertEqual(message.attachments.count(), 2)
 
+    @override_settings(MESSAGE_ATTACHMENT_MAX_SIZE_BYTES=3)
+    def test_attachment_over_size_limit_is_rejected(self):
+        with self.assertRaises(InvalidAttachment):
+            MessageAttachmentService.create_message_with_attachments(
+                current_user=self.alice,
+                direct_conversation_id=self.dm.pk,
+                content="",
+                files=[self.upload(content=b"four")],
+            )
+
+        self.assertFalse(Message.objects.exists())
+        self.assertFalse(MessageAttachment.objects.exists())
+
+    @override_settings(MESSAGE_MAX_ATTACHMENTS=1)
+    def test_too_many_attachments_are_rejected(self):
+        with self.assertRaises(InvalidAttachment):
+            MessageAttachmentService.create_message_with_attachments(
+                current_user=self.alice,
+                direct_conversation_id=self.dm.pk,
+                content="",
+                files=[
+                    self.upload("one.txt", b"one"),
+                    self.upload("two.txt", b"two"),
+                ],
+            )
+
+        self.assertFalse(Message.objects.exists())
+        self.assertFalse(MessageAttachment.objects.exists())
+
     def test_invalid_attachment_is_rejected_before_message_creation(self):
         upload = ContentFile(
             b"hello",
