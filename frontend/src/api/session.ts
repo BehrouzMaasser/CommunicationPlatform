@@ -1,6 +1,10 @@
-import { apiGet } from './client'
+import { apiGet, apiPost } from './client'
 import type { CurrentUser } from '../types/users'
 
 export function getCurrentUser(): Promise<CurrentUser> {
   return apiGet<CurrentUser>('/api/v1/users/me/')
+}
+
+export function logoutCurrentUser(): Promise<unknown> {
+  return apiPost<unknown>('/accounts/logout/')
 }

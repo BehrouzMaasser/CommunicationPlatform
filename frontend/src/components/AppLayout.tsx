@@ -10,6 +10,7 @@ import {
 import { ApiError } from '../api/client'
 import {
   getCurrentUser,
+  logoutCurrentUser,
 } from '../api/session'
 import {
   RealtimeProvider,
@@ -76,6 +77,28 @@ function AppLayoutContent({
   currentUser:
     CurrentUser | null
 }) {
+  const [
+    isLoggingOut,
+    setIsLoggingOut,
+  ] = useState(false)
+
+  async function handleLogout() {
+    if (isLoggingOut) {
+      return
+    }
+
+    setIsLoggingOut(true)
+
+    try {
+      await logoutCurrentUser()
+      window.location.assign(
+        '/accounts/login/',
+      )
+    } catch {
+      setIsLoggingOut(false)
+    }
+  }
+
   return (
     <div className="app-shell">
       <nav className="navbar navbar-expand-lg bg-dark border-bottom border-body">
@@ -141,6 +164,33 @@ function AppLayoutContent({
                     }
                   </strong>
                 </span>
+              )}
+
+            {authStatus ===
+              'authenticated' && (
+                <>
+                  <a
+                    className="btn btn-sm btn-outline-light"
+                    href="/accounts/me/"
+                  >
+                    Account
+                  </a>
+
+                  <button
+                    className="btn btn-sm btn-light"
+                    type="button"
+                    disabled={
+                      isLoggingOut
+                    }
+                    onClick={() => {
+                      void handleLogout()
+                    }}
+                  >
+                    {isLoggingOut
+                      ? 'Signing out…'
+                      : 'Sign out'}
+                  </button>
+                </>
               )}
 
             {authStatus ===
