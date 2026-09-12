@@ -16,6 +16,7 @@ from apps.messaging.exceptions import (
     ReplyMessageNotFound,
 )
 from apps.messaging.models import Message
+from apps.messaging.realtime import MessageRealtimePublisher
 
 
 User = get_user_model()
@@ -220,10 +221,9 @@ class MessageService:
                 update_fields=["last_activity_at"],
             )
 
-            # Later:
-            # transaction.on_commit(
-            #     lambda: publish MessageCreated(...)
-            # )
+            MessageRealtimePublisher.publish_created_after_commit(
+                message_id=message.pk,
+            )
 
         return message
 

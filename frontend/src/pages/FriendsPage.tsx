@@ -1,5 +1,6 @@
 import {
   type FormEvent,
+  useCallback,
   useEffect,
   useState,
 } from 'react'
@@ -16,6 +17,7 @@ import {
   unfriend,
 } from '../api/friendships'
 import { searchUsers } from '../api/users'
+import { useRealtimeEvent } from '../realtime/RealtimeContext'
 
 import type { FriendRequest } from '../types/friendships'
 import type { PublicUser } from '../types/users'
@@ -96,16 +98,59 @@ function FriendsPage() {
   const [busyAction, setBusyAction] =
     useState<string | null>(null)
 
-  function applyData(data: FriendshipData) {
-    setFriends(data.friends)
-    setIncoming(data.incoming)
-    setOutgoing(data.outgoing)
-  }
+  const applyData =
+    useCallback(
+      (data: FriendshipData) => {
+        setFriends(data.friends)
+        setIncoming(data.incoming)
+        setOutgoing(data.outgoing)
+      },
+      [],
+    )
 
-  async function refreshData() {
-    const data = await loadFriendshipData()
-    applyData(data)
-  }
+  const refreshData =
+    useCallback(
+      async () => {
+        const data =
+          await loadFriendshipData()
+
+        applyData(data)
+      },
+      [applyData],
+    )
+
+  const handleRealtimeChange =
+    useCallback(
+      () => {
+        void refreshData()
+      },
+      [refreshData],
+    )
+
+  useRealtimeEvent(
+    'friend_request.created',
+    handleRealtimeChange,
+  )
+
+  useRealtimeEvent(
+    'friend_request.accepted',
+    handleRealtimeChange,
+  )
+
+  useRealtimeEvent(
+    'friend_request.rejected',
+    handleRealtimeChange,
+  )
+
+  useRealtimeEvent(
+    'friend_request.cancelled',
+    handleRealtimeChange,
+  )
+
+  useRealtimeEvent(
+    'friendship.removed',
+    handleRealtimeChange,
+  )
 
   useEffect(() => {
     let cancelled = false
@@ -136,7 +181,7 @@ function FriendsPage() {
     return () => {
       cancelled = true
     }
-  }, [])
+  }, [applyData])
 
   async function runAction(
     key: string,

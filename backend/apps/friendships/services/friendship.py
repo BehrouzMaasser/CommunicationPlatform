@@ -8,6 +8,7 @@ from apps.friendships.exceptions import (
 )
 
 from apps.friendships.models import Friendship
+from apps.friendships.realtime import FriendshipRealtimePublisher
 
 
 User = get_user_model()
@@ -91,7 +92,16 @@ class FriendshipService:
             except Friendship.DoesNotExist as exc:
                 raise FriendshipNotFound from exc
 
+            user_a_id = friendship.user_1_id
+            user_a_username = friendship.user_1.username
+            user_b_id = friendship.user_2_id
+            user_b_username = friendship.user_2.username
+
             friendship.delete()
 
-            # FriendshipRemoved event will be registered here later
-            # using transaction.on_commit(...).
+            FriendshipRealtimePublisher.friendship_removed_after_commit(
+                user_a_id=user_a_id,
+                user_a_username=user_a_username,
+                user_b_id=user_b_id,
+                user_b_username=user_b_username,
+            )

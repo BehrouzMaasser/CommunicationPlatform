@@ -1,3 +1,5 @@
+from typing import Any
+
 from django.contrib.auth import get_user_model
 from django.db import IntegrityError, transaction
 from django.db.models import Q
@@ -16,6 +18,7 @@ from apps.friendships.models import (
     Friendship,
 )
 from apps.friendships.services.friendship import FriendshipService
+from apps.friendships.realtime import FriendshipRealtimePublisher
 
 
 User = get_user_model()
@@ -64,6 +67,7 @@ class FriendRequestService:
             raise SelfFriendRequestNotAllowed
 
         with transaction.atomic():
+
             if cls._friendship_exists(user_a=current_user, user_b=target_user):
                 raise UsersAlreadyFriends
 
@@ -80,9 +84,18 @@ class FriendRequestService:
                 # IntegrityError from the database constraint does
                 # not break the surrounding transaction.
                 with transaction.atomic():
+
                     friend_request = FriendRequest.objects.create(
                         sender=current_user,
                         recipient=target_user,
+                    )
+
+                    event_kwargs = cls._friend_request_event_kwargs(
+                        friend_request=friend_request
+                    )
+
+                    FriendshipRealtimePublisher.friend_request_created_after_commit(
+                        **event_kwargs
                     )
 
             except IntegrityError as exc:
@@ -93,17 +106,13 @@ class FriendRequestService:
 
                 raise
 
-            # Later:
-            # transaction.on_commit(
-            #     lambda: publish FriendRequestCreated(...)
-            # )
-
         return friend_request
 
     @classmethod
     def accept_friend_request(cls, *, current_user: User, friend_request_id: int) -> Friendship:
 
         with transaction.atomic():
+
             friend_request = (
                 cls._get_friend_request_for_update(
                     friend_request_id=friend_request_id,
@@ -127,16 +136,16 @@ class FriendRequestService:
                 user_b=friend_request.recipient,
             )
 
+            event_kwargs = cls._friend_request_event_kwargs(
+                friend_request=friend_request
+            )
+
             friend_request.delete()
 
-            # Later:
-            # transaction.on_commit(
-            #     lambda: publish FriendRequestAccepted(...)
-            # )
-            #
-            # transaction.on_commit(
-            #     lambda: publish FriendshipCreated(...)
-            # )
+            FriendshipRealtimePublisher.friend_request_accepted_after_commit(
+                **event_kwargs,
+                friendship_id=friendship.pk,
+            )
 
         return friendship
 
@@ -144,6 +153,7 @@ class FriendRequestService:
     def reject_friend_request(cls, *, current_user: User, friend_request_id: int) -> None:
 
         with transaction.atomic():
+
             friend_request = cls._get_friend_request_for_update(
                 friend_request_id=friend_request_id,
             )
@@ -151,17 +161,21 @@ class FriendRequestService:
             if friend_request.recipient_id != current_user.pk:
                 raise FriendRequestRecipientRequired
 
+            event_kwargs = cls._friend_request_event_kwargs(
+                friend_request=friend_request
+            )
+
             friend_request.delete()
 
-            # Later:
-            # transaction.on_commit(
-            #     lambda: publish FriendRequestRejected(...)
-            # )
+            FriendshipRealtimePublisher.friend_request_rejected_after_commit(
+                **event_kwargs
+            )
 
     @classmethod
     def cancel_pending_friend_request(cls, *, current_user: User, friend_request_id: int) -> None:
 
         with transaction.atomic():
+
             friend_request = cls._get_friend_request_for_update(
                 friend_request_id=friend_request_id,
             )
@@ -169,9 +183,29 @@ class FriendRequestService:
             if friend_request.sender_id != current_user.pk:
                 raise FriendRequestSenderRequired
 
+            event_kwargs = cls._friend_request_event_kwargs(
+                friend_request=friend_request
+            )
+
             friend_request.delete()
 
-            # Later:
-            # transaction.on_commit(
-            #     lambda: publish FriendRequestCancelled(...)
-            # )
+            FriendshipRealtimePublisher.friend_request_cancelled_after_commit(
+                **event_kwargs
+            )
+
+    @staticmethod
+    def _friend_request_event_kwargs(*, friend_request: FriendRequest) -> dict[str, Any]:
+
+        request_id = friend_request.pk
+        sender_id = friend_request.sender_id
+        sender_username = friend_request.sender.username
+        recipient_id = friend_request.recipient_id
+        recipient_username = friend_request.recipient.username
+
+        return {
+            "request_id": request_id,
+            "sender_id": sender_id,
+            "sender_username": sender_username,
+            "recipient_id": recipient_id,
+            "recipient_username": recipient_username,
+        }

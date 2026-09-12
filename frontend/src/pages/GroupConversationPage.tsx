@@ -1,4 +1,5 @@
 import {
+  useCallback,
   useEffect,
   useState,
 } from 'react'
@@ -16,7 +17,19 @@ import {
 
 import MessageComposer from '../components/messages/MessageComposer'
 import MessageThread from '../components/messages/MessageThread'
+import {
+  mergeMessage,
+  mergeMessageList,
+} from '../components/messages/messageState'
 
+import {
+  useConversationRealtimeSubscription,
+  useRealtimeEvent,
+} from '../realtime/RealtimeContext'
+
+import type {
+  MessageCreatedPayload,
+} from '../realtime/messageEvents'
 import type {
   GroupConversation,
 } from '../types/groups'
@@ -49,6 +62,13 @@ function describeError(
 }
 
 
+type ConversationSubscribedPayload = {
+  conversation_type:
+    'dm' | 'group'
+  conversation_id: number
+}
+
+
 function GroupConversationPage() {
   const { groupId } =
     useParams<{
@@ -77,6 +97,105 @@ function GroupConversationPage() {
 
   const [error, setError] =
     useState<string | null>(null)
+
+  const refreshMessages =
+    useCallback(
+      async () => {
+        const latest =
+          await getGroupMessages(
+            parsedGroupId,
+          )
+
+        setMessages(
+          (current) =>
+            mergeMessageList(
+              current,
+              latest,
+            ),
+        )
+      },
+      [parsedGroupId],
+    )
+
+  const handleMessageCreated =
+    useCallback(
+      ({
+        payload,
+      }: {
+        payload:
+          MessageCreatedPayload
+      }) => {
+        if (
+          payload
+            .conversation_type
+            !== 'group'
+          ||
+          payload
+            .conversation_id
+            !== parsedGroupId
+        ) {
+          return
+        }
+
+        setMessages(
+          (current) =>
+            mergeMessage(
+              current,
+              payload.message,
+            ),
+        )
+      },
+      [parsedGroupId],
+    )
+
+  const handleSubscribed =
+    useCallback(
+      ({
+        payload,
+      }: {
+        payload:
+          ConversationSubscribedPayload
+      }) => {
+        if (
+          payload
+            .conversation_type
+            !== 'group'
+          ||
+          payload
+            .conversation_id
+            !== parsedGroupId
+        ) {
+          return
+        }
+
+        void refreshMessages()
+      },
+      [
+        parsedGroupId,
+        refreshMessages,
+      ],
+    )
+
+  useRealtimeEvent<
+    MessageCreatedPayload
+  >(
+    'message.created',
+    handleMessageCreated,
+  )
+
+  useRealtimeEvent<
+    ConversationSubscribedPayload
+  >(
+    'conversation.subscribed',
+    handleSubscribed,
+  )
+
+  useConversationRealtimeSubscription(
+    'group',
+    parsedGroupId,
+    !loading &&
+      group !== null,
+  )
 
   useEffect(() => {
     let cancelled = false
@@ -147,10 +266,13 @@ function GroupConversationPage() {
         input,
       )
 
-    setMessages((current) => [
-      ...current,
-      createdMessage,
-    ])
+    setMessages(
+      (current) =>
+        mergeMessage(
+          current,
+          createdMessage,
+        ),
+    )
 
     setReplyingTo(null)
   }
