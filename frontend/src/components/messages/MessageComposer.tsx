@@ -1,6 +1,7 @@
 import {
   type ChangeEvent,
   type FormEvent,
+  useEffect,
   useRef,
   useState,
 } from 'react'
@@ -74,6 +75,8 @@ type MessageComposerProps = {
   ) => Promise<void>
   disabled?: boolean
   disabledMessage?: string
+  onTyping?: () => void
+  onTypingStop?: () => void
 }
 
 
@@ -84,6 +87,8 @@ function MessageComposer({
   onSend,
   disabled = false,
   disabledMessage,
+  onTyping,
+  onTypingStop,
 }: MessageComposerProps) {
   const fileInputRef =
     useRef<HTMLInputElement | null>(
@@ -105,6 +110,34 @@ function MessageComposer({
 
   const [error, setError] =
     useState<string | null>(null)
+
+  function handleTextChange(
+    value: string,
+  ) {
+    setMessageText(value)
+
+    if (value.trim()) {
+      onTyping?.()
+    } else {
+      onTypingStop?.()
+    }
+  }
+
+  useEffect(
+    () => () => {
+      onTypingStop?.()
+    },
+    [onTypingStop],
+  )
+
+  useEffect(() => {
+    if (disabled) {
+      onTypingStop?.()
+    }
+  }, [
+    disabled,
+    onTypingStop,
+  ])
 
   function handleFileSelection(
     event:
@@ -168,6 +201,7 @@ function MessageComposer({
         files: selectedFiles,
       })
 
+      onTypingStop?.()
       clearComposer()
     } catch (requestError) {
       setError(
@@ -280,7 +314,7 @@ function MessageComposer({
           rows={2}
           value={messageText}
           onChange={(event) =>
-            setMessageText(
+            handleTextChange(
               event.target.value,
             )
           }

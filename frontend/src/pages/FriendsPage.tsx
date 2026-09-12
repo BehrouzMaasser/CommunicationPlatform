@@ -17,7 +17,10 @@ import {
   unfriend,
 } from '../api/friendships'
 import { searchUsers } from '../api/users'
-import { useRealtimeEvent } from '../realtime/RealtimeContext'
+import {
+  useRealtime,
+  useRealtimeEvent,
+} from '../realtime/RealtimeContext'
 
 import type { FriendRequest } from '../types/friendships'
 import type { PublicUser } from '../types/users'
@@ -400,6 +403,7 @@ function FriendsPage() {
                     >
                       <UserIdentity
                         user={friend}
+                        showPresence
                       />
 
                       <button
@@ -607,13 +611,38 @@ function EmptyState({
 
 function UserIdentity({
   user,
+  showPresence = false,
 }: {
   user: PublicUser
+  showPresence?: boolean
 }) {
+  const {
+    isUserOnline,
+  } = useRealtime()
+
+  const online =
+    showPresence &&
+    isUserOnline(user.id)
   return (
     <div>
-      <div className="fw-semibold">
-        @{user.username}
+      <div className="fw-semibold d-flex align-items-center gap-2">
+        <span>
+          @{user.username}
+        </span>
+
+        {showPresence && (
+          <span
+            className={
+              online
+                ? 'badge text-bg-success'
+                : 'badge text-bg-secondary'
+            }
+          >
+            {online
+              ? 'Online'
+              : 'Offline'}
+          </span>
+        )}
       </div>
 
       <div className="small text-secondary">

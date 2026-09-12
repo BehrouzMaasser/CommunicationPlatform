@@ -43,6 +43,9 @@ export class RealtimeClient {
 
   private reconnectAttempt = 0
 
+  private heartbeatTimer:
+    number | null = null
+
   private eventHandlers =
     new Map<
       string,
@@ -86,6 +89,7 @@ export class RealtimeClient {
       () => {
         this.reconnectAttempt = 0
         this.setStatus('connected')
+        this.startHeartbeat()
       },
     )
 
@@ -104,6 +108,8 @@ export class RealtimeClient {
         if (this.socket === socket) {
           this.socket = null
         }
+
+        this.stopHeartbeat()
 
         this.setStatus(
           'disconnected',
@@ -125,6 +131,7 @@ export class RealtimeClient {
 
   disconnect() {
     this.manuallyStopped = true
+    this.stopHeartbeat()
 
     if (
       this.reconnectTimer !== null
@@ -253,6 +260,77 @@ export class RealtimeClient {
         message_id: messageId,
       },
     )
+  }
+
+  startTyping(
+    conversationType:
+      ConversationType,
+    conversationId: number,
+  ): string {
+    return this.sendCommand(
+      'typing.start',
+      {
+        conversation_type:
+          conversationType,
+        conversation_id:
+          conversationId,
+      },
+    )
+  }
+
+  stopTyping(
+    conversationType:
+      ConversationType,
+    conversationId: number,
+  ): string {
+    return this.sendCommand(
+      'typing.stop',
+      {
+        conversation_type:
+          conversationType,
+        conversation_id:
+          conversationId,
+      },
+    )
+  }
+
+  private startHeartbeat() {
+    this.stopHeartbeat()
+
+    const heartbeat = () => {
+      if (
+        this.getStatus()
+        !== 'connected'
+      ) {
+        return
+      }
+
+      this.sendCommand(
+        'presence.heartbeat',
+        {},
+      )
+    }
+
+    heartbeat()
+
+    this.heartbeatTimer =
+      window.setInterval(
+        heartbeat,
+        25000,
+      )
+  }
+
+  private stopHeartbeat() {
+    if (
+      this.heartbeatTimer === null
+    ) {
+      return
+    }
+
+    window.clearInterval(
+      this.heartbeatTimer,
+    )
+    this.heartbeatTimer = null
   }
 
   private sendCommand(

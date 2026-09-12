@@ -93,7 +93,6 @@ function GroupDetailPage() {
         const [
           groupResult,
           memberResult,
-          pendingInvitationResult,
         ] = await Promise.all([
           getGroup(
             parsedGroupId,
@@ -101,10 +100,22 @@ function GroupDetailPage() {
           getGroupMembers(
             parsedGroupId,
           ),
-          getGroupPendingInvitations(
-            parsedGroupId,
-          ).catch(() => []),
         ])
+
+        const currentMembership =
+          memberResult.find(
+            (membership) =>
+              membership.user.id ===
+              currentUser?.id,
+          )
+
+        const pendingInvitationResult =
+          currentMembership?.role ===
+            'OWNER'
+            ? await getGroupPendingInvitations(
+                parsedGroupId,
+              )
+            : []
 
         setGroup(groupResult)
         setMembers(memberResult)
@@ -120,7 +131,10 @@ function GroupDetailPage() {
           groupResult.name,
         )
       },
-      [parsedGroupId],
+      [
+        currentUser?.id,
+        parsedGroupId,
+      ],
     )
 
   const refreshMembers =
@@ -331,7 +345,6 @@ function GroupDetailPage() {
           memberResult,
           friendResult,
           userResult,
-          pendingInvitationResult,
         ] = await Promise.all([
           getGroup(parsedGroupId),
           getGroupMembers(
@@ -339,10 +352,22 @@ function GroupDetailPage() {
           ),
           getFriends(),
           getCurrentUser(),
-          getGroupPendingInvitations(
-            parsedGroupId,
-          ).catch(() => []),
         ])
+
+        const currentMembership =
+          memberResult.find(
+            (membership) =>
+              membership.user.id ===
+              userResult.id,
+          )
+
+        const pendingInvitationResult =
+          currentMembership?.role ===
+            'OWNER'
+            ? await getGroupPendingInvitations(
+                parsedGroupId,
+              )
+            : []
 
         if (cancelled) {
           return

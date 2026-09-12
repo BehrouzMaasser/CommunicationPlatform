@@ -1,3 +1,4 @@
+from datetime import datetime, timezone
 from typing import Any
 
 from channels.db import database_sync_to_async
@@ -19,6 +20,8 @@ from apps.realtime.subscriptions import (
 )
 from apps.messaging.exceptions import MessagingError
 from apps.messaging.services.receipt import MessageReceiptService
+from apps.realtime.ephemeral import RealtimeEphemeralSelector
+from apps.realtime.presence import PresenceStore
 
 
 class RealtimeConsumer(
@@ -66,6 +69,22 @@ class RealtimeConsumer(
             )
         )
 
+
+        expires_at = (
+            await PresenceStore.touch(
+                user_id=user.pk,
+                connection_id=(
+                    self.channel_name
+                ),
+            )
+        )
+
+        await self._broadcast_presence(
+            expires_at=expires_at,
+        )
+
+        await self._send_presence_snapshot()
+
     async def disconnect(
         self,
         close_code: int,
@@ -96,6 +115,27 @@ class RealtimeConsumer(
                     group_name,
                     self.channel_name,
                 )
+            )
+
+
+        user = getattr(
+            self,
+            "user",
+            None,
+        )
+
+        if user is not None:
+            remaining_until = (
+                await PresenceStore.remove(
+                    user_id=user.pk,
+                    connection_id=(
+                        self.channel_name
+                    ),
+                )
+            )
+
+            await self._broadcast_presence(
+                expires_at=remaining_until,
             )
 
     async def receive_json(
@@ -164,6 +204,27 @@ class RealtimeConsumer(
             == "message.read"
         ):
             await self._handle_message_read(
+                request_id=request_id,
+                payload=payload,
+            )
+            return
+
+        if (
+            command_type
+            == "presence.heartbeat"
+        ):
+            await (
+                self
+                ._handle_presence_heartbeat()
+            )
+            return
+
+        if command_type in {
+            "typing.start",
+            "typing.stop",
+        }:
+            await self._handle_typing(
+                command_type=command_type,
                 request_id=request_id,
                 payload=payload,
             )
@@ -298,6 +359,259 @@ class RealtimeConsumer(
                     "this message read."
                 ),
             )
+
+    @database_sync_to_async
+    def _friend_user_ids(
+        self,
+    ) -> list[int]:
+        return (
+            RealtimeEphemeralSelector
+            .friend_user_ids(
+                user_id=self.user.pk,
+            )
+        )
+
+    @database_sync_to_async
+    def _can_publish_typing(
+        self,
+        *,
+        conversation_type: str,
+        conversation_id: int,
+    ) -> bool:
+        return (
+            RealtimeEphemeralSelector
+            .can_publish_typing(
+                user_id=self.user.pk,
+                conversation_type=(
+                    conversation_type
+                ),
+                conversation_id=(
+                    conversation_id
+                ),
+            )
+        )
+
+    @staticmethod
+    def _expires_at_iso(
+        expires_at: float | None,
+    ) -> str | None:
+        if expires_at is None:
+            return None
+
+        return (
+            datetime.fromtimestamp(
+                expires_at,
+                tz=timezone.utc,
+            )
+            .isoformat()
+            .replace("+00:00", "Z")
+        )
+
+    async def _broadcast_presence(
+        self,
+        *,
+        expires_at: float | None,
+    ) -> None:
+        friend_ids = (
+            await self._friend_user_ids()
+        )
+
+        if not friend_ids:
+            return
+
+        event = build_realtime_event(
+            event_type=(
+                RealtimeEventType
+                .PRESENCE_UPDATED
+            ),
+            payload={
+                "user_id":
+                    self.user.pk,
+                "online":
+                    expires_at
+                    is not None,
+                "expires_at":
+                    self._expires_at_iso(
+                        expires_at
+                    ),
+            },
+        )
+
+        for friend_id in friend_ids:
+            await (
+                self.channel_layer
+                .group_send(
+                    user_group_name(
+                        friend_id
+                    ),
+                    {
+                        "type":
+                            "realtime.event",
+                        "event":
+                            event,
+                    },
+                )
+            )
+
+    async def _send_presence_snapshot(
+        self,
+    ) -> None:
+        friend_ids = (
+            await self._friend_user_ids()
+        )
+
+        for friend_id in friend_ids:
+            expires_at = (
+                await PresenceStore
+                .online_until(
+                    user_id=friend_id,
+                )
+            )
+
+            await self.send_json(
+                build_realtime_event(
+                    event_type=(
+                        RealtimeEventType
+                        .PRESENCE_UPDATED
+                    ),
+                    payload={
+                        "user_id":
+                            friend_id,
+                        "online":
+                            expires_at
+                            is not None,
+                        "expires_at":
+                            self._expires_at_iso(
+                                expires_at
+                            ),
+                    },
+                )
+            )
+
+    async def _handle_presence_heartbeat(
+        self,
+    ) -> None:
+        expires_at = (
+            await PresenceStore.touch(
+                user_id=self.user.pk,
+                connection_id=(
+                    self.channel_name
+                ),
+            )
+        )
+
+        await self._broadcast_presence(
+            expires_at=expires_at,
+        )
+
+    async def _handle_typing(
+        self,
+        *,
+        command_type: str,
+        request_id: str | None,
+        payload: dict[str, Any],
+    ) -> None:
+        parsed = self._parse_conversation(
+            payload
+        )
+
+        if parsed is None:
+            await self._send_error(
+                request_id=request_id,
+                code="INVALID_COMMAND",
+                detail=(
+                    "A valid conversation_type "
+                    "and conversation_id are required."
+                ),
+            )
+            return
+
+        (
+            conversation_type,
+            conversation_id,
+        ) = parsed
+
+        group_name = (
+            conversation_group_name(
+                conversation_type,
+                conversation_id,
+            )
+        )
+
+        # Typing is only meaningful from a socket that currently has this
+        # conversation open/subscribed.
+        if (
+            group_name
+            not in self.subscribed_groups
+        ):
+            await self._send_error(
+                request_id=request_id,
+                code="NOT_AUTHORIZED",
+                detail=(
+                    "You cannot publish typing "
+                    "state for this conversation."
+                ),
+            )
+            return
+
+        can_publish = (
+            await self._can_publish_typing(
+                conversation_type=(
+                    conversation_type
+                ),
+                conversation_id=(
+                    conversation_id
+                ),
+            )
+        )
+
+        if not can_publish:
+            await self._send_error(
+                request_id=request_id,
+                code="NOT_AUTHORIZED",
+                detail=(
+                    "You cannot publish typing "
+                    "state for this conversation."
+                ),
+            )
+            return
+
+        event_type = (
+            RealtimeEventType
+            .TYPING_STARTED
+            if command_type
+            == "typing.start"
+            else
+            RealtimeEventType
+            .TYPING_STOPPED
+        )
+
+        await (
+            self.channel_layer
+            .group_send(
+                group_name,
+                {
+                    "type":
+                        "realtime.event",
+                    "event":
+                        build_realtime_event(
+                            event_type=(
+                                event_type
+                            ),
+                            payload={
+                                "conversation_type":
+                                    conversation_type,
+                                "conversation_id":
+                                    conversation_id,
+                                "user_id":
+                                    self.user.pk,
+                                "username":
+                                    self.user.username,
+                            },
+                        ),
+                },
+            )
+        )
 
     async def _handle_conversation_subscribe(
         self,

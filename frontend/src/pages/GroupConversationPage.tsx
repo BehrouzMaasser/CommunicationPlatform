@@ -36,6 +36,7 @@ import type {
   MessageDeliveredPayload,
   MessageReadPayload,
 } from '../realtime/messageEvents'
+import { useConversationTyping } from '../realtime/typing'
 import type {
   GroupConversation,
 } from '../types/groups'
@@ -88,6 +89,16 @@ function GroupConversationPage() {
 
   const parsedGroupId =
     Number(groupId)
+
+
+  const {
+    typingUsernames,
+    notifyTyping,
+    stopTyping,
+  } = useConversationTyping(
+    'group',
+    parsedGroupId,
+  )
 
   const [group, setGroup] =
     useState<GroupConversation | null>(
@@ -597,6 +608,14 @@ function GroupConversationPage() {
         </div>
 
         <div className="card-footer bg-white py-3">
+          {typingUsernames.length > 0 && (
+            <div className="small text-secondary mb-2">
+              {typingUsernames.length === 1
+                ? `@${typingUsernames[0]} is typing…`
+                : `${typingUsernames.length} people are typing…`}
+            </div>
+          )}
+
           <MessageComposer
             placeholder={`Message ${group.name}`}
             replyingTo={replyingTo}
@@ -604,6 +623,8 @@ function GroupConversationPage() {
               setReplyingTo(null)
             }
             onSend={handleSend}
+            onTyping={notifyTyping}
+            onTypingStop={stopTyping}
           />
         </div>
       </div>

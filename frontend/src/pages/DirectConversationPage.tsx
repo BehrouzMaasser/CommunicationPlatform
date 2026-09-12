@@ -38,6 +38,7 @@ import type {
   MessageDeliveredPayload,
   MessageReadPayload,
 } from '../realtime/messageEvents'
+import { useConversationTyping } from '../realtime/typing'
 import type {
   DirectConversation,
 } from '../types/conversations'
@@ -81,6 +82,7 @@ function DirectConversationPage() {
   const {
     client: realtimeClient,
     status: realtimeStatus,
+    isUserOnline,
   } = useRealtime()
   const { conversationId } =
     useParams<{
@@ -89,6 +91,16 @@ function DirectConversationPage() {
 
   const parsedConversationId =
     Number(conversationId)
+
+
+  const {
+    typingUsernames,
+    notifyTyping,
+    stopTyping,
+  } = useConversationTyping(
+    'dm',
+    parsedConversationId,
+  )
 
   const [
     conversation,
@@ -493,8 +505,28 @@ function DirectConversationPage() {
               .username}
           </h1>
 
-          <div className="small text-secondary">
-            Direct conversation #{conversation.id}
+          <div className="small text-secondary d-flex align-items-center gap-2">
+            <span>
+              Direct conversation #{conversation.id}
+            </span>
+
+            <span
+              className={
+                isUserOnline(
+                  conversation.other_user.id,
+                )
+                  ? 'badge text-bg-success'
+                  : 'badge text-bg-secondary'
+              }
+            >
+              {
+                isUserOnline(
+                  conversation.other_user.id,
+                )
+                  ? 'Online'
+                  : 'Offline'
+              }
+            </span>
           </div>
         </div>
 
@@ -518,6 +550,14 @@ function DirectConversationPage() {
         </div>
 
         <div className="card-footer bg-white py-3">
+          {typingUsernames.length > 0 && (
+            <div className="small text-secondary mb-2">
+              {typingUsernames.length === 1
+                ? `@${typingUsernames[0]} is typing…`
+                : `${typingUsernames.length} people are typing…`}
+            </div>
+          )}
+
           <MessageComposer
             placeholder={`Message @${conversation.other_user.username}`}
             replyingTo={replyingTo}
@@ -525,6 +565,8 @@ function DirectConversationPage() {
               setReplyingTo(null)
             }
             onSend={handleSend}
+            onTyping={notifyTyping}
+            onTypingStop={stopTyping}
             disabled={!canMessage}
             disabledMessage={
               !canMessage
