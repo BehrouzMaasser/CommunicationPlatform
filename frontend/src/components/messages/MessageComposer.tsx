@@ -1,7 +1,7 @@
 import {
   type ChangeEvent,
   type FormEvent,
-  type KeyboardEvent,
+  type KeyboardEvent as ReactKeyboardEvent,
   useEffect,
   useRef,
   useState,
@@ -11,6 +11,8 @@ import type {
   Message,
   MessageDraft,
 } from '../../types/messages'
+
+import EmojiPicker from './EmojiPicker'
 
 
 function formatFileSize(
@@ -96,6 +98,16 @@ function MessageComposer({
       null,
     )
 
+  const textareaRef =
+    useRef<HTMLTextAreaElement | null>(
+      null,
+    )
+
+  const emojiPickerContainerRef =
+    useRef<HTMLDivElement | null>(
+      null,
+    )
+
   const [
     messageText,
     setMessageText,
@@ -112,6 +124,9 @@ function MessageComposer({
   const [error, setError] =
     useState<string | null>(null)
 
+  const [emojiPickerOpen, setEmojiPickerOpen] =
+    useState(false)
+
   function handleTextChange(
     value: string,
   ) {
@@ -124,6 +139,52 @@ function MessageComposer({
     }
   }
 
+
+  function insertEmoji(
+    emoji: string,
+  ) {
+    const textarea = textareaRef.current
+    const selectionStart =
+      textarea?.selectionStart
+      ?? messageText.length
+    const selectionEnd =
+      textarea?.selectionEnd
+      ?? selectionStart
+
+    const nextValue =
+      messageText.slice(
+        0,
+        selectionStart,
+      )
+      + emoji
+      + messageText.slice(
+          selectionEnd,
+        )
+
+    const nextCursorPosition =
+      selectionStart
+      + emoji.length
+
+    handleTextChange(nextValue)
+
+    window.requestAnimationFrame(
+      () => {
+        const currentTextarea =
+          textareaRef.current
+
+        if (!currentTextarea) {
+          return
+        }
+
+        currentTextarea.focus()
+        currentTextarea.setSelectionRange(
+          nextCursorPosition,
+          nextCursorPosition,
+        )
+      },
+    )
+  }
+
   useEffect(
     () => () => {
       onTypingStop?.()
@@ -131,8 +192,63 @@ function MessageComposer({
     [onTypingStop],
   )
 
+
+  useEffect(() => {
+    if (!emojiPickerOpen) {
+      return
+    }
+
+    function handlePointerDown(
+      event: PointerEvent,
+    ) {
+      const target =
+        event.target
+
+      if (
+        !(target instanceof Node)
+        || emojiPickerContainerRef.current?.contains(
+          target,
+        )
+      ) {
+        return
+      }
+
+      setEmojiPickerOpen(false)
+    }
+
+    function handleKeyDown(
+      event: KeyboardEvent,
+    ) {
+      if (event.key === 'Escape') {
+        setEmojiPickerOpen(false)
+        textareaRef.current?.focus()
+      }
+    }
+
+    document.addEventListener(
+      'pointerdown',
+      handlePointerDown,
+    )
+    document.addEventListener(
+      'keydown',
+      handleKeyDown,
+    )
+
+    return () => {
+      document.removeEventListener(
+        'pointerdown',
+        handlePointerDown,
+      )
+      document.removeEventListener(
+        'keydown',
+        handleKeyDown,
+      )
+    }
+  }, [emojiPickerOpen])
+
   useEffect(() => {
     if (disabled) {
+      setEmojiPickerOpen(false)
       onTypingStop?.()
     }
   }, [
@@ -174,7 +290,7 @@ function MessageComposer({
 
   function handleMessageKeyDown(
     event:
-      KeyboardEvent<HTMLTextAreaElement>,
+      ReactKeyboardEvent<HTMLTextAreaElement>,
   ) {
     if (
       event.key !== 'Enter' ||
@@ -220,6 +336,7 @@ function MessageComposer({
       })
 
       onTypingStop?.()
+      setEmojiPickerOpen(false)
       clearComposer()
     } catch (requestError) {
       setError(
@@ -325,10 +442,12 @@ function MessageComposer({
       )}
 
       <form
+        className="message-composer-form"
         onSubmit={handleSubmit}
       >
         <textarea
           className="form-control mb-2"
+          ref={textareaRef}
           rows={2}
           value={messageText}
           onChange={(event) =>
@@ -351,28 +470,62 @@ function MessageComposer({
         />
 
         <div className="d-flex flex-column flex-sm-row justify-content-between gap-2">
-          <div>
-            <label
-              className={`btn btn-outline-secondary${disabled ? ' disabled' : ''}`}
-              htmlFor="message-attachments"
+          <div className="d-flex align-items-center gap-2">
+            <div
+              className="emoji-picker-shell"
+              ref={emojiPickerContainerRef}
             >
-              Attach files
-            </label>
+              <button
+                className="btn btn-outline-secondary emoji-toggle-button"
+                type="button"
+                aria-label="Add emoji"
+                aria-expanded={emojiPickerOpen}
+                disabled={
+                  sending ||
+                  disabled
+                }
+                onClick={() =>
+                  setEmojiPickerOpen(
+                    (current) => !current,
+                  )
+                }
+              >
+                <span aria-hidden="true">😊</span>
+                <span className="d-none d-sm-inline ms-1">
+                  Emoji
+                </span>
+              </button>
 
-            <input
-              className="visually-hidden"
-              id="message-attachments"
-              type="file"
-              multiple
-              ref={fileInputRef}
-              onChange={
-                handleFileSelection
-              }
-              disabled={
-                sending ||
-                disabled
-              }
-            />
+              {emojiPickerOpen && (
+                <EmojiPicker
+                  onSelect={insertEmoji}
+                />
+              )}
+            </div>
+
+            <div>
+              <label
+                className={`btn btn-outline-secondary${disabled ? ' disabled' : ''}`}
+                htmlFor="message-attachments"
+              >
+                Attach files
+              </label>
+
+              <input
+                className="visually-hidden"
+                id="message-attachments"
+                type="file"
+                multiple
+                ref={fileInputRef}
+                onChange={
+                  handleFileSelection
+                }
+                disabled={
+                  sending ||
+                  disabled
+                }
+              />
+            </div>
           </div>
 
           <button
