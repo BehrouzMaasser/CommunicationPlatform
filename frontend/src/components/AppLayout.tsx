@@ -60,10 +60,12 @@ function RealtimeStatusBadge() {
 
   return (
     <span
-      className={`badge ${badgeClass}`}
-      title="Realtime connection status"
+      className={`connection-status ${badgeClass}`}
+      title={`Realtime status: ${label}`}
+      aria-label={`Realtime status: ${label}`}
     >
-      {label}
+      <span className="connection-status-dot" aria-hidden="true" />
+      <span className="d-none d-xl-inline">{label}</span>
     </span>
   )
 }
@@ -101,16 +103,18 @@ function AppLayoutContent({
 
   return (
     <div className="app-shell">
-      <nav className="navbar navbar-expand-lg bg-dark border-bottom border-body">
-        <div className="container">
+      <nav className="navbar app-navbar sticky-top">
+        <div className="container app-container app-navbar-inner">
           <NavLink
-            className="navbar-brand text-white fw-semibold"
+            className="navbar-brand app-brand"
             to="/"
+            aria-label="Communication Platform home"
           >
-            CommunicationPlatform
+            <span className="app-brand-mark" aria-hidden="true">CP</span>
+            <span>Communication Platform</span>
           </NavLink>
 
-          <div className="navbar-nav flex-row gap-2 gap-md-3">
+          <div className="navbar-nav app-main-nav flex-row">
             <NavLink
               className={
                 navLinkClass
@@ -139,7 +143,7 @@ function AppLayoutContent({
             </NavLink>
           </div>
 
-          <div className="ms-auto ps-3 text-white d-flex align-items-center gap-2">
+          <div className="app-account-nav ms-auto d-flex align-items-center gap-2">
             {authStatus ===
               'authenticated' && (
               <RealtimeStatusBadge />
@@ -147,22 +151,19 @@ function AppLayoutContent({
 
             {authStatus ===
               'loading' && (
-              <span className="text-white-50">
-                Checking session…
+              <span className="app-session-label">
+                Loading…
               </span>
             )}
 
             {authStatus ===
               'authenticated' &&
               currentUser && (
-                <span>
-                  Signed in as{' '}
-                  <strong>
-                    {
-                      currentUser
-                        .username
-                    }
-                  </strong>
+                <span className="app-user-chip d-none d-md-inline-flex">
+                  <span className="app-user-avatar" aria-hidden="true">
+                    {currentUser.username.charAt(0).toUpperCase()}
+                  </span>
+                  <strong>{currentUser.username}</strong>
                 </span>
               )}
 
@@ -170,14 +171,14 @@ function AppLayoutContent({
               'authenticated' && (
                 <>
                   <a
-                    className="btn btn-sm btn-outline-light"
+                    className="btn btn-sm btn-nav-secondary"
                     href="/accounts/me/"
                   >
                     Account
                   </a>
 
                   <button
-                    className="btn btn-sm btn-light"
+                    className="btn btn-sm btn-nav-primary"
                     type="button"
                     disabled={
                       isLoggingOut
@@ -196,7 +197,7 @@ function AppLayoutContent({
             {authStatus ===
               'anonymous' && (
               <a
-                className="btn btn-sm btn-outline-light"
+                className="btn btn-sm btn-nav-secondary"
                 href="/accounts/login/"
               >
                 Sign in
@@ -205,15 +206,15 @@ function AppLayoutContent({
 
             {authStatus ===
               'error' && (
-              <span className="text-warning">
-                Could not check session
+              <span className="app-session-error">
+                Session unavailable
               </span>
             )}
           </div>
         </div>
       </nav>
 
-      <main className="container py-4 py-md-5">
+      <main className="container app-container app-main py-4 py-md-5">
         <Outlet />
       </main>
     </div>

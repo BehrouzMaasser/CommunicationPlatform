@@ -31,30 +31,34 @@
 
 <body class="d-flex flex-column min-vh-100">
 
-    <nav class="navbar navbar-expand-lg bg-body border-bottom">
-        <div class="container">
+    <nav class="navbar app-navbar">
+        <div class="container app-container app-navbar-inner">
 
             <a
-                class="navbar-brand fw-semibold"
-                href="{% if request.user.is_authenticated %}/{% else %}{% url 'auth-login' %}{% endif %}"
+                class="navbar-brand app-brand"
+                href="{% if request.user.is_authenticated %}{{ frontend_base_url }}/{% else %}{% url 'auth-login' %}{% endif %}"
             >
-                Communication Platform
+                <span class="app-brand-mark" aria-hidden="true">CP</span>
+                <span>Communication Platform</span>
             </a>
 
             {% if request.user.is_authenticated %}
-                <div class="navbar-nav flex-row gap-2 gap-md-3 ms-3">
-                    <a class="nav-link" href="/friends">Friends</a>
-                    <a class="nav-link" href="/messages">Messages</a>
-                    <a class="nav-link" href="/groups">Groups</a>
+                <div class="navbar-nav app-main-nav flex-row gap-1 ms-2">
+                    <a class="nav-link" href="{{ frontend_base_url }}/friends">Friends</a>
+                    <a class="nav-link" href="{{ frontend_base_url }}/messages">Messages</a>
+                    <a class="nav-link" href="{{ frontend_base_url }}/groups">Groups</a>
                 </div>
             {% endif %}
 
-            <div class="ms-auto d-flex align-items-center gap-3">
+            <div class="ms-auto d-flex align-items-center gap-2 app-account-nav">
 
                 {% if request.user.is_authenticated %}
 
-                    <span class="text-body-secondary small">
-                        {{ request.user.username }}
+                    <span class="app-user-chip d-none d-sm-inline-flex">
+                        <span class="app-user-avatar" aria-hidden="true">
+                            {{ request.user.username|first|upper }}
+                        </span>
+                        <strong>{{ request.user.username }}</strong>
                     </span>
 
                     <form
@@ -66,7 +70,7 @@
 
                         <button
                             type="submit"
-                            class="btn btn-outline-secondary btn-sm"
+                            class="btn btn-nav-secondary btn-sm"
                         >
                             Log out
                         </button>
@@ -76,14 +80,14 @@
 
                     <a
                         href="{% url 'auth-login' %}"
-                        class="btn btn-outline-primary btn-sm"
+                        class="btn btn-nav-secondary btn-sm"
                     >
                         Log in
                     </a>
 
                     <a
                         href="{% url 'auth-register' %}"
-                        class="btn btn-primary btn-sm"
+                        class="btn btn-nav-primary btn-sm"
                     >
                         Sign up
                     </a>
@@ -129,8 +133,8 @@
         {% block content %}{% endblock %}
     </main>
 
-    <footer class="border-top py-4 mt-auto bg-body">
-        <div class="container text-center text-body-secondary small">
+    <footer class="app-footer py-4 mt-auto">
+        <div class="container app-container text-center small">
             Communication Platform
         </div>
     </footer>

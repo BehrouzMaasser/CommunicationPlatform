@@ -1,3 +1,4 @@
+from django.conf import settings
 from django.contrib.auth import login
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.core.exceptions import ValidationError
@@ -17,12 +18,15 @@ class SignupView(View):
 
         if request.user.is_authenticated:
 
-            return redirect("/")
+            return redirect(f"{settings.FRONTEND_BASE_URL}/")
 
         return render(
             request,
             self.template_name,
-            {"form": UserSignupForm()}
+            {
+                "form": UserSignupForm(),
+                "frontend_base_url": settings.FRONTEND_BASE_URL,
+            },
         )
 
     def post(self, request):
@@ -30,7 +34,14 @@ class SignupView(View):
         form = UserSignupForm(request.POST)
 
         if not form.is_valid():
-            return render(request, self.template_name, {"form": form})
+            return render(
+                request,
+                self.template_name,
+                {
+                    "form": form,
+                    "frontend_base_url": settings.FRONTEND_BASE_URL,
+                },
+            )
 
         try:
             user = AuthenticationService.register(
@@ -41,7 +52,7 @@ class SignupView(View):
 
             login(request, user)
 
-            return redirect("/")
+            return redirect(f"{settings.FRONTEND_BASE_URL}/")
 
         except ValidationError as e:
             if hasattr(e, "message_dict"):
@@ -51,7 +62,14 @@ class SignupView(View):
             else:
                 form.add_error(None, e.message)
 
-        return render(request, self.template_name, {"form": form})
+        return render(
+            request,
+            self.template_name,
+            {
+                "form": form,
+                "frontend_base_url": settings.FRONTEND_BASE_URL,
+            },
+        )
 
 
 class LoginView(View):
@@ -62,16 +80,30 @@ class LoginView(View):
 
         if request.user.is_authenticated:
 
-            return redirect("/")
+            return redirect(f"{settings.FRONTEND_BASE_URL}/")
 
-        return render(request, self.template_name, {"form": UserLoginForm()})
+        return render(
+            request,
+            self.template_name,
+            {
+                "form": UserLoginForm(),
+                "frontend_base_url": settings.FRONTEND_BASE_URL,
+            },
+        )
 
     def post(self, request):
 
         form = UserLoginForm(request.POST)
 
         if not form.is_valid():
-            return render(request, self.template_name, {"form": form})
+            return render(
+                request,
+                self.template_name,
+                {
+                    "form": form,
+                    "frontend_base_url": settings.FRONTEND_BASE_URL,
+                },
+            )
 
         user = AuthenticationService.authenticate(
             email=form.cleaned_data["email"],
@@ -81,11 +113,18 @@ class LoginView(View):
         if user:
             login(request, user)
 
-            return redirect("/")
+            return redirect(f"{settings.FRONTEND_BASE_URL}/")
 
         form.add_error(None, "Invalid credentials.")
 
-        return render(request, self.template_name, {"form": form})
+        return render(
+            request,
+            self.template_name,
+            {
+                "form": form,
+                "frontend_base_url": settings.FRONTEND_BASE_URL,
+            },
+        )
 
 
 class LogoutView(LoginRequiredMixin, View):

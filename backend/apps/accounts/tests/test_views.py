@@ -1,3 +1,4 @@
+from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.urls import reverse
@@ -44,7 +45,7 @@ class AccountViewTests(TestCase):
 
         self.assertRedirects(
             response,
-            "/",
+            f"{settings.FRONTEND_BASE_URL}/",
             fetch_redirect_response=False,
         )
 
@@ -90,7 +91,7 @@ class AccountViewTests(TestCase):
 
         self.assertRedirects(
             response,
-            "/",
+            f"{settings.FRONTEND_BASE_URL}/",
             fetch_redirect_response=False,
         )
 
@@ -120,7 +121,7 @@ class AccountViewTests(TestCase):
 
         self.assertRedirects(
             response,
-            "/",
+            f"{settings.FRONTEND_BASE_URL}/",
             fetch_redirect_response=False,
         )
 
@@ -154,7 +155,7 @@ class AccountViewTests(TestCase):
 
         self.assertRedirects(
             response,
-            "/",
+            f"{settings.FRONTEND_BASE_URL}/",
             fetch_redirect_response=False,
         )
 
@@ -196,9 +197,18 @@ class AccountViewTests(TestCase):
             self.user,
         )
 
-        self.assertContains(response, 'href="/friends"')
-        self.assertContains(response, 'href="/messages"')
-        self.assertContains(response, 'href="/groups"')
+        self.assertContains(
+            response,
+            f'href="{settings.FRONTEND_BASE_URL}/friends"',
+        )
+        self.assertContains(
+            response,
+            f'href="{settings.FRONTEND_BASE_URL}/messages"',
+        )
+        self.assertContains(
+            response,
+            f'href="{settings.FRONTEND_BASE_URL}/groups"',
+        )
 
     # ------------------------------------------------------------------
     # Logout

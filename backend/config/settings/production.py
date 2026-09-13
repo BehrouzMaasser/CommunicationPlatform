@@ -31,6 +31,10 @@ def _bool_env(name, default=False):
 
 DEBUG = False
 SECRET_KEY = _required_env("DJANGO_SECRET_KEY")
+FRONTEND_BASE_URL = os.getenv(
+    "DJANGO_FRONTEND_BASE_URL",
+    "",
+).rstrip("/")
 
 ALLOWED_HOSTS = _csv_env("DJANGO_ALLOWED_HOSTS")
 if not ALLOWED_HOSTS or "*" in ALLOWED_HOSTS:

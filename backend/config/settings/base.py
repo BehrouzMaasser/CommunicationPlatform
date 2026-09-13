@@ -204,3 +204,12 @@ MAILERS = {
 }
 
 LOGIN_URL = "auth-login"
+
+# Base URL for links/redirects from Django-rendered account pages back to
+# the React application. Production is served on the same origin, so the
+# empty default produces paths such as "/messages". Development overrides
+# this to point at the Vite dev server.
+FRONTEND_BASE_URL = os.getenv(
+    "DJANGO_FRONTEND_BASE_URL",
+    "",
+).rstrip("/")

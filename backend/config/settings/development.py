@@ -15,6 +15,16 @@ TEMPLATES = [
     },
 ]
 
+FRONTEND_BASE_URL = os.getenv(
+    "DJANGO_FRONTEND_BASE_URL",
+    "http://127.0.0.1:5173",
+).rstrip("/")
+
+CORS_ALLOWED_ORIGINS = [
+    "http://127.0.0.1:5173",
+    "http://localhost:5173",
+]
+
 STATIC_URL = "static/"
 
 STATICFILES_DIRS = [
@@ -27,4 +37,5 @@ MEDIA_URL = "media/"
 if DEBUG:
     CSRF_TRUSTED_ORIGINS = [
         "http://127.0.0.1:5173",
+        "http://localhost:5173",
     ]
