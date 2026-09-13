@@ -224,7 +224,6 @@ function MessageThread({
       previousLastMessageIdRef.current =
         null
       isNearBottomRef.current = true
-      setNewMessagesBelow(0)
       reportAtBottom(true)
       return
     }
@@ -427,7 +426,8 @@ function MessageThread({
         )}
       </div>
 
-      {newMessagesBelow > 0 && (
+      {messages.length > 0 &&
+        newMessagesBelow > 0 && (
         <button
           className="btn btn-primary btn-sm message-thread-new-button shadow"
           type="button"

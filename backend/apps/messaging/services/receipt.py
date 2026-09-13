@@ -271,6 +271,7 @@ class MessageReceiptService:
                     message=target,
                     user_id=current_user.pk,
                     read_at=read_at,
+                    read_count=len(receipts),
                 )
             )
 

@@ -267,10 +267,9 @@ class MessageRealtimePublisher:
 
 class MessageReceiptRealtimePublisher:
     """
-    Receipt updates go only to currently authorized conversation subscribers.
-
-    Persistence is the reconciliation path for users/tabs that were not
-    subscribed when the event happened.
+    Delivery updates go to authorized conversation subscribers. Read updates
+    additionally go to the reader's personal group so other tabs can keep
+    unread counters synchronized. Persistence remains the reconciliation path.
     """
 
     @staticmethod
@@ -335,14 +334,28 @@ class MessageReceiptRealtimePublisher:
         message: Message,
         user_id: int,
         read_at,
+        read_count: int,
     ) -> None:
-        cls._publish_after_commit(
+        (
+            conversation_type,
+            conversation_id,
+        ) = _conversation_identity(
+            message
+        )
+
+        # Conversation subscribers need this for receipt UI. The reader's
+        # personal group also receives the same event so other tabs can keep
+        # navbar/unread state synchronized without polling.
+        RealtimePublisher.publish_after_commit(
             event_type=(
                 RealtimeEventType
                 .MESSAGE_READ
             ),
-            message=message,
             payload={
+                "conversation_type":
+                    conversation_type,
+                "conversation_id":
+                    conversation_id,
                 # Read-through watermark.
                 "message_id":
                     message.pk,
@@ -350,5 +363,14 @@ class MessageReceiptRealtimePublisher:
                     user_id,
                 "read_at":
                     _iso(read_at),
+                "read_count":
+                    read_count,
             },
+            group_names=[
+                conversation_group_name(
+                    conversation_type,
+                    conversation_id,
+                ),
+                user_group_name(user_id),
+            ],
         )

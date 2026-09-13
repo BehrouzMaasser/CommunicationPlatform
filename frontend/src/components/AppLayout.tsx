@@ -9,6 +9,12 @@ import {
 
 import { ApiError } from '../api/client'
 import {
+  ActivityProvider,
+} from '../activity/ActivityContext'
+import {
+  useActivity,
+} from '../activity/useActivity'
+import {
   getCurrentUser,
   logoutCurrentUser,
 } from '../api/session'
@@ -37,6 +43,29 @@ const navLinkClass = ({
   `nav-link${
     isActive ? ' active' : ''
   }`
+
+
+function ActivityBadge({
+  count,
+  label,
+}: {
+  count: number
+  label: string
+}) {
+  if (count <= 0) {
+    return null
+  }
+
+  return (
+    <span
+      className="nav-activity-badge"
+      aria-label={`${count} ${label}`}
+      title={`${count} ${label}`}
+    >
+      {count > 99 ? '99+' : count}
+    </span>
+  )
+}
 
 
 function RealtimeStatusBadge() {
@@ -84,6 +113,17 @@ function AppLayoutContent({
     setIsLoggingOut,
   ] = useState(false)
 
+  const {
+    pendingFriendRequests,
+    pendingGroupInvitations,
+    unreadDirectMessages,
+    unreadGroupMessages,
+  } = useActivity()
+
+  const groupAttentionCount =
+    pendingGroupInvitations
+    + unreadGroupMessages
+
   async function handleLogout() {
     if (isLoggingOut) {
       return
@@ -121,7 +161,11 @@ function AppLayoutContent({
               }
               to="/friends"
             >
-              Friends
+              <span>Friends</span>
+              <ActivityBadge
+                count={pendingFriendRequests}
+                label="pending friend requests"
+              />
             </NavLink>
 
             <NavLink
@@ -130,7 +174,11 @@ function AppLayoutContent({
               }
               to="/messages"
             >
-              Messages
+              <span>Messages</span>
+              <ActivityBadge
+                count={unreadDirectMessages}
+                label="unread direct messages"
+              />
             </NavLink>
 
             <NavLink
@@ -139,7 +187,15 @@ function AppLayoutContent({
               }
               to="/groups"
             >
-              Groups
+              <span>Groups</span>
+              <ActivityBadge
+                count={groupAttentionCount}
+                label={
+                  pendingGroupInvitations > 0
+                    ? `${unreadGroupMessages} unread messages and ${pendingGroupInvitations} pending invitations`
+                    : 'unread group messages'
+                }
+              />
             </NavLink>
           </div>
 
@@ -294,10 +350,20 @@ function AppLayout() {
         currentUser?.id
       }
     >
-      <AppLayoutContent
-        authStatus={authStatus}
-        currentUser={currentUser}
-      />
+      <ActivityProvider
+        enabled={
+          authStatus ===
+          'authenticated'
+        }
+        currentUserId={
+          currentUser?.id
+        }
+      >
+        <AppLayoutContent
+          authStatus={authStatus}
+          currentUser={currentUser}
+        />
+      </ActivityProvider>
     </RealtimeProvider>
   )
 }

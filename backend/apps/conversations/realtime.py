@@ -90,16 +90,20 @@ class GroupRealtimePublisher:
         *,
         invitation_id: int,
         group_id: int,
+        group_name: str,
         invited_by_id: int,
         recipient_id: int,
+        recipient_username: str,
     ) -> None:
         cls._publish_group_event_after_commit(
             event_type=RealtimeEventType.GROUP_INVITATION_ACCEPTED,
             payload={
                 "invitation_id": invitation_id,
                 "group_id": group_id,
+                "group_name": group_name,
                 "invited_by_id": invited_by_id,
                 "recipient_id": recipient_id,
+                "recipient_username": recipient_username,
             },
             group_id=group_id,
             user_ids=[

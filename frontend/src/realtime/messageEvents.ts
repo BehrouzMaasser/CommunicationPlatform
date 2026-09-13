@@ -32,4 +32,5 @@ export type MessageReadPayload = {
   message_id: number
   user_id: number
   read_at: string
+  read_count: number
 }

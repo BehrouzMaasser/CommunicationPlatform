@@ -63,6 +63,7 @@ INSTALLED_APPS = [
     'apps.messaging',
     'apps.attachments',
     'apps.realtime',
+    'apps.activity',
 ]
 
 REST_FRAMEWORK = {

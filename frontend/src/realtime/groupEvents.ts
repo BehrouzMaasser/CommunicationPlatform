@@ -20,6 +20,13 @@ export type GroupInvitationEventPayload =
   }
 
 
+
+export type GroupInvitationAcceptedEventPayload =
+  GroupInvitationEventPayload & {
+    group_name: string
+    recipient_username: string
+  }
+
 export const groupLifecycleEventTypes = [
   'group_invitation.created',
   'group_invitation.accepted',

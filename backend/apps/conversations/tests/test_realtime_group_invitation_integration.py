@@ -94,6 +94,23 @@ class GroupInvitationRealtimeIntegrationTests(APITestCase):
                 "group.member_added",
             },
         )
+
+        accepted_call = next(
+            call
+            for call in publish.call_args_list
+            if (
+                call.kwargs["event_type"].value
+                == "group_invitation.accepted"
+            )
+        )
+        self.assertEqual(
+            accepted_call.kwargs["payload"]["group_name"],
+            "Study Group",
+        )
+        self.assertEqual(
+            accepted_call.kwargs["payload"]["recipient_username"],
+            "bob",
+        )
         self.assertTrue(
             GroupMembership.objects.filter(
                 group=self.group,

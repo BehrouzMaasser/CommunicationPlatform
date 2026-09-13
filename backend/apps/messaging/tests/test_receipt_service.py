@@ -286,3 +286,20 @@ class MessageReceiptServiceTests(TestCase):
             ],
             latest.pk,
         )
+
+        self.assertEqual(
+            read_calls[0]
+            .kwargs["payload"][
+                "read_count"
+            ],
+            2,
+        )
+
+        self.assertCountEqual(
+            read_calls[0]
+            .kwargs["group_names"],
+            [
+                f"dm.{self.dm.pk}",
+                f"user.{self.bob.pk}",
+            ],
+        )

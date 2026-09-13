@@ -1,4 +1,5 @@
 import {
+  useCallback,
   useEffect,
   useState,
 } from 'react'
@@ -8,11 +9,14 @@ import {
 } from 'react-router-dom'
 
 import { ApiError } from '../api/client'
+import { useActivity } from '../activity/useActivity'
 import {
   getDirectConversations,
   openDirectConversation,
 } from '../api/conversations'
 import { getFriends } from '../api/friendships'
+import { useRealtimeEvent } from '../realtime/RealtimeContext'
+import type { MessageCreatedPayload } from '../realtime/messageEvents'
 
 import type { DirectConversation } from '../types/conversations'
 import type { PublicUser } from '../types/users'
@@ -79,6 +83,8 @@ function formatActivity(value: string): string {
 
 function ConversationsPage() {
   const navigate = useNavigate()
+  const { getDirectUnread } =
+    useActivity()
 
   const [conversations, setConversations] =
     useState<DirectConversation[]>([])
@@ -93,6 +99,33 @@ function ConversationsPage() {
     useState<string | null>(null)
   const [openingUserId, setOpeningUserId] =
     useState<number | null>(null)
+
+  const refreshConversations =
+    useCallback(async () => {
+      setConversations(
+        await getDirectConversations(),
+      )
+    }, [])
+
+  const handleMessageCreated =
+    useCallback(
+      ({ payload }: {
+        payload: MessageCreatedPayload
+      }) => {
+        if (
+          payload.conversation_type
+          === 'dm'
+        ) {
+          void refreshConversations()
+        }
+      },
+      [refreshConversations],
+    )
+
+  useRealtimeEvent(
+    'message.created',
+    handleMessageCreated,
+  )
 
   useEffect(() => {
     let cancelled = false
@@ -247,14 +280,33 @@ function ConversationsPage() {
                           </div>
                         </div>
 
-                        <div className="small text-secondary text-end">
-                          <div>
-                            Last activity
-                          </div>
-                          <div>
-                            {formatActivity(
-                              conversation.last_activity_at,
-                            )}
+                        <div className="d-flex align-items-center gap-3">
+                          {getDirectUnread(
+                            conversation.id,
+                          ) > 0 && (
+                            <span
+                              className="unread-count-badge"
+                              title={`${getDirectUnread(conversation.id)} unread messages`}
+                            >
+                              {getDirectUnread(
+                                conversation.id,
+                              ) > 99
+                                ? '99+'
+                                : getDirectUnread(
+                                    conversation.id,
+                                  )}
+                            </span>
+                          )}
+
+                          <div className="small text-secondary text-end">
+                            <div>
+                              Last activity
+                            </div>
+                            <div>
+                              {formatActivity(
+                                conversation.last_activity_at,
+                              )}
+                            </div>
                           </div>
                         </div>
                       </Link>

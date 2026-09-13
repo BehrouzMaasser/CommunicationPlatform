@@ -1,5 +1,6 @@
 import {
   type FormEvent,
+  type KeyboardEvent as ReactKeyboardEvent,
   useCallback,
   useEffect,
   useMemo,
@@ -12,6 +13,7 @@ import {
 } from 'react-router-dom'
 
 import { ApiError } from '../api/client'
+import { useActivity } from '../activity/useActivity'
 import { getFriends } from '../api/friendships'
 import {
   createGroupInvitationLink,
@@ -43,6 +45,35 @@ import type {
   PublicUser,
 } from '../types/users'
 
+function submitOnEnter(
+  event: ReactKeyboardEvent<HTMLInputElement>,
+) {
+  if (
+    event.key !== 'Enter'
+    || event.nativeEvent.isComposing
+    || event.shiftKey
+    || event.altKey
+    || event.ctrlKey
+    || event.metaKey
+  ) {
+    return
+  }
+
+  const form = event.currentTarget.form
+  const submitButton =
+    form?.querySelector<HTMLButtonElement>(
+      'button[type="submit"]',
+    )
+
+  if (!form || submitButton?.disabled) {
+    return
+  }
+
+  event.preventDefault()
+  form.requestSubmit()
+}
+
+
 function errorText(error: unknown): string {
   if (error instanceof ApiError) {
     return error.message
@@ -58,6 +89,8 @@ function GroupDetailPage() {
 
   const navigate = useNavigate()
   const parsedGroupId = Number(groupId)
+  const { getGroupUnread } =
+    useActivity()
 
   const [group, setGroup] =
     useState<GroupConversation | null>(null)
@@ -76,6 +109,8 @@ function GroupDetailPage() {
     useState<string | null>(null)
   const [notice, setNotice] =
     useState<string | null>(null)
+  const [showDisbandConfirm, setShowDisbandConfirm] =
+    useState(false)
   const [loading, setLoading] =
     useState(true)
   const [invitedUserIds, setInvitedUserIds] =
@@ -533,14 +568,6 @@ function GroupDetailPage() {
   }
 
   async function handleDisband() {
-    if (
-      !window.confirm(
-        'Disband this group? This cannot be undone.',
-      )
-    ) {
-      return
-    }
-
     setBusy('disband')
     setError(null)
 
@@ -548,9 +575,12 @@ function GroupDetailPage() {
       await disbandGroup(
         parsedGroupId,
       )
+      setShowDisbandConfirm(false)
       navigate('/groups')
     } catch (requestError) {
       setError(errorText(requestError))
+      setShowDisbandConfirm(false)
+    } finally {
       setBusy(null)
     }
   }
@@ -650,18 +680,33 @@ function GroupDetailPage() {
             className="btn btn-primary"
             to={`/groups/${group.id}/messages`}
           >
-            Open chat
+            <span>Open chat</span>
+            {getGroupUnread(
+              group.id,
+            ) > 0 && (
+              <span className="badge rounded-pill text-bg-light text-primary ms-2">
+                {getGroupUnread(
+                  group.id,
+                ) > 99
+                  ? '99+'
+                  : getGroupUnread(
+                      group.id,
+                    )}
+              </span>
+            )}
           </Link>
 
           {isOwner ? (
             <button
               className="btn btn-outline-danger"
+              type="button"
               disabled={busy !== null}
-              onClick={() =>
-                void handleDisband()
-              }
+              onClick={() => {
+                setError(null)
+                setShowDisbandConfirm(true)
+              }}
             >
-              Disband
+              Delete group
             </button>
           ) : (
             <button
@@ -708,6 +753,7 @@ function GroupDetailPage() {
                     event.target.value,
                   )
                 }
+                onKeyDown={submitOnEnter}
               />
               <button
                 className="btn btn-primary"
@@ -871,6 +917,81 @@ function GroupDetailPage() {
           )}
         </div>
       </div>
+      {showDisbandConfirm && (
+        <>
+          <div
+            className="modal fade show d-block"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="delete-group-title"
+          >
+            <div className="modal-dialog modal-dialog-centered">
+              <div className="modal-content border-0 shadow-lg">
+                <div className="modal-header">
+                  <h2
+                    className="modal-title fs-5"
+                    id="delete-group-title"
+                  >
+                    Delete this group?
+                  </h2>
+
+                  <button
+                    className="btn-close"
+                    type="button"
+                    aria-label="Close"
+                    disabled={busy === 'disband'}
+                    onClick={() =>
+                      setShowDisbandConfirm(false)
+                    }
+                  />
+                </div>
+
+                <div className="modal-body">
+                  <p className="mb-2">
+                    Are you sure you want to delete{' '}
+                    <strong>{group.name}</strong>?
+                  </p>
+                  <p className="text-secondary mb-0">
+                    The group will be removed for everyone.
+                    This action cannot be undone.
+                  </p>
+                </div>
+
+                <div className="modal-footer">
+                  <button
+                    className="btn btn-outline-secondary"
+                    type="button"
+                    disabled={busy === 'disband'}
+                    onClick={() =>
+                      setShowDisbandConfirm(false)
+                    }
+                  >
+                    Cancel
+                  </button>
+
+                  <button
+                    className="btn btn-danger"
+                    type="button"
+                    disabled={busy === 'disband'}
+                    onClick={() =>
+                      void handleDisband()
+                    }
+                  >
+                    {busy === 'disband'
+                      ? 'Deleting…'
+                      : 'Delete group'}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div
+            className="modal-backdrop fade show"
+            aria-hidden="true"
+          />
+        </>
+      )}
     </section>
   )
 }

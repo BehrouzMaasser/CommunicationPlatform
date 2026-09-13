@@ -248,7 +248,6 @@ function MessageComposer({
 
   useEffect(() => {
     if (disabled) {
-      setEmojiPickerOpen(false)
       onTypingStop?.()
     }
   }, [
@@ -327,6 +326,8 @@ function MessageComposer({
     setSending(true)
     setError(null)
 
+    let sentSuccessfully = false
+
     try {
       await onSend({
         content: messageText,
@@ -338,6 +339,7 @@ function MessageComposer({
       onTypingStop?.()
       setEmojiPickerOpen(false)
       clearComposer()
+      sentSuccessfully = true
     } catch (requestError) {
       setError(
         describeError(
@@ -346,8 +348,19 @@ function MessageComposer({
       )
     } finally {
       setSending(false)
+
+      if (sentSuccessfully) {
+        window.requestAnimationFrame(
+          () => {
+            textareaRef.current?.focus()
+          },
+        )
+      }
     }
   }
+
+  const isEmojiPickerVisible =
+    emojiPickerOpen && !disabled
 
   const canSend =
     !disabled &&
@@ -479,7 +492,7 @@ function MessageComposer({
                 className="btn btn-outline-secondary emoji-toggle-button"
                 type="button"
                 aria-label="Add emoji"
-                aria-expanded={emojiPickerOpen}
+                aria-expanded={isEmojiPickerVisible}
                 disabled={
                   sending ||
                   disabled
@@ -496,7 +509,7 @@ function MessageComposer({
                 </span>
               </button>
 
-              {emojiPickerOpen && (
+              {isEmojiPickerVisible && (
                 <EmojiPicker
                   onSelect={insertEmoji}
                 />

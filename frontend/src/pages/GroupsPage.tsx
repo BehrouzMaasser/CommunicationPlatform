@@ -1,5 +1,6 @@
 import {
   type FormEvent,
+  type KeyboardEvent as ReactKeyboardEvent,
   useCallback,
   useEffect,
   useState,
@@ -10,7 +11,9 @@ import {
 } from 'react-router-dom'
 
 import { ApiError } from '../api/client'
+import { useActivity } from '../activity/useActivity'
 import { useRealtimeEvent } from '../realtime/RealtimeContext'
+import type { MessageCreatedPayload } from '../realtime/messageEvents'
 import {
   acceptGroupInvitation,
   createGroup,
@@ -24,6 +27,35 @@ import type {
   GroupInvitation,
 } from '../types/groups'
 
+function submitOnEnter(
+  event: ReactKeyboardEvent<HTMLInputElement>,
+) {
+  if (
+    event.key !== 'Enter'
+    || event.nativeEvent.isComposing
+    || event.shiftKey
+    || event.altKey
+    || event.ctrlKey
+    || event.metaKey
+  ) {
+    return
+  }
+
+  const form = event.currentTarget.form
+  const submitButton =
+    form?.querySelector<HTMLButtonElement>(
+      'button[type="submit"]',
+    )
+
+  if (!form || submitButton?.disabled) {
+    return
+  }
+
+  event.preventDefault()
+  form.requestSubmit()
+}
+
+
 function errorText(error: unknown): string {
   if (error instanceof ApiError) {
     return error.message
@@ -35,6 +67,10 @@ function errorText(error: unknown): string {
 
 function GroupsPage() {
   const navigate = useNavigate()
+  const {
+    getGroupUnread,
+    refreshActivity,
+  } = useActivity()
 
   const [groups, setGroups] =
     useState<GroupConversation[]>([])
@@ -67,6 +103,16 @@ function GroupsPage() {
       [],
     )
 
+  const refreshGroups =
+    useCallback(
+      async () => {
+        setGroups(
+          await getGroups(),
+        )
+      },
+      [],
+    )
+
   const handleRealtimeChange =
     useCallback(
       () => {
@@ -75,6 +121,25 @@ function GroupsPage() {
       [refresh],
     )
 
+  const handleMessageCreated =
+    useCallback(
+      ({ payload }: {
+        payload: MessageCreatedPayload
+      }) => {
+        if (
+          payload.conversation_type
+          === 'group'
+        ) {
+          void refreshGroups()
+        }
+      },
+      [refreshGroups],
+    )
+
+  useRealtimeEvent(
+    'message.created',
+    handleMessageCreated,
+  )
   useRealtimeEvent(
     'group_invitation.created',
     handleRealtimeChange,
@@ -186,7 +251,10 @@ function GroupsPage() {
         )
       }
 
-      await refresh()
+      await Promise.all([
+        refresh(),
+        refreshActivity(),
+      ])
     } catch (requestError) {
       setError(errorText(requestError))
     } finally {
@@ -235,6 +303,7 @@ function GroupsPage() {
               onChange={(event) =>
                 setName(event.target.value)
               }
+              onKeyDown={submitOnEnter}
               placeholder="Group name"
             />
 
@@ -343,11 +412,32 @@ function GroupsPage() {
                   key={group.id}
                   to={`/groups/${group.id}`}
                 >
-                  <div className="fw-semibold">
-                    {group.name}
-                  </div>
-                  <div className="small text-secondary">
-                    Group #{group.id}
+                  <div className="d-flex justify-content-between align-items-center gap-3">
+                    <div>
+                      <div className="fw-semibold">
+                        {group.name}
+                      </div>
+                      <div className="small text-secondary">
+                        Group #{group.id}
+                      </div>
+                    </div>
+
+                    {getGroupUnread(
+                      group.id,
+                    ) > 0 && (
+                      <span
+                        className="unread-count-badge"
+                        title={`${getGroupUnread(group.id)} unread messages`}
+                      >
+                        {getGroupUnread(
+                          group.id,
+                        ) > 99
+                          ? '99+'
+                          : getGroupUnread(
+                              group.id,
+                            )}
+                      </span>
+                    )}
                   </div>
                 </Link>
               ))}

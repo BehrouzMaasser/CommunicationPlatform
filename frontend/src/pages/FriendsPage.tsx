@@ -1,11 +1,13 @@
 import {
   type FormEvent,
+  type KeyboardEvent as ReactKeyboardEvent,
   useCallback,
   useEffect,
   useState,
 } from 'react'
 
 import { ApiError } from '../api/client'
+import { useActivity } from '../activity/useActivity'
 import {
   acceptFriendRequest,
   cancelFriendRequest,
@@ -50,6 +52,35 @@ Promise<FriendshipData> {
   }
 }
 
+function submitOnEnter(
+  event: ReactKeyboardEvent<HTMLInputElement>,
+) {
+  if (
+    event.key !== 'Enter'
+    || event.nativeEvent.isComposing
+    || event.shiftKey
+    || event.altKey
+    || event.ctrlKey
+    || event.metaKey
+  ) {
+    return
+  }
+
+  const form = event.currentTarget.form
+  const submitButton =
+    form?.querySelector<HTMLButtonElement>(
+      'button[type="submit"]',
+    )
+
+  if (!form || submitButton?.disabled) {
+    return
+  }
+
+  event.preventDefault()
+  form.requestSubmit()
+}
+
+
 function describeError(error: unknown): string {
   if (error instanceof ApiError) {
     if (error.status === 401) {
@@ -75,6 +106,9 @@ function describeError(error: unknown): string {
 }
 
 function FriendsPage() {
+  const { refreshActivity } =
+    useActivity()
+
   const [friends, setFriends] =
     useState<PublicUser[]>([])
   const [incoming, setIncoming] =
@@ -195,7 +229,10 @@ function FriendsPage() {
 
     try {
       await action()
-      await refreshData()
+      await Promise.all([
+        refreshData(),
+        refreshActivity(),
+      ])
     } catch (error) {
       setActionError(
         describeError(error),
@@ -309,6 +346,7 @@ function FriendsPage() {
                   event.target.value,
                 )
               }
+              onKeyDown={submitOnEnter}
               placeholder="Search by username"
               aria-label="Search by username"
             />

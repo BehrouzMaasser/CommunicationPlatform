@@ -137,6 +137,8 @@ class GroupInvitationService:
             invitation_id = invitation.pk
             invited_by_id = invitation.invited_by_id
             recipient_id = invitation.recipient_id
+            recipient_username = invitation.recipient.username
+            group_name = group.name
 
             membership = GroupConversationService._add_member(
                 group=group,
@@ -157,8 +159,10 @@ class GroupInvitationService:
             GroupRealtimePublisher.invitation_accepted_after_commit(
                 invitation_id=invitation_id,
                 group_id=group.pk,
+                group_name=group_name,
                 invited_by_id=invited_by_id,
                 recipient_id=recipient_id,
+                recipient_username=recipient_username,
             )
 
             GroupRealtimePublisher.member_added_after_commit(
