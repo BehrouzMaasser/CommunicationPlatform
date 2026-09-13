@@ -1,6 +1,7 @@
 import {
   type ChangeEvent,
   type FormEvent,
+  type KeyboardEvent,
   useEffect,
   useRef,
   useState,
@@ -171,6 +172,23 @@ function MessageComposer({
     }
   }
 
+  function handleMessageKeyDown(
+    event:
+      KeyboardEvent<HTMLTextAreaElement>,
+  ) {
+    if (
+      event.key !== 'Enter' ||
+      event.shiftKey ||
+      event.nativeEvent.isComposing
+    ) {
+      return
+    }
+
+    event.preventDefault()
+    event.currentTarget.form?.requestSubmit()
+  }
+
+
   async function handleSubmit(
     event:
       FormEvent<HTMLFormElement>,
@@ -317,6 +335,9 @@ function MessageComposer({
             handleTextChange(
               event.target.value,
             )
+          }
+          onKeyDown={
+            handleMessageKeyDown
           }
           placeholder={
             replyingTo

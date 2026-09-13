@@ -108,6 +108,9 @@ function GroupConversationPage() {
   const [messages, setMessages] =
     useState<Message[]>([])
 
+  const [isThreadAtBottom, setIsThreadAtBottom] =
+    useState(false)
+
   const [
     replyingTo,
     setReplyingTo,
@@ -408,6 +411,8 @@ function GroupConversationPage() {
         document.visibilityState
           !== 'visible'
         ||
+        !isThreadAtBottom
+        ||
         messages.length === 0
       ) {
         return
@@ -437,6 +442,7 @@ function GroupConversationPage() {
       )
     }
   }, [
+    isThreadAtBottom,
     messages,
     realtimeClient,
     realtimeStatus,
@@ -563,7 +569,7 @@ function GroupConversationPage() {
   }
 
   return (
-    <section>
+    <section className="conversation-page">
       <div className="d-flex justify-content-between align-items-center gap-3 mb-3">
         <Link
           className="btn btn-link px-0"
@@ -580,7 +586,7 @@ function GroupConversationPage() {
         </Link>
       </div>
 
-      <div className="card shadow-sm">
+      <div className="card shadow-sm conversation-card">
         <div className="card-header bg-white py-3">
           <h1 className="h4 mb-1">
             {group.name}
@@ -591,14 +597,13 @@ function GroupConversationPage() {
           </div>
         </div>
 
-        <div
-          className="card-body"
-          style={{
-            minHeight: '420px',
-          }}
-        >
+        <div className="card-body conversation-card-body">
           <MessageThread
+            key={`group-${group.id}`}
             messages={messages}
+            onAtBottomChange={
+              setIsThreadAtBottom
+            }
             onReply={(message) =>
               setReplyingTo(
                 message,

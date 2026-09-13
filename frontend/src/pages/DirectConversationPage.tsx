@@ -113,6 +113,9 @@ function DirectConversationPage() {
   const [messages, setMessages] =
     useState<Message[]>([])
 
+  const [isThreadAtBottom, setIsThreadAtBottom] =
+    useState(false)
+
   const [
     replyingTo,
     setReplyingTo,
@@ -320,6 +323,8 @@ function DirectConversationPage() {
         document.visibilityState
           !== 'visible'
         ||
+        !isThreadAtBottom
+        ||
         messages.length === 0
       ) {
         return
@@ -349,6 +354,7 @@ function DirectConversationPage() {
       )
     }
   }, [
+    isThreadAtBottom,
     messages,
     realtimeClient,
     realtimeStatus,
@@ -489,7 +495,7 @@ function DirectConversationPage() {
   }
 
   return (
-    <section>
+    <section className="conversation-page">
       <Link
         className="btn btn-link px-0 mb-3"
         to="/messages"
@@ -497,7 +503,7 @@ function DirectConversationPage() {
         ← Back to messages
       </Link>
 
-      <div className="card shadow-sm">
+      <div className="card shadow-sm conversation-card">
         <div className="card-header bg-white py-3">
           <h1 className="h4 mb-1">
             @{conversation
@@ -530,14 +536,13 @@ function DirectConversationPage() {
           </div>
         </div>
 
-        <div
-          className="card-body"
-          style={{
-            minHeight: '420px',
-          }}
-        >
+        <div className="card-body conversation-card-body">
           <MessageThread
+            key={`dm-${conversation.id}`}
             messages={messages}
+            onAtBottomChange={
+              setIsThreadAtBottom
+            }
             onReply={
               canMessage
                 ? (message) =>

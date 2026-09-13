@@ -711,6 +711,7 @@ function GroupDetailPage() {
               />
               <button
                 className="btn btn-primary"
+                type="submit"
                 disabled={
                   busy !== null ||
                   !renameText.trim()

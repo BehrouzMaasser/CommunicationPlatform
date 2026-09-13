@@ -240,6 +240,7 @@ function GroupsPage() {
 
             <button
               className="btn btn-primary text-nowrap"
+              type="submit"
               disabled={
                 busy === 'create' ||
                 !name.trim()
