@@ -48,6 +48,7 @@ class RealtimePublisher:
                 {
                     "type": cls.CHANNEL_EVENT_TYPE,
                     "event": event,
+                    "source_group": group_name,
                 },
             )
 

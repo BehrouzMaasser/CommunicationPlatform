@@ -603,6 +603,8 @@ class RealtimeConsumer(
                 {
                     "type":
                         "realtime.event",
+                    "source_group":
+                        group_name,
                     "event":
                         build_realtime_event(
                             event_type=(
@@ -835,10 +837,123 @@ class RealtimeConsumer(
             conversation_id,
         )
 
+    @staticmethod
+    def _group_id_from_source_group(
+        source_group: str,
+    ) -> int | None:
+        prefix = "group."
+
+        if not source_group.startswith(prefix):
+            return None
+
+        raw_group_id = source_group[len(prefix):]
+
+        if not raw_group_id.isdigit():
+            return None
+
+        group_id = int(raw_group_id)
+
+        if group_id <= 0:
+            return None
+
+        return group_id
+
+    async def _discard_group_subscription(
+        self,
+        *,
+        group_name: str,
+        group_id: int,
+        notify: bool,
+    ) -> None:
+        was_subscribed = (
+            group_name
+            in self.subscribed_groups
+        )
+
+        await self.channel_layer.group_discard(
+            group_name,
+            self.channel_name,
+        )
+
+        self.subscribed_groups.discard(
+            group_name
+        )
+
+        if not notify or not was_subscribed:
+            return
+
+        await self.send_json(
+            build_realtime_event(
+                event_type=(
+                    RealtimeEventType
+                    .CONVERSATION_UNSUBSCRIBED
+                ),
+                payload={
+                    "conversation_type": (
+                        "group"
+                    ),
+                    "conversation_id": (
+                        group_id
+                    ),
+                    "reason": (
+                        "access_revoked"
+                    ),
+                },
+            )
+        )
+
     async def realtime_event(
         self,
         event: dict[str, Any],
     ):
+        source_group = event.get(
+            "source_group"
+        )
+
+        if isinstance(source_group, str):
+            group_id = (
+                self
+                ._group_id_from_source_group(
+                    source_group
+                )
+            )
+
+            if group_id is not None:
+                if (
+                    source_group
+                    not in self.subscribed_groups
+                ):
+                    # A stale Channels-group delivery can already be queued
+                    # while unsubscribe/disconnect cleanup is in flight.
+                    # Never forward a group-conversation event unless this
+                    # consumer still considers itself subscribed.
+                    await (
+                        self.channel_layer
+                        .group_discard(
+                            source_group,
+                            self.channel_name,
+                        )
+                    )
+                    return
+
+                can_access = await (
+                    self._can_subscribe(
+                        conversation_type="group",
+                        conversation_id=group_id,
+                    )
+                )
+
+                if not can_access:
+                    # PostgreSQL membership is authoritative. This closes the
+                    # short window between membership revocation and the
+                    # asynchronous force-unsubscribe command being processed.
+                    await self._discard_group_subscription(
+                        group_name=source_group,
+                        group_id=group_id,
+                        notify=True,
+                    )
+                    return
+
         await self.send_json(
             event["event"]
         )
@@ -855,6 +970,19 @@ class RealtimeConsumer(
             "conversation_id"
         ]
 
+        if conversation_type == "group":
+            await self._discard_group_subscription(
+                group_name=group_name,
+                group_id=conversation_id,
+                notify=True,
+            )
+            return
+
+        was_subscribed = (
+            group_name
+            in self.subscribed_groups
+        )
+
         await self.channel_layer.group_discard(
             group_name,
             self.channel_name,
@@ -863,6 +991,9 @@ class RealtimeConsumer(
         self.subscribed_groups.discard(
             group_name
         )
+
+        if not was_subscribed:
+            return
 
         await self.send_json(
             build_realtime_event(

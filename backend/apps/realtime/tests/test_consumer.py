@@ -1,4 +1,5 @@
 from asgiref.sync import async_to_sync
+from channels.db import database_sync_to_async
 from channels.layers import (
     get_channel_layer,
 )
@@ -787,6 +788,136 @@ class RealtimeConsumerTests(
         self.assertTrue(
             received_nothing
         )
+
+        await communicator.disconnect()
+
+    def test_revoked_group_member_does_not_receive_stale_group_event(
+        self,
+    ):
+        headers = self.websocket_headers_for(
+            self.bob
+        )
+
+        async_to_sync(
+            self._assert_revoked_group_event_filtered
+        )(headers)
+
+    async def _assert_revoked_group_event_filtered(
+        self,
+        headers,
+    ):
+        communicator = (
+            WebsocketCommunicator(
+                application,
+                "/ws/v1/",
+                headers=headers,
+            )
+        )
+
+        connected, _ = (
+            await communicator.connect()
+        )
+        self.assertTrue(connected)
+
+        await communicator.receive_json_from()
+
+        await communicator.send_json_to(
+            {
+                "type": (
+                    "conversation.subscribe"
+                ),
+                "request_id": (
+                    "request-race"
+                ),
+                "payload": {
+                    "conversation_type": (
+                        "group"
+                    ),
+                    "conversation_id": (
+                        self.group.pk
+                    ),
+                },
+            }
+        )
+
+        subscribed = (
+            await communicator
+            .receive_json_from()
+        )
+        self.assertEqual(
+            subscribed["type"],
+            "conversation.subscribed",
+        )
+
+        await database_sync_to_async(
+            lambda: (
+                GroupMembership.objects
+                .filter(
+                    group=self.group,
+                    user=self.bob,
+                )
+                .delete()
+            )
+        )()
+
+        group_name = (
+            conversation_group_name(
+                "group",
+                self.group.pk,
+            )
+        )
+
+        event = build_realtime_event(
+            event_type="message.created",
+            payload={
+                "conversation_type": (
+                    "group"
+                ),
+                "conversation_id": (
+                    self.group.pk
+                ),
+                "message": {
+                    "id": 101,
+                },
+            },
+        )
+
+        channel_layer = (
+            get_channel_layer()
+        )
+
+        await channel_layer.group_send(
+            group_name,
+            {
+                "type": "realtime.event",
+                "event": event,
+                "source_group": group_name,
+            },
+        )
+
+        revoked = (
+            await communicator
+            .receive_json_from()
+        )
+
+        self.assertEqual(
+            revoked["type"],
+            "conversation.unsubscribed",
+        )
+        self.assertEqual(
+            revoked["payload"][
+                "reason"
+            ],
+            "access_revoked",
+        )
+
+        received_nothing = (
+            await communicator
+            .receive_nothing(
+                timeout=0.05,
+            )
+        )
+        self.assertTrue(received_nothing)
 
         await communicator.disconnect()
 
