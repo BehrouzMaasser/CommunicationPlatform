@@ -40,6 +40,14 @@ Log in · Communication Platform
 
                         {% csrf_token %}
 
+                        {% if next_url %}
+                            <input
+                                type="hidden"
+                                name="next"
+                                value="{{ next_url }}"
+                            >
+                        {% endif %}
+
 
                         {% include "forms/field.html" with field=form.email %}
 
@@ -63,7 +71,7 @@ Log in · Communication Platform
                         </span>
 
                         <a
-                            href="{% url 'auth-register' %}"
+                            href="{% url 'auth-register' %}{% if next_url %}?next={{ next_url|urlencode }}{% endif %}"
                             class="text-decoration-none"
                         >
                             Create one

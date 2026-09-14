@@ -79,14 +79,14 @@
                 {% else %}
 
                     <a
-                        href="{% url 'auth-login' %}"
+                        href="{% url 'auth-login' %}{% if next_url %}?next={{ next_url|urlencode }}{% endif %}"
                         class="btn btn-nav-secondary btn-sm"
                     >
                         Log in
                     </a>
 
                     <a
-                        href="{% url 'auth-register' %}"
+                        href="{% url 'auth-register' %}{% if next_url %}?next={{ next_url|urlencode }}{% endif %}"
                         class="btn btn-nav-primary btn-sm"
                     >
                         Sign up

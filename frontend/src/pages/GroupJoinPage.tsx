@@ -38,6 +38,20 @@ function GroupJoinPage() {
       await joinGroupWithToken(token)
       navigate('/groups')
     } catch (requestError) {
+      if (
+        requestError instanceof ApiError &&
+        requestError.status === 401
+      ) {
+        const nextUrl = encodeURIComponent(
+          window.location.href,
+        )
+
+        window.location.assign(
+          `/accounts/login/?next=${nextUrl}`,
+        )
+        return
+      }
+
       setError(
         requestError instanceof ApiError
           ? requestError.message

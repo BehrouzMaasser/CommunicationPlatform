@@ -38,6 +38,14 @@ Create account · Communication Platform
 
                         {% csrf_token %}
 
+                        {% if next_url %}
+                            <input
+                                type="hidden"
+                                name="next"
+                                value="{{ next_url }}"
+                            >
+                        {% endif %}
+
 
                         {% include "forms/field.html" with field=form.email %}
 
@@ -65,7 +73,7 @@ Create account · Communication Platform
                         </span>
 
                         <a
-                            href="{% url 'auth-login' %}"
+                            href="{% url 'auth-login' %}{% if next_url %}?next={{ next_url|urlencode }}{% endif %}"
                             class="text-decoration-none"
                         >
                             Log in

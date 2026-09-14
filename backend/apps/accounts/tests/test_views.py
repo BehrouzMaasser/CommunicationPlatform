@@ -1,6 +1,6 @@
 from django.conf import settings
 from django.contrib.auth import get_user_model
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from django.urls import reverse
 
 
@@ -82,6 +82,32 @@ class AccountViewTests(TestCase):
             ).exists()
         )
 
+    @override_settings(
+        FRONTEND_BASE_URL="http://127.0.0.1:5173",
+    )
+    def test_register_redirects_to_safe_frontend_next_url(self):
+        next_url = (
+            "http://127.0.0.1:5173"
+            "/groups/join/invitation-token"
+        )
+
+        response = self.client.post(
+            reverse("auth-register"),
+            {
+                "email": "bob@example.com",
+                "username": "bob",
+                "password": self.VALID_PASSWORD,
+                "confirm_password": self.VALID_PASSWORD,
+                "next": next_url,
+            },
+        )
+
+        self.assertRedirects(
+            response,
+            next_url,
+            fetch_redirect_response=False,
+        )
+
     def test_authenticated_user_cannot_access_register_page(self):
         self.client.force_login(self.user)
 
@@ -144,6 +170,49 @@ class AccountViewTests(TestCase):
         self.assertNotIn(
             "_auth_user_id",
             self.client.session,
+        )
+
+    @override_settings(
+        FRONTEND_BASE_URL="http://127.0.0.1:5173",
+    )
+    def test_login_redirects_to_safe_frontend_next_url(self):
+        next_url = (
+            "http://127.0.0.1:5173"
+            "/groups/join/invitation-token"
+        )
+
+        response = self.client.post(
+            reverse("auth-login"),
+            {
+                "email": "alice@example.com",
+                "password": self.VALID_PASSWORD,
+                "next": next_url,
+            },
+        )
+
+        self.assertRedirects(
+            response,
+            next_url,
+            fetch_redirect_response=False,
+        )
+
+    @override_settings(
+        FRONTEND_BASE_URL="http://127.0.0.1:5173",
+    )
+    def test_login_rejects_external_next_url(self):
+        response = self.client.post(
+            reverse("auth-login"),
+            {
+                "email": "alice@example.com",
+                "password": self.VALID_PASSWORD,
+                "next": "https://evil.example/phishing",
+            },
+        )
+
+        self.assertRedirects(
+            response,
+            "http://127.0.0.1:5173/",
+            fetch_redirect_response=False,
         )
 
     def test_authenticated_user_cannot_access_login_page(self):
