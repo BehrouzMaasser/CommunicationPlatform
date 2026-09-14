@@ -1,7 +1,10 @@
+from unittest.mock import patch
+
 from django.contrib.auth import get_user_model
 from django.contrib.auth import login as django_login
 from django.contrib.sessions.middleware import SessionMiddleware
 from django.core.exceptions import ValidationError
+from django.db import IntegrityError
 from django.test import RequestFactory, TestCase
 
 from apps.accounts.services.authentication import AuthenticationService
@@ -94,6 +97,59 @@ class AuthenticationServiceTests(TestCase):
                 email="bob@example.com",
             ).exists()
         )
+
+
+    def test_register_maps_concurrent_unique_conflict_to_validation_error(self):
+        with (
+            patch.object(
+                AuthenticationService,
+                "_registration_conflict_errors",
+                side_effect=[
+                    {},
+                    {"email": "Email already exists."},
+                ],
+            ),
+            patch.object(
+                User,
+                "save",
+                side_effect=IntegrityError(
+                    "simulated concurrent unique violation"
+                ),
+            ),
+        ):
+            with self.assertRaises(ValidationError) as context:
+                AuthenticationService.register(
+                    email="bob@example.com",
+                    username="bob",
+                    password=self.VALID_PASSWORD,
+                )
+
+        self.assertEqual(
+            context.exception.message_dict,
+            {"email": ["Email already exists."]},
+        )
+
+    def test_register_does_not_hide_unrelated_integrity_error(self):
+        with (
+            patch.object(
+                AuthenticationService,
+                "_registration_conflict_errors",
+                side_effect=[{}, {}],
+            ),
+            patch.object(
+                User,
+                "save",
+                side_effect=IntegrityError(
+                    "simulated unrelated integrity failure"
+                ),
+            ),
+        ):
+            with self.assertRaises(IntegrityError):
+                AuthenticationService.register(
+                    email="bob@example.com",
+                    username="bob",
+                    password=self.VALID_PASSWORD,
+                )
 
     def test_register_rejects_weak_password(self):
         with self.assertRaises(ValidationError) as context:
