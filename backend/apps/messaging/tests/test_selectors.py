@@ -13,6 +13,8 @@ from apps.messaging.models import Message
 from apps.messaging.selectors import MessageSelector
 from apps.messaging.services import MessageService
 
+from apps.messaging.api.v1.serializers import MessageSerializer
+
 
 User = get_user_model()
 
@@ -328,3 +330,31 @@ class MessageSelectorTests(TestCase):
             result.reply_to.sender,
             self.alice,
         )
+
+    def test_selected_messages_serialize_without_additional_queries(self):
+        parent = MessageService.create_text_message(
+            current_user=self.alice,
+            direct_conversation_id=self.direct_conversation.pk,
+            content="Parent",
+        )
+
+        MessageService.create_text_message(
+            current_user=self.bob,
+            direct_conversation_id=self.direct_conversation.pk,
+            content="Reply",
+            reply_to_id=parent.pk,
+        )
+
+        messages = list(
+            MessageSelector.list_for_direct_conversation(
+                conversation=self.direct_conversation,
+            )
+        )
+
+        with self.assertNumQueries(0):
+            data = MessageSerializer(
+                messages,
+                many=True,
+            ).data
+
+        self.assertEqual(len(data), 2)

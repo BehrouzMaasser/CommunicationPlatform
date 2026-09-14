@@ -82,11 +82,6 @@ class GroupConversationService:
                 role=GroupMembership.Role.OWNER,
             )
 
-            # Later:
-            # transaction.on_commit(
-            #     lambda: publish GroupCreated(...)
-            # )
-
         return group
 
     @classmethod
@@ -100,8 +95,8 @@ class GroupConversationService:
         Internal operation.
 
         Joining a group is not a standalone V1 user action.
-        Membership will later be granted by a validated invitation
-        or invitation-link workflow.
+        Membership is granted through a validated invitation
+            or invitation-link workflow.
         """
 
         membership, created = (

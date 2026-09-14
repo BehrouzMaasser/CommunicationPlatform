@@ -32,8 +32,6 @@ from apps.conversations.services import (
     GroupInvitationService,
 )
 
-from apps.conversations.models import GroupMembership
-
 
 def _get_accessible_group_or_404(
     *,
@@ -334,14 +332,9 @@ class GroupInvitationCreateView(APIView):
             group_id=group_id,
         )
 
-        is_owner = (
-            GroupMembership.objects
-            .filter(
-                group=group,
-                user=request.user,
-                role=GroupMembership.Role.OWNER,
-            )
-            .exists()
+        is_owner = GroupConversationSelector.is_owner(
+            group=group,
+            user=request.user,
         )
 
         if not is_owner:

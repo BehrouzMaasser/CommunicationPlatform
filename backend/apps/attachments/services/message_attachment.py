@@ -84,16 +84,22 @@ class MessageAttachmentService:
             size_bytes=file_obj.size,
         )
 
-        attachment.file.save(
-            original_filename,
-            file_obj,
-            save=False,
-        )
+        try:
+            attachment.file.save(
+                original_filename,
+                file_obj,
+                save=False,
+            )
 
-        # FileField storage may theoretically transform the stored payload.
-        # Record the size of the actual stored object when available.
-        attachment.size_bytes = attachment.file.size
-        attachment.save()
+            # FileField storage may theoretically transform the stored payload.
+            # Record the size of the actual stored object when available.
+            attachment.size_bytes = attachment.file.size
+            attachment.save()
+
+        except Exception:
+            if attachment.file and attachment.file.name:
+                attachment.file.delete(save=False)
+            raise
 
         return attachment
 

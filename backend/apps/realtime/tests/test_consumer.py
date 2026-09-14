@@ -291,6 +291,173 @@ class RealtimeConsumerTests(
 
         await communicator.disconnect()
 
+    def test_non_object_command_is_rejected(
+        self,
+    ):
+        headers = self.websocket_headers_for(
+            self.alice
+        )
+
+        async_to_sync(
+            self._assert_non_object_command_rejected
+        )(headers)
+
+    async def _assert_non_object_command_rejected(
+        self,
+        headers,
+    ):
+        communicator = (
+            WebsocketCommunicator(
+                application,
+                "/ws/v1/",
+                headers=headers,
+            )
+        )
+
+        connected, _ = (
+            await communicator.connect()
+        )
+        self.assertTrue(connected)
+
+        await communicator.receive_json_from()
+
+        await communicator.send_json_to([])
+
+        error = (
+            await communicator
+            .receive_json_from()
+        )
+
+        self.assertEqual(
+            error["type"],
+            "error",
+        )
+        self.assertEqual(
+            error["payload"]["code"],
+            "INVALID_COMMAND",
+        )
+
+        await communicator.disconnect()
+
+    def test_boolean_conversation_id_is_rejected(
+        self,
+    ):
+        headers = self.websocket_headers_for(
+            self.alice
+        )
+
+        async_to_sync(
+            self._assert_boolean_conversation_id_rejected
+        )(headers)
+
+    async def _assert_boolean_conversation_id_rejected(
+        self,
+        headers,
+    ):
+        communicator = (
+            WebsocketCommunicator(
+                application,
+                "/ws/v1/",
+                headers=headers,
+            )
+        )
+
+        connected, _ = (
+            await communicator.connect()
+        )
+        self.assertTrue(connected)
+
+        await communicator.receive_json_from()
+
+        await communicator.send_json_to(
+            {
+                "type": (
+                    "conversation.subscribe"
+                ),
+                "request_id": (
+                    "request-bool-conversation"
+                ),
+                "payload": {
+                    "conversation_type": "dm",
+                    "conversation_id": True,
+                },
+            }
+        )
+
+        error = (
+            await communicator
+            .receive_json_from()
+        )
+
+        self.assertEqual(
+            error["type"],
+            "error",
+        )
+        self.assertEqual(
+            error["payload"]["code"],
+            "INVALID_COMMAND",
+        )
+
+        await communicator.disconnect()
+
+    def test_boolean_message_id_is_rejected(
+        self,
+    ):
+        headers = self.websocket_headers_for(
+            self.alice
+        )
+
+        async_to_sync(
+            self._assert_boolean_message_id_rejected
+        )(headers)
+
+    async def _assert_boolean_message_id_rejected(
+        self,
+        headers,
+    ):
+        communicator = (
+            WebsocketCommunicator(
+                application,
+                "/ws/v1/",
+                headers=headers,
+            )
+        )
+
+        connected, _ = (
+            await communicator.connect()
+        )
+        self.assertTrue(connected)
+
+        await communicator.receive_json_from()
+
+        await communicator.send_json_to(
+            {
+                "type": "message.delivered",
+                "request_id": (
+                    "request-bool-message"
+                ),
+                "payload": {
+                    "message_id": True,
+                },
+            }
+        )
+
+        error = (
+            await communicator
+            .receive_json_from()
+        )
+
+        self.assertEqual(
+            error["type"],
+            "error",
+        )
+        self.assertEqual(
+            error["payload"]["code"],
+            "INVALID_COMMAND",
+        )
+
+        await communicator.disconnect()
+
     def test_dm_participant_can_subscribe(
         self,
     ):

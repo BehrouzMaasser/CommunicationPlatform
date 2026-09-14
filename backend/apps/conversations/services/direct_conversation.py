@@ -78,10 +78,4 @@ class DirectConversationService:
                 )
             )
 
-            # Later, if created:
-            #
-            # transaction.on_commit(
-            #     lambda: publish DirectConversationCreated(...)
-            # )
-
         return conversation, created

@@ -332,3 +332,32 @@ class MessageAttachmentServiceTests(TestCase):
             if path.is_file()
         ]
         self.assertEqual(remaining_files, [])
+
+    def test_database_failure_after_file_write_cleans_up_storage(self):
+        upload = self.upload(
+            "orphan.txt",
+            b"should-not-remain",
+        )
+
+        with patch.object(
+                MessageAttachment,
+                "save",
+                side_effect=RuntimeError("simulated database failure"),
+        ):
+            with self.assertRaises(RuntimeError):
+                MessageAttachmentService.create_message_with_attachments(
+                    current_user=self.alice,
+                    direct_conversation_id=self.dm.pk,
+                    content="",
+                    files=[upload],
+                )
+
+        self.assertFalse(Message.objects.exists())
+        self.assertFalse(MessageAttachment.objects.exists())
+
+        remaining_files = [
+            path
+            for path in Path(self.temp_media.name).rglob("*")
+            if path.is_file()
+        ]
+        self.assertEqual(remaining_files, [])

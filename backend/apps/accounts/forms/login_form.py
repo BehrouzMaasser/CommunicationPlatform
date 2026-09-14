@@ -1,8 +1,6 @@
 from django import forms
 from django.core.validators import validate_email
 
-from apps.accounts.models import User
-
 
 class UserLoginForm(forms.Form):
 

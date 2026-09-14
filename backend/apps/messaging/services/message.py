@@ -30,10 +30,9 @@ class MessageService:
     V1 messages are immutable. This service therefore creates messages but
     intentionally exposes no edit or delete operation.
 
-    Attachment-bearing creation is added later. The internal
-    _create_message_record() primitive assumes the payload has already been
-    validated by its caller, so the attachment workflow can reuse it after
-    validating the files and optional text together.
+    The internal _create_message_record() primitive assumes the full payload
+        has already been validated by its caller. This allows both text-only and
+        attachment-bearing creation workflows to reuse the same persistence logic.
     """
 
     @staticmethod
@@ -171,9 +170,9 @@ class MessageService:
         Internal persistence primitive.
 
         The caller must already have validated that the full message payload
-        is meaningful. Text-only creation does that in create_text_message().
-        Later, attachment-bearing creation will validate the optional text and
-        files together before calling this method.
+        is meaningful. ext-only creation validates this in create_text_message().
+        Attachment-bearing creation validates the optional text and files together
+            before calling this method.
         """
         cls._validate_context_choice(
             direct_conversation_id=direct_conversation_id,

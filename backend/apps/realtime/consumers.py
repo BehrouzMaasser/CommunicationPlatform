@@ -69,7 +69,6 @@ class RealtimeConsumer(
             )
         )
 
-
         expires_at = (
             await PresenceStore.touch(
                 user_id=user.pk,
@@ -117,7 +116,6 @@ class RealtimeConsumer(
                 )
             )
 
-
         user = getattr(
             self,
             "user",
@@ -140,9 +138,20 @@ class RealtimeConsumer(
 
     async def receive_json(
         self,
-        content: dict[str, Any],
+        content: Any,
         **kwargs,
     ):
+        if not isinstance(content, dict):
+            await self._send_error(
+                request_id=None,
+                code="INVALID_COMMAND",
+                detail=(
+                    "Realtime command must "
+                    "be an object."
+                ),
+            )
+            return
+
         command_type = content.get("type")
         request_id = content.get(
             "request_id"
@@ -248,7 +257,8 @@ class RealtimeConsumer(
         )
 
         if (
-            not isinstance(
+            isinstance(message_id, bool)
+            or not isinstance(
                 message_id,
                 int,
             )
@@ -811,7 +821,8 @@ class RealtimeConsumer(
             return None
 
         if (
-            not isinstance(
+            isinstance(conversation_id, bool)
+            or not isinstance(
                 conversation_id,
                 int,
             )
