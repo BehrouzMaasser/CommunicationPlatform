@@ -18,7 +18,37 @@ staticfiles/
 .env
 .env.*
 !.env.example
-!.env.production.example
+!.env.*.example
+
+# Secrets and credentials
+.envrc
+.direnv/
+*.pem
+*.key
+*.p12
+*.pfx
+*.jks
+*.keystore
+id_rsa
+id_rsa.*
+id_ed25519
+id_ed25519.*
+credentials.json
+client_secret*.json
+service-account*.json
+.pgpass
+.ssh/
+.aws/
+.postgresql/
+
+# Local databases, dumps, and backups
+*.sqlite
+*.sqlite3
+*.db
+*.sql
+*.dump
+*.backup
+*.bak
 
 # IDEs
 .idea/
