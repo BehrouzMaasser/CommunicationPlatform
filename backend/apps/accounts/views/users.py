@@ -3,6 +3,8 @@ from django.contrib.auth.mixins import LoginRequiredMixin
 from django.shortcuts import render
 from django.views import View
 
+from apps.activity.selectors import ActivitySummarySelector
+
 
 class CurrentUserView(LoginRequiredMixin, View):
 
@@ -13,5 +15,10 @@ class CurrentUserView(LoginRequiredMixin, View):
             {
                 "user": request.user,
                 "frontend_base_url": settings.FRONTEND_BASE_URL,
+                "activity_summary": (
+                    ActivitySummarySelector.get_for_user(
+                        user=request.user,
+                    )
+                ),
             }
         )

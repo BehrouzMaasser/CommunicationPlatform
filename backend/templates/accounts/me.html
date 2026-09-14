@@ -81,9 +81,50 @@ My account · Communication Platform
 
                             <div class="d-flex flex-wrap gap-2 mb-4">
                                 <a class="btn btn-primary" href="{{ frontend_base_url }}/">Open app</a>
-                                <a class="btn btn-outline-primary" href="{{ frontend_base_url }}/friends">Friends</a>
-                                <a class="btn btn-outline-primary" href="{{ frontend_base_url }}/messages">Messages</a>
-                                <a class="btn btn-outline-primary" href="{{ frontend_base_url }}/groups">Groups</a>
+
+                                <a class="btn btn-outline-primary" href="{{ frontend_base_url }}/friends">
+                                    Friends
+                                    <span
+                                        class="badge rounded-pill text-bg-danger ms-1{% if not activity_summary.pending_friend_requests %} d-none{% endif %}"
+                                        data-activity-badge="friends"
+                                        {% if activity_summary.pending_friend_requests %}
+                                            aria-label="{{ activity_summary.pending_friend_requests }} pending friend requests"
+                                            title="{{ activity_summary.pending_friend_requests }} pending friend requests"
+                                        {% endif %}
+                                    >
+                                        {% if activity_summary.pending_friend_requests > 99 %}99+{% elif activity_summary.pending_friend_requests %}{{ activity_summary.pending_friend_requests }}{% endif %}
+                                    </span>
+                                </a>
+
+                                <a class="btn btn-outline-primary" href="{{ frontend_base_url }}/messages">
+                                    Messages
+                                    <span
+                                        class="badge rounded-pill text-bg-danger ms-1{% if not activity_summary.unread_direct_messages %} d-none{% endif %}"
+                                        data-activity-badge="messages"
+                                        {% if activity_summary.unread_direct_messages %}
+                                            aria-label="{{ activity_summary.unread_direct_messages }} unread direct messages"
+                                            title="{{ activity_summary.unread_direct_messages }} unread direct messages"
+                                        {% endif %}
+                                    >
+                                        {% if activity_summary.unread_direct_messages > 99 %}99+{% elif activity_summary.unread_direct_messages %}{{ activity_summary.unread_direct_messages }}{% endif %}
+                                    </span>
+                                </a>
+
+                                {% with group_attention=activity_summary.unread_group_messages|add:activity_summary.pending_group_invitations %}
+                                    <a class="btn btn-outline-primary" href="{{ frontend_base_url }}/groups">
+                                        Groups
+                                        <span
+                                            class="badge rounded-pill text-bg-danger ms-1{% if not group_attention %} d-none{% endif %}"
+                                            data-activity-badge="groups"
+                                            {% if group_attention %}
+                                                aria-label="{{ group_attention }} group items needing attention"
+                                                title="{{ activity_summary.unread_group_messages }} unread group messages · {{ activity_summary.pending_group_invitations }} pending group invitations"
+                                            {% endif %}
+                                        >
+                                            {% if group_attention > 99 %}99+{% elif group_attention %}{{ group_attention }}{% endif %}
+                                        </span>
+                                    </a>
+                                {% endwith %}
                             </div>
 
                             <form

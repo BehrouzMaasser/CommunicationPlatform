@@ -1,3 +1,5 @@
+from unittest.mock import patch
+
 from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.test import TestCase, override_settings
@@ -277,6 +279,77 @@ class AccountViewTests(TestCase):
         self.assertContains(
             response,
             f'href="{settings.FRONTEND_BASE_URL}/groups"',
+        )
+
+    @patch(
+        "apps.accounts.views.users.ActivitySummarySelector.get_for_user"
+    )
+    def test_me_shows_activity_indicators(self, get_activity_summary):
+        get_activity_summary.return_value = {
+            "pending_friend_requests": 3,
+            "pending_group_invitations": 2,
+            "unread_direct_messages": 4,
+            "unread_group_messages": 5,
+            "direct_conversations": [],
+            "groups": [],
+        }
+
+        self.client.force_login(self.user)
+
+        response = self.client.get(
+            reverse("users-me")
+        )
+
+        self.assertEqual(response.status_code, 200)
+        get_activity_summary.assert_called_once_with(
+            user=self.user,
+        )
+
+        self.assertEqual(
+            response.context["activity_summary"][
+                "pending_friend_requests"
+            ],
+            3,
+        )
+        self.assertContains(
+            response,
+            'aria-label="3 pending friend requests"',
+        )
+        self.assertContains(
+            response,
+            'aria-label="4 unread direct messages"',
+        )
+        self.assertContains(
+            response,
+            'aria-label="7 group items needing attention"',
+        )
+
+        self.assertContains(
+            response,
+            'data-activity-badge="friends"',
+            count=2,
+        )
+        self.assertContains(
+            response,
+            'data-activity-badge="messages"',
+            count=2,
+        )
+        self.assertContains(
+            response,
+            'data-activity-badge="groups"',
+            count=2,
+        )
+        self.assertContains(
+            response,
+            'data-activity-summary-url="/api/v1/activity/summary/"',
+        )
+        self.assertContains(
+            response,
+            'data-realtime-url="/ws/v1/"',
+        )
+        self.assertContains(
+            response,
+            'src="/static/js/account-activity-realtime.js"',
         )
 
     # ------------------------------------------------------------------

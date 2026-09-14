@@ -29,7 +29,13 @@
     {% block extra_css %}{% endblock %}
 </head>
 
-<body class="d-flex flex-column min-vh-100">
+<body
+    class="d-flex flex-column min-vh-100"
+    {% if request.user.is_authenticated %}
+        data-activity-summary-url="{% url 'activity-summary' %}"
+        data-realtime-url="/ws/v1/"
+    {% endif %}
+>
 
     <nav class="navbar app-navbar">
         <div class="container app-container app-navbar-inner">
@@ -44,9 +50,49 @@
 
             {% if request.user.is_authenticated %}
                 <div class="navbar-nav app-main-nav flex-row gap-1 ms-2">
-                    <a class="nav-link" href="{{ frontend_base_url }}/friends">Friends</a>
-                    <a class="nav-link" href="{{ frontend_base_url }}/messages">Messages</a>
-                    <a class="nav-link" href="{{ frontend_base_url }}/groups">Groups</a>
+                    <a class="nav-link" href="{{ frontend_base_url }}/friends">
+                        <span>Friends</span>
+                        <span
+                            class="nav-activity-badge{% if not activity_summary.pending_friend_requests %} d-none{% endif %}"
+                            data-activity-badge="friends"
+                            {% if activity_summary.pending_friend_requests %}
+                                aria-label="{{ activity_summary.pending_friend_requests }} pending friend requests"
+                                title="{{ activity_summary.pending_friend_requests }} pending friend requests"
+                            {% endif %}
+                        >
+                            {% if activity_summary.pending_friend_requests > 99 %}99+{% elif activity_summary.pending_friend_requests %}{{ activity_summary.pending_friend_requests }}{% endif %}
+                        </span>
+                    </a>
+
+                    <a class="nav-link" href="{{ frontend_base_url }}/messages">
+                        <span>Messages</span>
+                        <span
+                            class="nav-activity-badge{% if not activity_summary.unread_direct_messages %} d-none{% endif %}"
+                            data-activity-badge="messages"
+                            {% if activity_summary.unread_direct_messages %}
+                                aria-label="{{ activity_summary.unread_direct_messages }} unread direct messages"
+                                title="{{ activity_summary.unread_direct_messages }} unread direct messages"
+                            {% endif %}
+                        >
+                            {% if activity_summary.unread_direct_messages > 99 %}99+{% elif activity_summary.unread_direct_messages %}{{ activity_summary.unread_direct_messages }}{% endif %}
+                        </span>
+                    </a>
+
+                    {% with group_attention=activity_summary.unread_group_messages|add:activity_summary.pending_group_invitations %}
+                        <a class="nav-link" href="{{ frontend_base_url }}/groups">
+                            <span>Groups</span>
+                            <span
+                                class="nav-activity-badge{% if not group_attention %} d-none{% endif %}"
+                                data-activity-badge="groups"
+                                {% if group_attention %}
+                                    aria-label="{{ group_attention }} group items needing attention"
+                                    title="{{ activity_summary.unread_group_messages }} unread group messages · {{ activity_summary.pending_group_invitations }} pending group invitations"
+                                {% endif %}
+                            >
+                                {% if group_attention > 99 %}99+{% elif group_attention %}{{ group_attention }}{% endif %}
+                            </span>
+                        </a>
+                    {% endwith %}
                 </div>
             {% endif %}
 
@@ -149,6 +195,13 @@
         src="{% static 'js/form-submit-on-enter.js' %}"
         defer
     ></script>
+
+    {% if request.user.is_authenticated %}
+        <script
+            src="{% static 'js/account-activity-realtime.js' %}"
+            defer
+        ></script>
+    {% endif %}
 
     {% block extra_js %}{% endblock %}
 
