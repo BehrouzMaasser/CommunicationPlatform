@@ -101,6 +101,9 @@ For additional design documentation, see:
 │   ├── package.json
 │   └── vite.config.ts
 ├── docs/
+├── deploy/
+│   ├── nginx/
+│   └── systemd/
 ├── .env.example
 ├── .env.production.example
 ├── docker-compose.yml
@@ -248,7 +251,9 @@ Production uses:
 * Daphne as the ASGI application server
 * PostgreSQL for durable state
 * Redis for Django Channels
-* Nginx as the public-facing reverse proxy and static/media frontend
+* Nginx as the public-facing reverse proxy, React frontend server, and static-file server
+
+Message attachments are **not** exposed through a public `/media/` alias. Attachment downloads remain behind the authenticated Django API so conversation authorization is enforced.
 
 ### PostgreSQL connections under ASGI
 
@@ -301,7 +306,9 @@ The VPS runs from `deployment-development`.
 
 The production server should not be switched directly to `main` as part of the V1 cleanup.
 
-Detailed reproducible Nginx, Daphne/systemd, static-file, media-file, frontend-build, migration, and deployment instructions will be maintained as part of the release/deployment configuration.
+Reproducible production deployment instructions and example Nginx/systemd configuration are provided in `docs/deployment.md` and `deploy/`.
+
+The deployment examples intentionally keep hostnames generic. The actual production domain belongs in the private production environment and server configuration; it is not product branding.
 
 ## V1 Release Process
 
