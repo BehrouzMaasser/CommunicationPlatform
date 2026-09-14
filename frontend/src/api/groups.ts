@@ -4,6 +4,7 @@ import {
   apiPatch,
   apiPost,
 } from './client'
+import { getAllPages } from './pagination'
 
 import type {
   GroupConversation,
@@ -12,33 +13,14 @@ import type {
   GroupMembership,
 } from '../types/groups'
 
-type PaginatedResponse<T> = {
-  count: number
-  next: string | null
-  previous: string | null
-  results: T[]
-}
 
-type ListResponse<T> =
-  | T[]
-  | PaginatedResponse<T>
-
-function unwrapList<T>(
-  value: ListResponse<T>,
-): T[] {
-  return Array.isArray(value)
-    ? value
-    : value.results
-}
-
-export async function getGroups():
+export function getGroups():
 Promise<GroupConversation[]> {
-  return unwrapList(
-    await apiGet<ListResponse<GroupConversation>>(
-      '/api/v1/groups/',
-    ),
+  return getAllPages<GroupConversation>(
+    '/api/v1/groups/',
   )
 }
+
 
 export function createGroup(
   name: string,
@@ -49,6 +31,7 @@ export function createGroup(
   )
 }
 
+
 export function getGroup(
   groupId: number,
 ): Promise<GroupConversation> {
@@ -56,6 +39,7 @@ export function getGroup(
     `/api/v1/groups/${groupId}/`,
   )
 }
+
 
 export function renameGroup(
   groupId: number,
@@ -67,6 +51,7 @@ export function renameGroup(
   )
 }
 
+
 export function leaveGroup(
   groupId: number,
 ): Promise<unknown> {
@@ -74,6 +59,7 @@ export function leaveGroup(
     `/api/v1/groups/${groupId}/leave/`,
   )
 }
+
 
 export function disbandGroup(
   groupId: number,
@@ -83,15 +69,15 @@ export function disbandGroup(
   )
 }
 
-export async function getGroupMembers(
+
+export function getGroupMembers(
   groupId: number,
 ): Promise<GroupMembership[]> {
-  return unwrapList(
-    await apiGet<ListResponse<GroupMembership>>(
-      `/api/v1/groups/${groupId}/members/`,
-    ),
+  return getAllPages<GroupMembership>(
+    `/api/v1/groups/${groupId}/members/`,
   )
 }
+
 
 export function removeGroupMember(
   groupId: number,
@@ -102,22 +88,20 @@ export function removeGroupMember(
   )
 }
 
-export async function getIncomingGroupInvitations():
+
+export function getIncomingGroupInvitations():
 Promise<GroupInvitation[]> {
-  return unwrapList(
-    await apiGet<ListResponse<GroupInvitation>>(
-      '/api/v1/group-invitations/',
-    ),
+  return getAllPages<GroupInvitation>(
+    '/api/v1/group-invitations/',
   )
 }
 
-export async function getGroupPendingInvitations(
+
+export function getGroupPendingInvitations(
   groupId: number,
 ): Promise<GroupInvitation[]> {
-  return unwrapList(
-    await apiGet<ListResponse<GroupInvitation>>(
-      `/api/v1/groups/${groupId}/invitations/`,
-    ),
+  return getAllPages<GroupInvitation>(
+    `/api/v1/groups/${groupId}/invitations/`,
   )
 }
 
@@ -132,6 +116,7 @@ export function inviteUserToGroup(
   )
 }
 
+
 export function acceptGroupInvitation(
   invitationId: number,
 ): Promise<GroupMembership> {
@@ -139,6 +124,7 @@ export function acceptGroupInvitation(
     `/api/v1/group-invitations/${invitationId}/accept/`,
   )
 }
+
 
 export function rejectGroupInvitation(
   invitationId: number,
@@ -148,6 +134,7 @@ export function rejectGroupInvitation(
   )
 }
 
+
 export function createGroupInvitationLink(
   groupId: number,
 ): Promise<GroupInvitationLink> {
@@ -155,6 +142,7 @@ export function createGroupInvitationLink(
     `/api/v1/groups/${groupId}/invitation-links/`,
   )
 }
+
 
 export function revokeGroupInvitationLink(
   groupId: number,
@@ -164,6 +152,7 @@ export function revokeGroupInvitationLink(
     `/api/v1/groups/${groupId}/invitation-links/${linkId}/`,
   )
 }
+
 
 export function joinGroupWithToken(
   token: string,

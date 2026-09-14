@@ -87,6 +87,11 @@ export class RealtimeClient {
     socket.addEventListener(
       'open',
       () => {
+        if (this.socket !== socket) {
+          socket.close()
+          return
+        }
+
         this.reconnectAttempt = 0
         this.setStatus('connected')
         this.startHeartbeat()
@@ -96,6 +101,10 @@ export class RealtimeClient {
     socket.addEventListener(
       'message',
       (message) => {
+        if (this.socket !== socket) {
+          return
+        }
+
         this.handleMessage(
           message.data,
         )
@@ -105,10 +114,11 @@ export class RealtimeClient {
     socket.addEventListener(
       'close',
       () => {
-        if (this.socket === socket) {
-          this.socket = null
+        if (this.socket !== socket) {
+          return
         }
 
+        this.socket = null
         this.stopHeartbeat()
 
         this.setStatus(
@@ -212,7 +222,7 @@ export class RealtimeClient {
     conversationType:
       ConversationType,
     conversationId: number,
-  ): string {
+  ): string | null {
     return this.sendCommand(
       'conversation.subscribe',
       {
@@ -228,7 +238,7 @@ export class RealtimeClient {
     conversationType:
       ConversationType,
     conversationId: number,
-  ): string {
+  ): string | null {
     return this.sendCommand(
       'conversation.unsubscribe',
       {
@@ -242,7 +252,7 @@ export class RealtimeClient {
 
   acknowledgeDelivered(
     messageId: number,
-  ): string {
+  ): string | null {
     return this.sendCommand(
       'message.delivered',
       {
@@ -253,7 +263,7 @@ export class RealtimeClient {
 
   markReadThrough(
     messageId: number,
-  ): string {
+  ): string | null {
     return this.sendCommand(
       'message.read',
       {
@@ -266,7 +276,7 @@ export class RealtimeClient {
     conversationType:
       ConversationType,
     conversationId: number,
-  ): string {
+  ): string | null {
     return this.sendCommand(
       'typing.start',
       {
@@ -282,7 +292,7 @@ export class RealtimeClient {
     conversationType:
       ConversationType,
     conversationId: number,
-  ): string {
+  ): string | null {
     return this.sendCommand(
       'typing.stop',
       {
@@ -337,21 +347,21 @@ export class RealtimeClient {
     type: string,
     payload:
       Record<string, unknown>,
-  ): string {
+  ): string | null {
+    const socket = this.socket
+
     if (
-      !this.socket ||
-      this.socket.readyState !==
+      !socket ||
+      socket.readyState !==
         WebSocket.OPEN
     ) {
-      throw new Error(
-        'Realtime connection is not open.',
-      )
+      return null
     }
 
     const requestId =
       createRequestId()
 
-    this.socket.send(
+    socket.send(
       JSON.stringify({
         type,
         request_id:

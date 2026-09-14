@@ -682,10 +682,6 @@ function UserIdentity({
           </span>
         )}
       </div>
-
-      <div className="small text-secondary">
-        User #{user.id}
-      </div>
     </div>
   )
 }

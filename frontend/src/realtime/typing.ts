@@ -184,7 +184,8 @@ export function useConversationTyping(
         typingActive.current = false
 
         if (
-          status === 'connected'
+          client.getStatus() ===
+            'connected'
         ) {
           client.stopTyping(
             conversationType,
@@ -196,7 +197,6 @@ export function useConversationTyping(
         client,
         conversationId,
         conversationType,
-        status,
       ],
     )
 
@@ -204,7 +204,8 @@ export function useConversationTyping(
     useCallback(
       () => {
         if (
-          status !== 'connected'
+          client.getStatus() !==
+            'connected'
         ) {
           return
         }
@@ -218,10 +219,15 @@ export function useConversationTyping(
           - lastStartSentAt.current
           >= 3000
         ) {
-          client.startTyping(
-            conversationType,
-            conversationId,
-          )
+          const requestId =
+            client.startTyping(
+              conversationType,
+              conversationId,
+            )
+
+          if (requestId === null) {
+            return
+          }
 
           lastStartSentAt.current =
             now
@@ -248,10 +254,28 @@ export function useConversationTyping(
         client,
         conversationId,
         conversationType,
-        status,
         stopTyping,
       ],
     )
+
+  useEffect(() => {
+    if (status === 'connected') {
+      return
+    }
+
+    if (
+      stopTimer.current !== null
+    ) {
+      window.clearTimeout(
+        stopTimer.current,
+      )
+      stopTimer.current = null
+    }
+
+    typingActive.current = false
+    lastStartSentAt.current = 0
+  }, [status])
+
 
   useEffect(() => {
     const timer =

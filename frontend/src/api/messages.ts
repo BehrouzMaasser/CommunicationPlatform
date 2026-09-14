@@ -1,12 +1,14 @@
 import {
-  apiGet,
   apiPost,
 } from './client'
+import {
+  getPaginatedPage,
+  type PaginatedResponse,
+} from './pagination'
 
 import type {
   Message,
   MessageDraft,
-  PaginatedMessages,
 } from '../types/messages'
 
 
@@ -52,15 +54,30 @@ function buildMessageBody(
 }
 
 
-export async function getDirectMessages(
+export function getDirectMessages(
   conversationId: number,
-): Promise<Message[]> {
-  const response =
-    await apiGet<PaginatedMessages>(
-      `/api/v1/dms/${conversationId}/messages/`,
-    )
+): Promise<PaginatedResponse<Message>> {
+  return getPaginatedPage<Message>(
+    `/api/v1/dms/${conversationId}/messages/?page=last`,
+  )
+}
 
-  return response.results
+
+export function getGroupMessages(
+  groupId: number,
+): Promise<PaginatedResponse<Message>> {
+  return getPaginatedPage<Message>(
+    `/api/v1/groups/${groupId}/messages/?page=last`,
+  )
+}
+
+
+export function getOlderMessages(
+  pageUrl: string,
+): Promise<PaginatedResponse<Message>> {
+  return getPaginatedPage<Message>(
+    pageUrl,
+  )
 }
 
 
@@ -72,18 +89,6 @@ export function sendDirectMessage(
     `/api/v1/dms/${conversationId}/messages/`,
     buildMessageBody(input),
   )
-}
-
-
-export async function getGroupMessages(
-  groupId: number,
-): Promise<Message[]> {
-  const response =
-    await apiGet<PaginatedMessages>(
-      `/api/v1/groups/${groupId}/messages/`,
-    )
-
-  return response.results
 }
 
 

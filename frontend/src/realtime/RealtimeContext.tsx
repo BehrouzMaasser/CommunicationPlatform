@@ -24,6 +24,12 @@ type PresenceState = {
 }
 
 
+type RealtimeErrorPayload = {
+  code: string
+  detail: string
+}
+
+
 type RealtimeContextValue = {
   client: RealtimeClient
   status: RealtimeStatus
@@ -336,6 +342,8 @@ export function useConversationRealtimeSubscription(
     ConversationType,
   conversationId: number,
   enabled = true,
+  onSubscriptionRejected?:
+    () => void,
 ) {
   const {
     client,
@@ -354,12 +362,39 @@ export function useConversationRealtimeSubscription(
       return
     }
 
-    client.subscribeConversation(
-      conversationType,
-      conversationId,
-    )
+    const requestId =
+      client.subscribeConversation(
+        conversationType,
+        conversationId,
+      )
+
+    if (requestId === null) {
+      return
+    }
+
+    const stopListeningForErrors =
+      client.onEvent<
+        RealtimeErrorPayload
+      >(
+        'error',
+        (event) => {
+          if (
+            event.request_id !==
+              requestId
+            ||
+            event.payload.code !==
+              'NOT_AUTHORIZED'
+          ) {
+            return
+          }
+
+          onSubscriptionRejected?.()
+        },
+      )
 
     return () => {
+      stopListeningForErrors()
+
       if (
         client.getStatus()
         === 'connected'
@@ -376,6 +411,7 @@ export function useConversationRealtimeSubscription(
     conversationType,
     conversationId,
     enabled,
+    onSubscriptionRejected,
     status,
   ])
 }

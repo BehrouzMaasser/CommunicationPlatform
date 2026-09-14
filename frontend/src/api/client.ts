@@ -333,20 +333,6 @@ export function apiPatch<T>(
 }
 
 
-export function apiPut<T>(
-  url: string,
-  body?: ApiBody,
-): Promise<T> {
-  return apiRequest<T>(
-    url,
-    {
-      method: 'PUT',
-      body,
-    },
-  )
-}
-
-
 export function apiDelete<T>(
   url: string,
   body?: ApiBody,

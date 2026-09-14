@@ -2,38 +2,18 @@ import {
   apiGet,
   apiPost,
 } from './client'
+import { getAllPages } from './pagination'
 
 import type { DirectConversation } from '../types/conversations'
 
-type PaginatedResponse<T> = {
-  count: number
-  next: string | null
-  previous: string | null
-  results: T[]
-}
 
-type ListResponse<T> =
-  | T[]
-  | PaginatedResponse<T>
-
-function unwrapList<T>(
-  response: ListResponse<T>,
-): T[] {
-  if (Array.isArray(response)) {
-    return response
-  }
-
-  return response.results
-}
-
-export async function getDirectConversations():
+export function getDirectConversations():
 Promise<DirectConversation[]> {
-  const response = await apiGet<
-    ListResponse<DirectConversation>
-  >('/api/v1/dms/')
-
-  return unwrapList(response)
+  return getAllPages<DirectConversation>(
+    '/api/v1/dms/',
+  )
 }
+
 
 export function getDirectConversation(
   conversationId: number,
@@ -42,6 +22,7 @@ export function getDirectConversation(
     `/api/v1/dms/${conversationId}/`,
   )
 }
+
 
 export function openDirectConversation(
   userId: number,

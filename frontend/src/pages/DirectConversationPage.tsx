@@ -15,6 +15,7 @@ import {
 import { getFriends } from '../api/friendships'
 import {
   getDirectMessages,
+  getOlderMessages,
   sendDirectMessage,
 } from '../api/messages'
 
@@ -33,6 +34,10 @@ import {
   useRealtimeEvent,
 } from '../realtime/RealtimeContext'
 
+import type {
+  FriendRequestAcceptedRealtimePayload,
+  FriendshipRemovedRealtimePayload,
+} from '../realtime/friendshipEvents'
 import type {
   MessageCreatedPayload,
   MessageDeliveredPayload,
@@ -82,6 +87,7 @@ function DirectConversationPage() {
   const {
     client: realtimeClient,
     status: realtimeStatus,
+    currentUserId,
     isUserOnline,
   } = useRealtime()
   const { conversationId } =
@@ -112,6 +118,15 @@ function DirectConversationPage() {
 
   const [messages, setMessages] =
     useState<Message[]>([])
+
+  const [olderMessagesUrl, setOlderMessagesUrl] =
+    useState<string | null>(null)
+
+  const [loadingOlderMessages, setLoadingOlderMessages] =
+    useState(false)
+
+  const [olderMessagesError, setOlderMessagesError] =
+    useState<string | null>(null)
 
   const [isThreadAtBottom, setIsThreadAtBottom] =
     useState(false)
@@ -145,12 +160,81 @@ function DirectConversationPage() {
           (current) =>
             mergeMessageList(
               current,
-              latest,
+              latest.results,
             ),
         )
       },
       [parsedConversationId],
     )
+
+  const refreshCanMessage =
+    useCallback(
+      async () => {
+        if (!conversation) {
+          return
+        }
+
+        const friends =
+          await getFriends()
+
+        setCanMessage(
+          friends.some(
+            (friend) =>
+              friend.id ===
+              conversation
+                .other_user.id,
+          ),
+        )
+      },
+      [conversation],
+    )
+
+
+  const loadOlderMessages =
+    useCallback(
+      async () => {
+        if (
+          !olderMessagesUrl
+          || loadingOlderMessages
+        ) {
+          return
+        }
+
+        setLoadingOlderMessages(true)
+        setOlderMessagesError(null)
+
+        try {
+          const page =
+            await getOlderMessages(
+              olderMessagesUrl,
+            )
+
+          setMessages(
+            (current) =>
+              mergeMessageList(
+                current,
+                page.results,
+              ),
+          )
+          setOlderMessagesUrl(
+            page.previous,
+          )
+        } catch (requestError) {
+          setOlderMessagesError(
+            describeError(
+              requestError,
+            ),
+          )
+        } finally {
+          setLoadingOlderMessages(false)
+        }
+      },
+      [
+        loadingOlderMessages,
+        olderMessagesUrl,
+      ],
+    )
+
 
   const handleMessageCreated =
     useCallback(
@@ -205,13 +289,116 @@ function DirectConversationPage() {
           return
         }
 
-        void refreshMessages()
+        void Promise.all([
+          refreshMessages(),
+          refreshCanMessage(),
+        ]).catch(() => {
+          // The canonical page state remains usable;
+          // the next reconnect or mutation can reconcile again.
+        })
       },
       [
         parsedConversationId,
+        refreshCanMessage,
         refreshMessages,
       ],
     )
+
+  const handleFriendshipRemoved =
+    useCallback(
+      ({
+        payload,
+      }: {
+        payload:
+          FriendshipRemovedRealtimePayload
+      }) => {
+        if (
+          currentUserId === undefined
+          ||
+          !conversation
+        ) {
+          return
+        }
+
+        const otherUserId =
+          conversation.other_user.id
+
+        const matchesConversation =
+          (
+            payload.user_a.id ===
+              currentUserId
+            &&
+            payload.user_b.id ===
+              otherUserId
+          )
+          ||
+          (
+            payload.user_b.id ===
+              currentUserId
+            &&
+            payload.user_a.id ===
+              otherUserId
+          )
+
+        if (!matchesConversation) {
+          return
+        }
+
+        setCanMessage(false)
+        setReplyingTo(null)
+      },
+      [
+        conversation,
+        currentUserId,
+      ],
+    )
+
+  const handleFriendRequestAccepted =
+    useCallback(
+      ({
+        payload,
+      }: {
+        payload:
+          FriendRequestAcceptedRealtimePayload
+      }) => {
+        if (
+          currentUserId === undefined
+          ||
+          !conversation
+        ) {
+          return
+        }
+
+        const otherUserId =
+          conversation.other_user.id
+
+        const matchesConversation =
+          (
+            payload.sender.id ===
+              currentUserId
+            &&
+            payload.recipient.id ===
+              otherUserId
+          )
+          ||
+          (
+            payload.recipient.id ===
+              currentUserId
+            &&
+            payload.sender.id ===
+              otherUserId
+          )
+
+        if (matchesConversation) {
+          setCanMessage(true)
+        }
+      },
+      [
+        conversation,
+        currentUserId,
+      ],
+    )
+
 
   const handleDelivered =
     useCallback(
@@ -314,6 +501,20 @@ function DirectConversationPage() {
     handleSubscribed,
   )
 
+  useRealtimeEvent<
+    FriendshipRemovedRealtimePayload
+  >(
+    'friendship.removed',
+    handleFriendshipRemoved,
+  )
+
+  useRealtimeEvent<
+    FriendRequestAcceptedRealtimePayload
+  >(
+    'friend_request.accepted',
+    handleFriendRequestAccepted,
+  )
+
   useEffect(() => {
     function markVisibleMessagesRead() {
       if (
@@ -408,7 +609,10 @@ function DirectConversationPage() {
         )
 
         setMessages(
-          messagesResult,
+          messagesResult.results,
+        )
+        setOlderMessagesUrl(
+          messagesResult.previous,
         )
 
         setCanMessage(
@@ -529,6 +733,18 @@ function DirectConversationPage() {
           <MessageThread
             key={`dm-${conversation.id}`}
             messages={messages}
+            hasOlderMessages={
+              olderMessagesUrl !== null
+            }
+            loadingOlderMessages={
+              loadingOlderMessages
+            }
+            olderMessagesError={
+              olderMessagesError
+            }
+            onLoadOlderMessages={
+              loadOlderMessages
+            }
             onAtBottomChange={
               setIsThreadAtBottom
             }

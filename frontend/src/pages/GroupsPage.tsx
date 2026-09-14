@@ -417,9 +417,6 @@ function GroupsPage() {
                       <div className="fw-semibold">
                         {group.name}
                       </div>
-                      <div className="small text-secondary">
-                        Group #{group.id}
-                      </div>
                     </div>
 
                     {getGroupUnread(

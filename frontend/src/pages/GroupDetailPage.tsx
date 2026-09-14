@@ -670,9 +670,6 @@ function GroupDetailPage() {
           <h1 className="h2 mb-1">
             {group.name}
           </h1>
-          <div className="text-secondary">
-            Group #{group.id}
-          </div>
         </div>
 
         <div className="d-flex gap-2">
@@ -790,7 +787,9 @@ function GroupDetailPage() {
                           @{membership.user.username}
                         </div>
                         <div className="small text-secondary">
-                          {membership.role}
+                          {membership.role === 'OWNER'
+                            ? 'Owner'
+                            : 'Member'}
                         </div>
                       </div>
 

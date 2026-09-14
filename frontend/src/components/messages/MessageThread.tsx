@@ -111,6 +111,10 @@ function AttachmentLink({
 
 type MessageThreadProps = {
   messages: Message[]
+  hasOlderMessages?: boolean
+  loadingOlderMessages?: boolean
+  olderMessagesError?: string | null
+  onLoadOlderMessages?: () => Promise<void>
   onReply?: (
     message: Message,
   ) => void
@@ -122,6 +126,10 @@ type MessageThreadProps = {
 
 function MessageThread({
   messages,
+  hasOlderMessages = false,
+  loadingOlderMessages = false,
+  olderMessagesError = null,
+  onLoadOlderMessages,
   onReply,
   onAtBottomChange,
 }: MessageThreadProps) {
@@ -183,6 +191,41 @@ function MessageThread({
       },
       [reportAtBottom],
     )
+
+  async function handleLoadOlderMessages() {
+    if (
+      !onLoadOlderMessages
+      || loadingOlderMessages
+    ) {
+      return
+    }
+
+    const viewport = viewportRef.current
+    const previousScrollHeight =
+      viewport?.scrollHeight ?? 0
+    const previousScrollTop =
+      viewport?.scrollTop ?? 0
+
+    await onLoadOlderMessages()
+
+    window.requestAnimationFrame(() => {
+      const currentViewport =
+        viewportRef.current
+
+      if (!currentViewport) {
+        return
+      }
+
+      const addedHeight =
+        currentViewport.scrollHeight
+        - previousScrollHeight
+
+      currentViewport.scrollTop =
+        previousScrollTop
+        + Math.max(addedHeight, 0)
+    })
+  }
+
 
   function handleScroll() {
     const viewport =
@@ -308,6 +351,29 @@ function MessageThread({
         ref={viewportRef}
         onScroll={handleScroll}
       >
+        {hasOlderMessages && (
+          <div className="text-center pb-3">
+            <button
+              className="btn btn-sm btn-outline-secondary"
+              type="button"
+              disabled={loadingOlderMessages}
+              onClick={() => {
+                void handleLoadOlderMessages()
+              }}
+            >
+              {loadingOlderMessages
+                ? 'Loading older messages…'
+                : 'Load older messages'}
+            </button>
+          </div>
+        )}
+
+        {olderMessagesError && (
+          <div className="alert alert-warning py-2 small" role="alert">
+            {olderMessagesError}
+          </div>
+        )}
+
         {messages.length === 0 ? (
           <div className="message-thread-empty text-center py-5">
             <h2 className="h5">

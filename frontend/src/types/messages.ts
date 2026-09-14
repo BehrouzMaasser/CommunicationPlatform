@@ -38,10 +38,3 @@ export type MessageDraft = {
   replyToId?: number
   files?: File[]
 }
-
-export type PaginatedMessages = {
-  count: number
-  next: string | null
-  previous: string | null
-  results: Message[]
-}

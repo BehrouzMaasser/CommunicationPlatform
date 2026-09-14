@@ -13,6 +13,7 @@ import { ApiError } from '../api/client'
 import { getGroup } from '../api/groups'
 import {
   getGroupMessages,
+  getOlderMessages,
   sendGroupMessage,
 } from '../api/messages'
 
@@ -108,6 +109,15 @@ function GroupConversationPage() {
   const [messages, setMessages] =
     useState<Message[]>([])
 
+  const [olderMessagesUrl, setOlderMessagesUrl] =
+    useState<string | null>(null)
+
+  const [loadingOlderMessages, setLoadingOlderMessages] =
+    useState(false)
+
+  const [olderMessagesError, setOlderMessagesError] =
+    useState<string | null>(null)
+
   const [isThreadAtBottom, setIsThreadAtBottom] =
     useState(false)
 
@@ -135,12 +145,58 @@ function GroupConversationPage() {
           (current) =>
             mergeMessageList(
               current,
-              latest,
+              latest.results,
             ),
         )
       },
       [parsedGroupId],
     )
+
+  const loadOlderMessages =
+    useCallback(
+      async () => {
+        if (
+          !olderMessagesUrl
+          || loadingOlderMessages
+        ) {
+          return
+        }
+
+        setLoadingOlderMessages(true)
+        setOlderMessagesError(null)
+
+        try {
+          const page =
+            await getOlderMessages(
+              olderMessagesUrl,
+            )
+
+          setMessages(
+            (current) =>
+              mergeMessageList(
+                current,
+                page.results,
+              ),
+          )
+          setOlderMessagesUrl(
+            page.previous,
+          )
+        } catch (requestError) {
+          setOlderMessagesError(
+            describeError(
+              requestError,
+            ),
+          )
+        } finally {
+          setLoadingOlderMessages(false)
+        }
+      },
+      [
+        loadingOlderMessages,
+        olderMessagesUrl,
+      ],
+    )
+
 
   const handleMessageCreated =
     useCallback(
@@ -193,7 +249,11 @@ function GroupConversationPage() {
           return
         }
 
-        void refreshMessages()
+        void refreshMessages().catch(
+          () => {
+            // A later reconnect or REST navigation can reconcile again.
+          },
+        )
       },
       [
         parsedGroupId,
@@ -448,11 +508,23 @@ function GroupConversationPage() {
     realtimeStatus,
   ])
 
+  const handleSubscriptionRejected =
+    useCallback(
+      () => {
+        navigate(
+          '/groups',
+          { replace: true },
+        )
+      },
+      [navigate],
+    )
+
   useConversationRealtimeSubscription(
     'group',
     parsedGroupId,
     !loading &&
       group !== null,
+    handleSubscriptionRejected,
   )
 
   useEffect(() => {
@@ -491,7 +563,10 @@ function GroupConversationPage() {
 
         setGroup(groupResult)
         setMessages(
-          messagesResult,
+          messagesResult.results,
+        )
+        setOlderMessagesUrl(
+          messagesResult.previous,
         )
       } catch (requestError) {
         if (!cancelled) {
@@ -590,6 +665,18 @@ function GroupConversationPage() {
           <MessageThread
             key={`group-${group.id}`}
             messages={messages}
+            hasOlderMessages={
+              olderMessagesUrl !== null
+            }
+            loadingOlderMessages={
+              loadingOlderMessages
+            }
+            olderMessagesError={
+              olderMessagesError
+            }
+            onLoadOlderMessages={
+              loadOlderMessages
+            }
             onAtBottomChange={
               setIsThreadAtBottom
             }

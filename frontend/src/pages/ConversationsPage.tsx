@@ -274,10 +274,6 @@ function ConversationsPage() {
                           <div className="fw-semibold">
                             @{conversation.other_user.username}
                           </div>
-
-                          <div className="small text-secondary">
-                            Conversation #{conversation.id}
-                          </div>
                         </div>
 
                         <div className="d-flex align-items-center gap-3">
@@ -361,10 +357,6 @@ function ConversationsPage() {
                         <div>
                           <div className="fw-semibold">
                             @{friend.username}
-                          </div>
-
-                          <div className="small text-secondary">
-                            User #{friend.id}
                           </div>
                         </div>
 
