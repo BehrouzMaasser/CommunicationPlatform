@@ -217,6 +217,7 @@ The owner may:
 - rename the group
 - create direct invitations
 - list the group's pending direct invitations
+- cancel pending direct invitations
 - create invitation links
 - revoke invitation links
 - remove ordinary members
@@ -309,9 +310,12 @@ A shareable invitation link stores:
 - expiry timestamp
 - optional revoked timestamp
 
-The plaintext token is generated securely and returned to the creator at link creation time.
+New V1 tokens are deterministic Django signatures of the link id. The owner can
+therefore reconstruct and copy the same active URL later while the database
+still stores only the SHA-256 token hash.
 
-The database does not store the plaintext token.
+The database does not store the plaintext bearer token. Legacy random-token
+rows created before this scheme cannot be reconstructed from their hashes.
 
 V1 validity period:
 
@@ -652,6 +656,7 @@ Persistent state changes publish realtime events only after commit.
 Important group lifecycle behavior:
 
 - invitation accept -> `group_invitation.accepted` + `group.member_added`
+- invitation cancellation -> `group_invitation.cancelled`
 - member removal -> `group.member_removed` + forced unsubscribe
 - ordinary member leaves -> `group.member_left` + forced unsubscribe
 - rename -> `group.renamed`

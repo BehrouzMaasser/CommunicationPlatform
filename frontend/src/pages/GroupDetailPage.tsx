@@ -1,6 +1,7 @@
 import {
   type FormEvent,
   type KeyboardEvent as ReactKeyboardEvent,
+  type SyntheticEvent,
   useCallback,
   useEffect,
   useMemo,
@@ -16,6 +17,7 @@ import { ApiError } from '../api/client'
 import { useActivity } from '../activity/useActivity'
 import { getFriends } from '../api/friendships'
 import {
+  cancelGroupInvitation,
   createGroupInvitationLink,
   disbandGroup,
   getActiveGroupInvitationLinks,
@@ -38,6 +40,7 @@ import type {
 
 import type {
   GroupConversation,
+  GroupInvitation,
   GroupInvitationLink,
   GroupInvitationLinkSummary,
   GroupMembership,
@@ -85,6 +88,19 @@ function errorText(error: unknown): string {
     : 'Something went wrong.'
 }
 
+function invitationUrl(token: string): string {
+  return (
+    `${window.location.origin}/groups/join/`
+    + encodeURIComponent(token)
+  )
+}
+
+function selectInputText(
+  event: SyntheticEvent<HTMLInputElement>,
+) {
+  event.currentTarget.select()
+}
+
 function GroupDetailPage() {
   const { groupId } =
     useParams<{ groupId: string }>()
@@ -115,10 +131,10 @@ function GroupDetailPage() {
     useState(false)
   const [loading, setLoading] =
     useState(true)
-  const [invitedUserIds, setInvitedUserIds] =
-    useState<Set<number>>(
-      () => new Set(),
-    )
+  const [pendingInvitations, setPendingInvitations] =
+    useState<GroupInvitation[]>([])
+  const [copiedLinkId, setCopiedLinkId] =
+    useState<number | null>(null)
   const [link, setLink] =
     useState<GroupInvitationLink | null>(
       null,
@@ -172,13 +188,8 @@ function GroupDetailPage() {
 
         setGroup(groupResult)
         setMembers(memberResult)
-        setInvitedUserIds(
-          new Set(
-            pendingInvitationResult.map(
-              (invitation) =>
-                invitation.recipient.id,
-            ),
-          ),
+        setPendingInvitations(
+          pendingInvitationResult,
         )
         setActiveInvitationLinks(
           activeInvitationLinkResult,
@@ -220,17 +231,6 @@ function GroupDetailPage() {
           return
         }
 
-        setInvitedUserIds(
-          (current) => {
-            const next =
-              new Set(current)
-            next.delete(
-              payload.user_id,
-            )
-            return next
-          },
-        )
-
         if (
           payload.user_id ===
           currentUser?.id
@@ -256,10 +256,8 @@ function GroupDetailPage() {
   const handleInvitationChange =
     useCallback(
       ({
-        type,
         payload,
       }: {
-        type: string
         payload:
           GroupInvitationEventPayload
       }) => {
@@ -270,29 +268,12 @@ function GroupDetailPage() {
           return
         }
 
-        setInvitedUserIds(
-          (current) => {
-            const next =
-              new Set(current)
-
-            if (
-              type ===
-              'group_invitation.created'
-            ) {
-              next.add(
-                payload.recipient_id,
-              )
-            } else {
-              next.delete(
-                payload.recipient_id,
-              )
-            }
-
-            return next
-          },
-        )
+        void refreshGroupState()
       },
-      [parsedGroupId],
+      [
+        parsedGroupId,
+        refreshGroupState,
+      ],
     )
 
   const handleRenamed =
@@ -358,6 +339,10 @@ function GroupDetailPage() {
   )
   useRealtimeEvent<GroupInvitationEventPayload>(
     'group_invitation.rejected',
+    handleInvitationChange,
+  )
+  useRealtimeEvent<GroupInvitationEventPayload>(
+    'group_invitation.cancelled',
     handleInvitationChange,
   )
 
@@ -443,13 +428,8 @@ function GroupDetailPage() {
         setMembers(memberResult)
         setFriends(friendResult)
         setCurrentUser(userResult)
-        setInvitedUserIds(
-          new Set(
-            pendingInvitationResult.map(
-              (invitation) =>
-                invitation.recipient.id,
-            ),
-          ),
+        setPendingInvitations(
+          pendingInvitationResult,
         )
         setActiveInvitationLinks(
           activeInvitationLinkResult,
@@ -497,6 +477,19 @@ function GroupDetailPage() {
     [members],
   )
 
+  const pendingInvitationByUserId = useMemo(
+    () =>
+      new Map(
+        pendingInvitations.map(
+          (invitation) => [
+            invitation.recipient.id,
+            invitation,
+          ],
+        ),
+      ),
+    [pendingInvitations],
+  )
+
   const inviteCandidates =
     friends.filter(
       (friend) =>
@@ -542,20 +535,57 @@ function GroupDetailPage() {
     setNotice(null)
 
     try {
-      await inviteUserToGroup(
-        parsedGroupId,
-        friend.id,
-      )
+      const invitation =
+        await inviteUserToGroup(
+          parsedGroupId,
+          friend.id,
+        )
 
-      setInvitedUserIds(
-        (current) =>
-          new Set(current).add(
-            friend.id,
+      setPendingInvitations(
+        (current) => [
+          ...current.filter(
+            (item) =>
+              item.id !== invitation.id,
           ),
+          invitation,
+        ],
       )
 
       setNotice(
         `Invitation sent to @${friend.username}.`,
+      )
+    } catch (requestError) {
+      setError(errorText(requestError))
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  async function handleCancelInvitation(
+    invitation: GroupInvitation,
+  ) {
+    const key =
+      `cancel-invitation-${invitation.id}`
+    setBusy(key)
+    setError(null)
+    setNotice(null)
+
+    try {
+      await cancelGroupInvitation(
+        parsedGroupId,
+        invitation.id,
+      )
+
+      setPendingInvitations(
+        (current) =>
+          current.filter(
+            (item) =>
+              item.id !== invitation.id,
+          ),
+      )
+
+      setNotice(
+        `Invitation to @${invitation.recipient.username} cancelled.`,
       )
     } catch (requestError) {
       setError(errorText(requestError))
@@ -619,6 +649,25 @@ function GroupDetailPage() {
     }
   }
 
+  async function handleCopyLink(
+    linkId: number,
+    token: string,
+  ) {
+    setError(null)
+
+    try {
+      await navigator.clipboard.writeText(
+        invitationUrl(token),
+      )
+      setCopiedLinkId(linkId)
+      setNotice('Invitation link copied.')
+    } catch {
+      setError(
+        'Could not copy the invitation link automatically. Select the link and copy it manually.',
+      )
+    }
+  }
+
   async function handleCreateLink() {
     setBusy('link')
     setError(null)
@@ -666,6 +715,10 @@ function GroupDetailPage() {
         setLink(null)
       }
 
+      if (copiedLinkId === linkId) {
+        setCopiedLinkId(null)
+      }
+
       setNotice(
         'Invitation link revoked.',
       )
@@ -702,7 +755,7 @@ function GroupDetailPage() {
   }
 
   const joinUrl = link
-    ? `${window.location.origin}/groups/join/${link.token}`
+    ? invitationUrl(link.token)
     : null
 
   return (
@@ -889,26 +942,50 @@ function GroupDetailPage() {
                               @{friend.username}
                             </span>
 
-                            <button
-                              className="btn btn-sm btn-primary"
-                              disabled={
-                                busy !== null ||
-                                invitedUserIds.has(
+                            {(() => {
+                              const invitation =
+                                pendingInvitationByUserId.get(
                                   friend.id,
                                 )
-                              }
-                              onClick={() =>
-                                void handleInvite(
-                                  friend,
+
+                              if (invitation) {
+                                const key =
+                                  `cancel-invitation-${invitation.id}`
+
+                                return (
+                                  <button
+                                    className="btn btn-sm btn-outline-secondary"
+                                    disabled={busy !== null}
+                                    onClick={() =>
+                                      void handleCancelInvitation(
+                                        invitation,
+                                      )
+                                    }
+                                  >
+                                    {busy === key
+                                      ? 'Cancelling…'
+                                      : 'Cancel invitation'}
+                                  </button>
                                 )
                               }
-                            >
-                              {invitedUserIds.has(
-                                friend.id,
+
+                              return (
+                                <button
+                                  className="btn btn-sm btn-primary"
+                                  disabled={busy !== null}
+                                  onClick={() =>
+                                    void handleInvite(
+                                      friend,
+                                    )
+                                  }
+                                >
+                                  {busy ===
+                                  `invite-${friend.id}`
+                                    ? 'Inviting…'
+                                    : 'Invite'}
+                                </button>
                               )
-                                ? 'Invited'
-                                : 'Invite'}
-                            </button>
+                            })()}
                           </div>
                         ),
                       )}
@@ -924,10 +1001,9 @@ function GroupDetailPage() {
                   </h2>
 
                   <p className="text-secondary small">
-                    A newly created link is shown only
-                    once. Existing link URLs cannot be
-                    recovered after a reload, but you can
-                    still revoke active links below.
+                    Create links, copy them now or again
+                    later, and revoke them whenever needed.
+                    Links expire automatically.
                   </p>
 
                   <button
@@ -946,11 +1022,30 @@ function GroupDetailPage() {
                         Newly created link
                       </div>
 
-                      <input
-                        className="form-control mb-2"
-                        readOnly
-                        value={joinUrl ?? ''}
-                      />
+                      <div className="input-group mb-2">
+                        <input
+                          className="form-control"
+                          readOnly
+                          value={joinUrl ?? ''}
+                          onClick={selectInputText}
+                          onFocus={selectInputText}
+                          aria-label="New invitation link"
+                        />
+                        <button
+                          className="btn btn-outline-secondary"
+                          type="button"
+                          onClick={() =>
+                            void handleCopyLink(
+                              link.id,
+                              link.token,
+                            )
+                          }
+                        >
+                          {copiedLinkId === link.id
+                            ? 'Copied!'
+                            : 'Copy'}
+                        </button>
+                      </div>
 
                       <div className="small text-secondary">
                         Expires:{' '}
@@ -991,6 +1086,42 @@ function GroupDetailPage() {
                               ).toLocaleString()}
                             </div>
 
+                            {activeLink.token ? (
+                              <div className="input-group input-group-sm mb-2">
+                                <input
+                                  className="form-control"
+                                  readOnly
+                                  value={invitationUrl(
+                                    activeLink.token,
+                                  )}
+                                  onClick={selectInputText}
+                                  onFocus={selectInputText}
+                                  aria-label="Invitation link"
+                                />
+                                <button
+                                  className="btn btn-outline-secondary"
+                                  type="button"
+                                  disabled={busy !== null}
+                                  onClick={() =>
+                                    void handleCopyLink(
+                                      activeLink.id,
+                                      activeLink.token!,
+                                    )
+                                  }
+                                >
+                                  {copiedLinkId ===
+                                  activeLink.id
+                                    ? 'Copied!'
+                                    : 'Copy'}
+                                </button>
+                              </div>
+                            ) : (
+                              <div className="small text-secondary mb-2">
+                                This pre-V1 link cannot be copied again.
+                                Revoke it and create a new link if needed.
+                              </div>
+                            )}
+
                             <button
                               className="btn btn-outline-danger btn-sm"
                               disabled={busy !== null}
@@ -1002,7 +1133,7 @@ function GroupDetailPage() {
                             >
                               {busy ===
                               `revoke-link-${activeLink.id}`
-                                ? 'Revoking...'
+                                ? 'Revoking…'
                                 : 'Revoke'}
                             </button>
                           </div>

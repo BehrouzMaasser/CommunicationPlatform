@@ -197,6 +197,54 @@ class GroupInvitationService:
         return membership
 
     @classmethod
+    def cancel_invitation(
+        cls,
+        *,
+        current_user: User,
+        group_id: int,
+        invitation_id: int,
+    ) -> None:
+        with transaction.atomic():
+            invitation_group_id = cls._get_invitation_group_id(
+                invitation_id=invitation_id,
+            )
+
+            if invitation_group_id != group_id:
+                raise GroupInvitationNotFound
+
+            try:
+                group = GroupConversationService._get_group_for_update(
+                    group_id=group_id,
+                )
+            except GroupNotFound as exc:
+                raise GroupInvitationNotFound from exc
+
+            GroupConversationService._require_owner(
+                group=group,
+                user=current_user,
+            )
+
+            invitation = cls._get_invitation_for_update(
+                invitation_id=invitation_id,
+            )
+
+            if invitation.group_id != group.pk:
+                raise GroupInvitationNotFound
+
+            cancelled_invitation_id = invitation.pk
+            invited_by_id = invitation.invited_by_id
+            recipient_id = invitation.recipient_id
+
+            invitation.delete()
+
+            GroupRealtimePublisher.invitation_cancelled_after_commit(
+                invitation_id=cancelled_invitation_id,
+                group_id=group.pk,
+                invited_by_id=invited_by_id,
+                recipient_id=recipient_id,
+            )
+
+    @classmethod
     def reject_invitation(
         cls,
         *,

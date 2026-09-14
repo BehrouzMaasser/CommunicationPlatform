@@ -103,7 +103,7 @@ class GroupInvitationLinkListApiTests(TestCase):
             [active_link.pk],
         )
 
-    def test_list_does_not_expose_token_hash_or_plaintext_token(self):
+    def test_owner_list_returns_recoverable_token_but_never_token_hash(self):
         link, token = GroupInvitationLinkService.create_link(
             current_user=self.owner,
             group_id=self.group.pk,
@@ -114,9 +114,33 @@ class GroupInvitationLinkListApiTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.data[0]["id"], link.pk)
-        self.assertNotIn("token", response.data[0])
+        self.assertEqual(response.data[0]["token"], token)
         self.assertNotIn("token_hash", response.data[0])
-        self.assertNotIn(token, str(response.data))
+        self.assertNotIn(link.token_hash, str(response.data))
+
+    def test_legacy_link_is_listed_without_recoverable_token(self):
+        raw_token = GroupInvitationLinkService._generate_token()
+        link = GroupInvitationLink.objects.create(
+            group=self.group,
+            created_by=self.owner,
+            token_hash=(
+                GroupInvitationLinkService._hash_token(
+                    raw_token
+                )
+            ),
+            expires_at=(
+                timezone.now()
+                + timedelta(hours=1)
+            ),
+        )
+
+        self.login(self.owner)
+        response = self.client.get(self.url)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data[0]["id"], link.pk)
+        self.assertIsNone(response.data[0]["token"])
+        self.assertNotIn("token_hash", response.data[0])
 
     def test_non_owner_member_cannot_list_links(self):
         self.login(self.member)

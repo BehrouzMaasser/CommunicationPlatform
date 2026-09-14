@@ -3,6 +3,7 @@ import secrets
 from datetime import timedelta
 
 from django.contrib.auth import get_user_model
+from django.core.signing import Signer
 from django.db import transaction
 from django.utils import timezone
 
@@ -16,10 +17,10 @@ from apps.conversations.models import (
     GroupInvitationLink,
     GroupMembership,
 )
+from apps.conversations.realtime import GroupRealtimePublisher
 from apps.conversations.services.group_conversation import (
     GroupConversationService,
 )
-from apps.conversations.realtime import GroupRealtimePublisher
 
 
 User = get_user_model()
@@ -27,6 +28,9 @@ User = get_user_model()
 
 class GroupInvitationLinkService:
     VALIDITY_PERIOD = timedelta(days=1)
+    TOKEN_SIGNING_SALT = (
+        "communication-platform.group-invitation-link"
+    )
 
     @staticmethod
     def _hash_token(token: str) -> str:
@@ -37,6 +41,44 @@ class GroupInvitationLinkService:
     @staticmethod
     def _generate_token() -> str:
         return secrets.token_urlsafe(32)
+
+    @classmethod
+    def _signed_token_for_link_id(
+        cls,
+        *,
+        link_id: int,
+    ) -> str:
+        signer = Signer(
+            salt=cls.TOKEN_SIGNING_SALT,
+        )
+        return signer.sign(str(link_id))
+
+    @classmethod
+    def recover_token(
+        cls,
+        *,
+        link: GroupInvitationLink,
+    ) -> str | None:
+        """
+        Reconstruct a token for links created with the signed-token scheme.
+
+        V1 stores only a SHA-256 token hash.  New tokens are deterministic
+        signatures of the link id, so an owner can retrieve the same URL later
+        without storing the bearer token itself.  Legacy random-token links
+        intentionally return None because their plaintext token cannot be
+        recovered from the hash.
+        """
+        token = cls._signed_token_for_link_id(
+            link_id=link.pk,
+        )
+
+        if not secrets.compare_digest(
+            link.token_hash,
+            cls._hash_token(token),
+        ):
+            return None
+
+        return token
 
     @classmethod
     def _get_link_group_id(
@@ -89,16 +131,27 @@ class GroupInvitationLinkService:
                 user=current_user,
             )
 
-            token = cls._generate_token()
-
+            # token_hash is required before the row has a primary key. Use a
+            # cryptographically random one-time placeholder, then replace it
+            # with the hash of the deterministic signed token once pk exists.
             link = GroupInvitationLink.objects.create(
                 group=group,
                 created_by=current_user,
-                token_hash=cls._hash_token(token),
+                token_hash=cls._hash_token(
+                    cls._generate_token()
+                ),
                 expires_at=(
                     timezone.now()
                     + cls.VALIDITY_PERIOD
                 ),
+            )
+
+            token = cls._signed_token_for_link_id(
+                link_id=link.pk,
+            )
+            link.token_hash = cls._hash_token(token)
+            link.save(
+                update_fields=["token_hash"],
             )
 
         return link, token

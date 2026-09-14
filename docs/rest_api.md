@@ -558,6 +558,23 @@ Representation:
 }
 ```
 
+### Cancel pending invitation
+
+```http
+DELETE /api/v1/groups/{group_id}/invitations/{invitation_id}/
+```
+
+Requires the current group owner.
+
+Success:
+
+```text
+204 No Content
+```
+
+Cancellation removes the pending invitation and publishes
+`group_invitation.cancelled` to the inviter and recipient.
+
 ### Incoming invitations
 
 ```http
@@ -625,11 +642,38 @@ Response:
 }
 ```
 
-The database stores only the token hash.
+The database stores only the token hash. New V1 links use a deterministic
+Django-signed token so the group owner can reconstruct and copy the same URL
+again without storing the bearer token in plaintext.
 
 The link is valid for one day unless revoked.
 
-V1 has no endpoint to list previously created invitation links.
+### List active links
+
+```http
+GET /api/v1/groups/{group_id}/invitation-links/
+```
+
+Requires owner. Only active, unexpired links are returned.
+
+Example item:
+
+```json
+{
+  "id": 3,
+  "token": "3:signed-token",
+  "created_by": {
+    "id": 1,
+    "username": "alice"
+  },
+  "created_at": "...",
+  "expires_at": "..."
+}
+```
+
+`token_hash` is never returned. A legacy pre-V1 random-token row may return
+`"token": null` because a SHA-256 hash cannot be reversed; fresh V1 links are
+re-copyable.
 
 ### Revoke
 

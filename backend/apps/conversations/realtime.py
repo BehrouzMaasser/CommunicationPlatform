@@ -139,6 +139,31 @@ class GroupRealtimePublisher:
         )
 
     @classmethod
+    def invitation_cancelled_after_commit(
+        cls,
+        *,
+        invitation_id: int,
+        group_id: int,
+        invited_by_id: int,
+        recipient_id: int,
+    ) -> None:
+        cls._publish_group_event_after_commit(
+            event_type=RealtimeEventType.GROUP_INVITATION_CANCELLED,
+            payload={
+                "invitation_id": invitation_id,
+                "group_id": group_id,
+                "invited_by_id": invited_by_id,
+                "recipient_id": recipient_id,
+            },
+            group_id=group_id,
+            user_ids=[
+                invited_by_id,
+                recipient_id,
+            ],
+            include_conversation=False,
+        )
+
+    @classmethod
     def member_added_after_commit(
         cls,
         *,

@@ -33,6 +33,7 @@ export type GroupInvitationLink = {
 
 export type GroupInvitationLinkSummary = {
   id: number
+  token: string | null
   created_by: PublicUser
   created_at: string
   expires_at: string

@@ -103,6 +103,54 @@ class GroupInvitationOwnerListApiTests(APITestCase):
             403,
         )
 
+    def test_owner_can_cancel_pending_invitation(self):
+        invitation = GroupInvitation.objects.create(
+            group=self.group,
+            invited_by=self.alice,
+            recipient=self.bob,
+        )
+        self.login(self.alice)
+
+        response = self.client.delete(
+            f"/api/v1/groups/{self.group.pk}/invitations/{invitation.pk}/"
+        )
+
+        self.assertEqual(
+            response.status_code,
+            204,
+        )
+        self.assertFalse(
+            GroupInvitation.objects.filter(
+                pk=invitation.pk,
+            ).exists()
+        )
+
+    def test_non_owner_member_cannot_cancel_pending_invitation(self):
+        invitation = GroupInvitation.objects.create(
+            group=self.group,
+            invited_by=self.alice,
+            recipient=self.charlie,
+        )
+        GroupConversationService._add_member(
+            group=self.group,
+            user=self.bob,
+        )
+        self.login(self.bob)
+
+        response = self.client.delete(
+            f"/api/v1/groups/{self.group.pk}/invitations/{invitation.pk}/"
+        )
+
+        self.assertEqual(
+            response.status_code,
+            403,
+        )
+        self.assertTrue(
+            GroupInvitation.objects.filter(
+                pk=invitation.pk,
+            ).exists()
+        )
+
     def test_outsider_gets_404(self):
         self.login(self.charlie)
 

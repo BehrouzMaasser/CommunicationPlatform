@@ -8,6 +8,9 @@ from apps.conversations.models import (
     GroupInvitationLink,
     GroupMembership,
 )
+from apps.conversations.services.group_invitation_link import (
+    GroupInvitationLinkService,
+)
 
 
 class DirectConversationCreateSerializer(serializers.Serializer):
@@ -111,16 +114,26 @@ class GroupInvitationLinkSummarySerializer(
     created_by = PublicUserSerializer(
         read_only=True,
     )
+    token = serializers.SerializerMethodField()
 
     class Meta:
         model = GroupInvitationLink
         fields = (
             "id",
+            "token",
             "created_by",
             "created_at",
             "expires_at",
         )
         read_only_fields = fields
+
+    def get_token(
+        self,
+        link: GroupInvitationLink,
+    ) -> str | None:
+        return GroupInvitationLinkService.recover_token(
+            link=link,
+        )
 
 
 class GroupInvitationLinkCreateResponseSerializer(

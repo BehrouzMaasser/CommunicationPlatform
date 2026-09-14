@@ -8,6 +8,7 @@ from apps.conversations.api.v1.views import (
     GroupConversationListCreateView,
     GroupConversationRenameView,
     GroupInvitationAcceptView,
+    GroupInvitationCancelView,
     GroupInvitationCreateView,
     GroupInvitationLinkCreateView,
     GroupInvitationLinkJoinView,
@@ -69,6 +70,11 @@ urlpatterns = [
         "groups/<int:group_id>/invitations/",
         GroupInvitationCreateView.as_view(),
         name="group-invitation-create",
+    ),
+    path(
+        "groups/<int:group_id>/invitations/<int:invitation_id>/",
+        GroupInvitationCancelView.as_view(),
+        name="group-invitation-cancel",
     ),
     path(
         "group-invitations/",

@@ -148,6 +148,101 @@ class GroupInvitationServiceTests(TestCase):
             1,
         )
 
+    def test_owner_can_cancel_pending_invitation(self):
+        self.make_friends(self.alice, self.bob)
+
+        invitation = GroupInvitationService.create_invitation(
+            current_user=self.alice,
+            group_id=self.group.pk,
+            target_user_id=self.bob.pk,
+        )
+
+        GroupInvitationService.cancel_invitation(
+            current_user=self.alice,
+            group_id=self.group.pk,
+            invitation_id=invitation.pk,
+        )
+
+        self.assertFalse(
+            GroupInvitation.objects.filter(
+                pk=invitation.pk,
+            ).exists()
+        )
+
+    def test_non_owner_cannot_cancel_pending_invitation(self):
+        self.make_friends(self.alice, self.bob)
+        invitation = GroupInvitationService.create_invitation(
+            current_user=self.alice,
+            group_id=self.group.pk,
+            target_user_id=self.bob.pk,
+        )
+        GroupConversationService._add_member(
+            group=self.group,
+            user=self.charlie,
+        )
+
+        with self.assertRaises(GroupOwnerRequired):
+            GroupInvitationService.cancel_invitation(
+                current_user=self.charlie,
+                group_id=self.group.pk,
+                invitation_id=invitation.pk,
+            )
+
+        self.assertTrue(
+            GroupInvitation.objects.filter(
+                pk=invitation.pk,
+            ).exists()
+        )
+
+    def test_cancel_invitation_locks_group_before_invitation(self):
+        self.make_friends(self.alice, self.bob)
+        invitation = GroupInvitationService.create_invitation(
+            current_user=self.alice,
+            group_id=self.group.pk,
+            target_user_id=self.bob.pk,
+        )
+
+        original_group_lock = (
+            GroupConversationService._get_group_for_update
+        )
+        original_invitation_lock = (
+            GroupInvitationService._get_invitation_for_update
+        )
+        lock_order = []
+
+        def lock_group(*, group_id):
+            lock_order.append("group")
+            return original_group_lock(group_id=group_id)
+
+        def lock_invitation(*, invitation_id):
+            lock_order.append("invitation")
+            return original_invitation_lock(
+                invitation_id=invitation_id,
+            )
+
+        with (
+            patch.object(
+                GroupConversationService,
+                "_get_group_for_update",
+                side_effect=lock_group,
+            ),
+            patch.object(
+                GroupInvitationService,
+                "_get_invitation_for_update",
+                side_effect=lock_invitation,
+            ),
+        ):
+            GroupInvitationService.cancel_invitation(
+                current_user=self.alice,
+                group_id=self.group.pk,
+                invitation_id=invitation.pk,
+            )
+
+        self.assertEqual(
+            lock_order,
+            ["group", "invitation"],
+        )
+
     def test_recipient_can_accept_invitation(self):
         self.make_friends(self.alice, self.bob)
 

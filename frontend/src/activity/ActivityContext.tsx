@@ -742,6 +742,10 @@ export function ActivityProvider({
     handleGroupInvitationRemoved,
   )
   useRealtimeEvent(
+    'group_invitation.cancelled',
+    handleGroupInvitationRemoved,
+  )
+  useRealtimeEvent(
     'group.member_removed',
     handleMemberRemoved,
   )

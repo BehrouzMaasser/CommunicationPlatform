@@ -398,6 +398,33 @@ class GroupInvitationCreateView(APIView):
         )
 
 
+class GroupInvitationCancelView(APIView):
+
+    def delete(
+        self,
+        request,
+        group_id,
+        invitation_id,
+    ):
+        _get_accessible_group_or_404(
+            user=request.user,
+            group_id=group_id,
+        )
+
+        try:
+            GroupInvitationService.cancel_invitation(
+                current_user=request.user,
+                group_id=group_id,
+                invitation_id=invitation_id,
+            )
+        except ConversationsError as exc:
+            return conversations_error_response(exc)
+
+        return Response(
+            status=status.HTTP_204_NO_CONTENT,
+        )
+
+
 class GroupInvitationListView(generics.ListAPIView):
     serializer_class = GroupInvitationSerializer
 

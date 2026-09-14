@@ -173,6 +173,20 @@ Friendship removal stops future presence sharing between the pair.
 
 ---
 
+## 12. Invitation-Link Tokens
+
+Group invitation URLs are bearer capabilities and must be treated as secrets by
+the recipient.
+
+The database stores only SHA-256 token hashes. New V1 links derive their token
+from a Django signature of the link id, allowing the authenticated group owner
+to reconstruct/copy an active link later without plaintext token storage. The
+owner-only list endpoint never exposes `token_hash`.
+
+Revoked or expired links cannot be used to join.
+
+---
+
 ## 12. Attachment Security
 
 User-controlled original filenames are stored as metadata but are not used as storage paths.

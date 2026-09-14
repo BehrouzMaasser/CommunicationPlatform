@@ -119,6 +119,32 @@ class GroupInvitationRealtimeIntegrationTests(APITestCase):
         )
 
     @patch(PUBLISH)
+    def test_cancel_publishes_cancelled(self, publish):
+        self.login(self.alice)
+        created = self.client.post(
+            f"/api/v1/groups/{self.group.pk}/invitations/",
+            {"user_id": self.bob.pk},
+            format="json",
+        )
+        invitation_id = created.data["id"]
+
+        publish.reset_mock()
+
+        response = self.client.delete(
+            f"/api/v1/groups/{self.group.pk}/invitations/{invitation_id}/"
+        )
+
+        self.assertEqual(response.status_code, 204)
+        self.assertEqual(
+            publish.call_args.kwargs["event_type"].value,
+            "group_invitation.cancelled",
+        )
+        self.assertEqual(
+            publish.call_args.kwargs["payload"]["recipient_id"],
+            self.bob.pk,
+        )
+
+    @patch(PUBLISH)
     def test_reject_publishes_rejected(self, publish):
         self.login(self.alice)
         created = self.client.post(

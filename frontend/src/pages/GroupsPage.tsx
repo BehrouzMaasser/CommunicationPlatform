@@ -153,6 +153,10 @@ function GroupsPage() {
     handleRealtimeChange,
   )
   useRealtimeEvent(
+    'group_invitation.cancelled',
+    handleRealtimeChange,
+  )
+  useRealtimeEvent(
     'group.member_added',
     handleRealtimeChange,
   )

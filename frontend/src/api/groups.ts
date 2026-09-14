@@ -118,6 +118,16 @@ export function inviteUserToGroup(
 }
 
 
+export function cancelGroupInvitation(
+  groupId: number,
+  invitationId: number,
+): Promise<unknown> {
+  return apiDelete(
+    `/api/v1/groups/${groupId}/invitations/${invitationId}/`,
+  )
+}
+
+
 export function acceptGroupInvitation(
   invitationId: number,
 ): Promise<GroupMembership> {

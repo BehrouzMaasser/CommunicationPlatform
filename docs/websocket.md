@@ -589,9 +589,10 @@ Implemented:
 group_invitation.created
 group_invitation.accepted
 group_invitation.rejected
+group_invitation.cancelled
 ```
 
-### Created/rejected payload
+### Created/rejected/cancelled payload
 
 ```json
 {
@@ -829,6 +830,7 @@ friendship.removed
 group_invitation.created
 group_invitation.accepted
 group_invitation.rejected
+group_invitation.cancelled
 ```
 
 ### Groups

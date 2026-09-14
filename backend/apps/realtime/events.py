@@ -24,6 +24,7 @@ class RealtimeEventType(str, Enum):
     GROUP_INVITATION_CREATED = "group_invitation.created"
     GROUP_INVITATION_ACCEPTED = "group_invitation.accepted"
     GROUP_INVITATION_REJECTED = "group_invitation.rejected"
+    GROUP_INVITATION_CANCELLED = "group_invitation.cancelled"
 
     GROUP_MEMBER_ADDED = "group.member_added"
     GROUP_MEMBER_REMOVED = "group.member_removed"

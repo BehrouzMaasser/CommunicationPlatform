@@ -96,6 +96,41 @@ class GroupInvitationLinkServiceTests(TestCase):
             ).exists()
         )
 
+    def test_created_token_can_be_recovered_without_plaintext_storage(self):
+        link, token = GroupInvitationLinkService.create_link(
+            current_user=self.alice,
+            group_id=self.group.pk,
+        )
+
+        recovered = GroupInvitationLinkService.recover_token(
+            link=link,
+        )
+
+        self.assertEqual(recovered, token)
+        self.assertNotEqual(link.token_hash, token)
+
+    def test_legacy_random_token_cannot_be_recovered(self):
+        raw_token = GroupInvitationLinkService._generate_token()
+        link = GroupInvitationLink.objects.create(
+            group=self.group,
+            created_by=self.alice,
+            token_hash=(
+                GroupInvitationLinkService._hash_token(
+                    raw_token
+                )
+            ),
+            expires_at=(
+                timezone.now()
+                + timedelta(hours=1)
+            ),
+        )
+
+        self.assertIsNone(
+            GroupInvitationLinkService.recover_token(
+                link=link,
+            )
+        )
+
     def test_non_owner_cannot_create_invitation_link(self):
         GroupConversationService._add_member(
             group=self.group,
