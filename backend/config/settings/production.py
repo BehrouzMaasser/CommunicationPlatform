@@ -52,7 +52,9 @@ DATABASES["default"].update(  # noqa: F405
         "PASSWORD": _required_env("POSTGRES_PASSWORD"),
         "HOST": _required_env("POSTGRES_HOST"),
         "PORT": _required_env("POSTGRES_PORT"),
-        "CONN_MAX_AGE": int(os.getenv("POSTGRES_CONN_MAX_AGE", "60")),
+        # Persistent Django DB connections are disabled under ASGI.
+        # Add an external pooler later if connection pooling is needed.
+        "CONN_MAX_AGE": int(os.getenv("POSTGRES_CONN_MAX_AGE", "0")),
         "CONN_HEALTH_CHECKS": True,
     }
 )
