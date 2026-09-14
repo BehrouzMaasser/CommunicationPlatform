@@ -1,4 +1,5 @@
 import os
+from pathlib import Path
 
 from django.core.exceptions import ImproperlyConfigured
 
@@ -45,6 +46,13 @@ if not ALLOWED_HOSTS or "*" in ALLOWED_HOSTS:
 CSRF_TRUSTED_ORIGINS = _csv_env("DJANGO_CSRF_TRUSTED_ORIGINS")
 CORS_ALLOWED_ORIGINS = _csv_env("DJANGO_CORS_ALLOWED_ORIGINS")
 
+POSTGRES_CONN_MAX_AGE = int(os.getenv("POSTGRES_CONN_MAX_AGE", "0"))
+if POSTGRES_CONN_MAX_AGE != 0:
+    raise ImproperlyConfigured(
+        "POSTGRES_CONN_MAX_AGE must remain 0 under the current Daphne/ASGI "
+        "deployment architecture."
+    )
+
 DATABASES["default"].update(  # noqa: F405
     {
         "NAME": _required_env("POSTGRES_DB"),
@@ -52,9 +60,7 @@ DATABASES["default"].update(  # noqa: F405
         "PASSWORD": _required_env("POSTGRES_PASSWORD"),
         "HOST": _required_env("POSTGRES_HOST"),
         "PORT": _required_env("POSTGRES_PORT"),
-        # Persistent Django DB connections are disabled under ASGI.
-        # Add an external pooler later if connection pooling is needed.
-        "CONN_MAX_AGE": int(os.getenv("POSTGRES_CONN_MAX_AGE", "0")),
+        "CONN_MAX_AGE": POSTGRES_CONN_MAX_AGE,
         "CONN_HEALTH_CHECKS": True,
     }
 )
