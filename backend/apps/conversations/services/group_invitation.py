@@ -5,6 +5,7 @@ from apps.conversations.exceptions import (
     FriendshipRequiredForGroupInvitation,
     GroupInvitationAlreadyPending,
     GroupInvitationNotFound,
+    GroupNotFound,
     GroupInvitationRecipientRequired,
     GroupInvitationTargetNotFound,
     UserAlreadyGroupMember,
@@ -26,6 +27,20 @@ User = get_user_model()
 class GroupInvitationService:
 
     @staticmethod
+    def _get_invitation_group_id(
+        *,
+        invitation_id: int,
+    ) -> int:
+        try:
+            return (
+                GroupInvitation.objects
+                .values_list("group_id", flat=True)
+                .get(pk=invitation_id)
+            )
+        except GroupInvitation.DoesNotExist as exc:
+            raise GroupInvitationNotFound from exc
+
+    @staticmethod
     def _get_invitation_for_update(
         *,
         invitation_id: int,
@@ -33,9 +48,8 @@ class GroupInvitationService:
         try:
             return (
                 GroupInvitation.objects
-                .select_for_update()
+                .select_for_update(of=("self",))
                 .select_related(
-                    "group",
                     "invited_by",
                     "recipient",
                 )
@@ -117,16 +131,25 @@ class GroupInvitationService:
         invitation_id: int,
     ) -> GroupMembership:
         with transaction.atomic():
+            # Resolve the parent ID without locking the child, then lock
+            # parent -> child consistently with other group mutations.
+            group_id = cls._get_invitation_group_id(
+                invitation_id=invitation_id,
+            )
+
+            try:
+                group = GroupConversationService._get_group_for_update(
+                    group_id=group_id,
+                )
+            except GroupNotFound as exc:
+                raise GroupInvitationNotFound from exc
+
             invitation = cls._get_invitation_for_update(
                 invitation_id=invitation_id,
             )
 
             if invitation.recipient_id != current_user.pk:
                 raise GroupInvitationRecipientRequired
-
-            group = GroupConversationService._get_group_for_update(
-                group_id=invitation.group_id,
-            )
 
             if GroupMembership.objects.filter(
                 group=group,

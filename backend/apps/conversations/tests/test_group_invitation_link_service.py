@@ -1,4 +1,5 @@
 from datetime import timedelta
+from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
 from django.test import TestCase
@@ -128,6 +129,53 @@ class GroupInvitationLinkServiceTests(TestCase):
         self.assertEqual(
             membership.role,
             GroupMembership.Role.MEMBER,
+        )
+
+    def test_join_with_token_locks_group_before_link(self):
+        _, token = GroupInvitationLinkService.create_link(
+            current_user=self.alice,
+            group_id=self.group.pk,
+        )
+
+        original_group_lock = (
+            GroupConversationService._get_group_for_update
+        )
+        original_link_lock = (
+            GroupInvitationLinkService._get_link_for_update
+        )
+        lock_order = []
+
+        def lock_group(*, group_id):
+            lock_order.append("group")
+            return original_group_lock(group_id=group_id)
+
+        def lock_link(*, token_hash, group_id):
+            lock_order.append("link")
+            return original_link_lock(
+                token_hash=token_hash,
+                group_id=group_id,
+            )
+
+        with (
+            patch.object(
+                GroupConversationService,
+                "_get_group_for_update",
+                side_effect=lock_group,
+            ),
+            patch.object(
+                GroupInvitationLinkService,
+                "_get_link_for_update",
+                side_effect=lock_link,
+            ),
+        ):
+            GroupInvitationLinkService.join_with_token(
+                current_user=self.bob,
+                token=token,
+            )
+
+        self.assertEqual(
+            lock_order,
+            ["group", "link"],
         )
 
     def test_joining_with_link_is_idempotent_for_existing_member(self):

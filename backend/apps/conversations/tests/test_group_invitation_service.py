@@ -1,3 +1,5 @@
+from unittest.mock import patch
+
 from django.contrib.auth import get_user_model
 from django.test import TestCase
 
@@ -177,6 +179,55 @@ class GroupInvitationServiceTests(TestCase):
             GroupInvitation.objects.filter(
                 pk=invitation.pk,
             ).exists()
+        )
+
+    def test_accept_invitation_locks_group_before_invitation(self):
+        self.make_friends(self.alice, self.bob)
+
+        invitation = GroupInvitationService.create_invitation(
+            current_user=self.alice,
+            group_id=self.group.pk,
+            target_user_id=self.bob.pk,
+        )
+
+        original_group_lock = (
+            GroupConversationService._get_group_for_update
+        )
+        original_invitation_lock = (
+            GroupInvitationService._get_invitation_for_update
+        )
+        lock_order = []
+
+        def lock_group(*, group_id):
+            lock_order.append("group")
+            return original_group_lock(group_id=group_id)
+
+        def lock_invitation(*, invitation_id):
+            lock_order.append("invitation")
+            return original_invitation_lock(
+                invitation_id=invitation_id,
+            )
+
+        with (
+            patch.object(
+                GroupConversationService,
+                "_get_group_for_update",
+                side_effect=lock_group,
+            ),
+            patch.object(
+                GroupInvitationService,
+                "_get_invitation_for_update",
+                side_effect=lock_invitation,
+            ),
+        ):
+            GroupInvitationService.accept_invitation(
+                current_user=self.bob,
+                invitation_id=invitation.pk,
+            )
+
+        self.assertEqual(
+            lock_order,
+            ["group", "invitation"],
         )
 
     def test_acceptance_does_not_require_friendship_to_still_exist(self):

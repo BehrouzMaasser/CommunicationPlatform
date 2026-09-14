@@ -8,10 +8,10 @@ from django.utils import timezone
 
 from apps.conversations.exceptions import (
     GroupInvitationLinkNotFound,
+    GroupNotFound,
     InvalidGroupInvitationLink,
 )
 from apps.conversations.models import (
-    GroupConversation,
     GroupInvitation,
     GroupInvitationLink,
     GroupMembership,
@@ -37,6 +37,40 @@ class GroupInvitationLinkService:
     @staticmethod
     def _generate_token() -> str:
         return secrets.token_urlsafe(32)
+
+    @classmethod
+    def _get_link_group_id(
+        cls,
+        *,
+        token_hash: str,
+    ) -> int:
+        try:
+            return (
+                GroupInvitationLink.objects
+                .values_list("group_id", flat=True)
+                .get(token_hash=token_hash)
+            )
+        except GroupInvitationLink.DoesNotExist as exc:
+            raise InvalidGroupInvitationLink from exc
+
+    @classmethod
+    def _get_link_for_update(
+        cls,
+        *,
+        token_hash: str,
+        group_id: int,
+    ) -> GroupInvitationLink:
+        try:
+            return (
+                GroupInvitationLink.objects
+                .select_for_update(of=("self",))
+                .get(
+                    token_hash=token_hash,
+                    group_id=group_id,
+                )
+            )
+        except GroupInvitationLink.DoesNotExist as exc:
+            raise InvalidGroupInvitationLink from exc
 
     @classmethod
     def create_link(
@@ -79,20 +113,22 @@ class GroupInvitationLinkService:
         token_hash = cls._hash_token(token)
 
         with transaction.atomic():
+            # Resolve the parent ID without locking the child, then lock
+            # parent -> child consistently with revoke/disband flows.
+            group_id = cls._get_link_group_id(
+                token_hash=token_hash,
+            )
+
             try:
-                link = (
-                    GroupInvitationLink.objects
-                    .select_for_update()
-                    .select_related("group")
-                    .get(token_hash=token_hash)
+                group = GroupConversationService._get_group_for_update(
+                    group_id=group_id,
                 )
-            except GroupInvitationLink.DoesNotExist as exc:
+            except GroupNotFound as exc:
                 raise InvalidGroupInvitationLink from exc
 
-            group = (
-                GroupConversation.objects
-                .select_for_update()
-                .get(pk=link.group_id)
+            link = cls._get_link_for_update(
+                token_hash=token_hash,
+                group_id=group.pk,
             )
 
             now = timezone.now()
@@ -165,7 +201,7 @@ class GroupInvitationLinkService:
             try:
                 link = (
                     GroupInvitationLink.objects
-                    .select_for_update()
+                    .select_for_update(of=("self",))
                     .get(
                         pk=link_id,
                         group=group,
