@@ -12,6 +12,7 @@ from apps.conversations.api.v1.serializers import (
     GroupConversationSerializer,
     GroupInvitationCreateSerializer,
     GroupInvitationLinkCreateResponseSerializer,
+    GroupInvitationLinkSummarySerializer,
     GroupInvitationSerializer,
     GroupMembershipSerializer,
     GroupNameSerializer,
@@ -23,6 +24,7 @@ from apps.conversations.exceptions import (
 from apps.conversations.selectors import (
     DirectConversationSelector,
     GroupConversationSelector,
+    GroupInvitationLinkSelector,
     GroupInvitationSelector,
 )
 from apps.conversations.services import (
@@ -464,6 +466,37 @@ class GroupInvitationRejectView(APIView):
 
 
 class GroupInvitationLinkCreateView(APIView):
+
+    def get(self, request, group_id):
+        group = _get_accessible_group_or_404(
+            user=request.user,
+            group_id=group_id,
+        )
+
+        if not GroupConversationSelector.is_owner(
+            group=group,
+            user=request.user,
+        ):
+            return conversations_error_response(
+                GroupOwnerRequired()
+            )
+
+        links = (
+            GroupInvitationLinkSelector
+            .list_active_for_group(
+                group=group,
+            )
+        )
+
+        serializer = GroupInvitationLinkSummarySerializer(
+            links,
+            many=True,
+        )
+
+        return Response(
+            serializer.data,
+            status=status.HTTP_200_OK,
+        )
 
     def post(self, request, group_id):
         _get_accessible_group_or_404(

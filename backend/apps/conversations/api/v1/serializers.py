@@ -5,6 +5,7 @@ from apps.conversations.models import (
     DirectConversation,
     GroupConversation,
     GroupInvitation,
+    GroupInvitationLink,
     GroupMembership,
 )
 
@@ -100,6 +101,24 @@ class GroupInvitationSerializer(serializers.ModelSerializer):
             "invited_by",
             "recipient",
             "created_at",
+        )
+        read_only_fields = fields
+
+
+class GroupInvitationLinkSummarySerializer(
+    serializers.ModelSerializer
+):
+    created_by = PublicUserSerializer(
+        read_only=True,
+    )
+
+    class Meta:
+        model = GroupInvitationLink
+        fields = (
+            "id",
+            "created_by",
+            "created_at",
+            "expires_at",
         )
         read_only_fields = fields
 

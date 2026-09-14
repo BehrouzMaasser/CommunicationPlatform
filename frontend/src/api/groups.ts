@@ -10,6 +10,7 @@ import type {
   GroupConversation,
   GroupInvitation,
   GroupInvitationLink,
+  GroupInvitationLinkSummary,
   GroupMembership,
 } from '../types/groups'
 
@@ -131,6 +132,15 @@ export function rejectGroupInvitation(
 ): Promise<unknown> {
   return apiPost(
     `/api/v1/group-invitations/${invitationId}/reject/`,
+  )
+}
+
+
+export function getActiveGroupInvitationLinks(
+  groupId: number,
+): Promise<GroupInvitationLinkSummary[]> {
+  return apiGet<GroupInvitationLinkSummary[]>(
+    `/api/v1/groups/${groupId}/invitation-links/`,
   )
 }
 

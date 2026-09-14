@@ -18,6 +18,7 @@ import { getFriends } from '../api/friendships'
 import {
   createGroupInvitationLink,
   disbandGroup,
+  getActiveGroupInvitationLinks,
   getGroup,
   getGroupMembers,
   getGroupPendingInvitations,
@@ -38,6 +39,7 @@ import type {
 import type {
   GroupConversation,
   GroupInvitationLink,
+  GroupInvitationLinkSummary,
   GroupMembership,
 } from '../types/groups'
 import type {
@@ -121,6 +123,12 @@ function GroupDetailPage() {
     useState<GroupInvitationLink | null>(
       null,
     )
+  const [
+    activeInvitationLinks,
+    setActiveInvitationLinks,
+  ] = useState<GroupInvitationLinkSummary[]>(
+    [],
+  )
 
   const refreshGroupState =
     useCallback(
@@ -144,13 +152,23 @@ function GroupDetailPage() {
               currentUser?.id,
           )
 
-        const pendingInvitationResult =
+        const isCurrentUserOwner =
           currentMembership?.role ===
-            'OWNER'
-            ? await getGroupPendingInvitations(
+          'OWNER'
+
+        const [
+          pendingInvitationResult,
+          activeInvitationLinkResult,
+        ] = isCurrentUserOwner
+          ? await Promise.all([
+              getGroupPendingInvitations(
                 parsedGroupId,
-              )
-            : []
+              ),
+              getActiveGroupInvitationLinks(
+                parsedGroupId,
+              ),
+            ])
+          : [[], []]
 
         setGroup(groupResult)
         setMembers(memberResult)
@@ -161,6 +179,9 @@ function GroupDetailPage() {
                 invitation.recipient.id,
             ),
           ),
+        )
+        setActiveInvitationLinks(
+          activeInvitationLinkResult,
         )
         setRenameText(
           groupResult.name,
@@ -396,13 +417,23 @@ function GroupDetailPage() {
               userResult.id,
           )
 
-        const pendingInvitationResult =
+        const isCurrentUserOwner =
           currentMembership?.role ===
-            'OWNER'
-            ? await getGroupPendingInvitations(
+          'OWNER'
+
+        const [
+          pendingInvitationResult,
+          activeInvitationLinkResult,
+        ] = isCurrentUserOwner
+          ? await Promise.all([
+              getGroupPendingInvitations(
                 parsedGroupId,
-              )
-            : []
+              ),
+              getActiveGroupInvitationLinks(
+                parsedGroupId,
+              ),
+            ])
+          : [[], []]
 
         if (cancelled) {
           return
@@ -419,6 +450,9 @@ function GroupDetailPage() {
                 invitation.recipient.id,
             ),
           ),
+        )
+        setActiveInvitationLinks(
+          activeInvitationLinkResult,
         )
         setRenameText(
           groupResult.name,
@@ -596,6 +630,11 @@ function GroupDetailPage() {
           parsedGroupId,
         )
       setLink(result)
+      setActiveInvitationLinks(
+        await getActiveGroupInvitationLinks(
+          parsedGroupId,
+        ),
+      )
     } catch (requestError) {
       setError(errorText(requestError))
     } finally {
@@ -603,20 +642,30 @@ function GroupDetailPage() {
     }
   }
 
-  async function handleRevokeLink() {
-    if (!link) {
-      return
-    }
-
-    setBusy('revoke-link')
+  async function handleRevokeLink(
+    linkId: number,
+  ) {
+    setBusy(`revoke-link-${linkId}`)
     setError(null)
 
     try {
       await revokeGroupInvitationLink(
         parsedGroupId,
-        link.id,
+        linkId,
       )
-      setLink(null)
+
+      setActiveInvitationLinks(
+        (current) =>
+          current.filter(
+            (activeLink) =>
+              activeLink.id !== linkId,
+          ),
+      )
+
+      if (link?.id === linkId) {
+        setLink(null)
+      }
+
       setNotice(
         'Invitation link revoked.',
       )
@@ -874,41 +923,92 @@ function GroupDetailPage() {
                     Invitation link
                   </h2>
 
-                  {!link ? (
-                    <button
-                      className="btn btn-outline-primary"
-                      disabled={busy !== null}
-                      onClick={() =>
-                        void handleCreateLink()
-                      }
-                    >
-                      Create link
-                    </button>
-                  ) : (
-                    <>
+                  <p className="text-secondary small">
+                    A newly created link is shown only
+                    once. Existing link URLs cannot be
+                    recovered after a reload, but you can
+                    still revoke active links below.
+                  </p>
+
+                  <button
+                    className="btn btn-outline-primary mb-3"
+                    disabled={busy !== null}
+                    onClick={() =>
+                      void handleCreateLink()
+                    }
+                  >
+                    Create new link
+                  </button>
+
+                  {link && (
+                    <div className="border rounded p-3 mb-3">
+                      <div className="fw-semibold mb-2">
+                        Newly created link
+                      </div>
+
                       <input
                         className="form-control mb-2"
                         readOnly
                         value={joinUrl ?? ''}
                       />
 
-                      <div className="small text-secondary mb-3">
+                      <div className="small text-secondary">
                         Expires:{' '}
                         {new Date(
                           link.expires_at,
                         ).toLocaleString()}
                       </div>
+                    </div>
+                  )}
 
-                      <button
-                        className="btn btn-outline-danger btn-sm"
-                        disabled={busy !== null}
-                        onClick={() =>
-                          void handleRevokeLink()
-                        }
-                      >
-                        Revoke link
-                      </button>
-                    </>
+                  <div className="fw-semibold mb-2">
+                    Active links
+                  </div>
+
+                  {activeInvitationLinks.length === 0 ? (
+                    <div className="text-secondary small">
+                      No active invitation links.
+                    </div>
+                  ) : (
+                    <div className="vstack gap-2">
+                      {activeInvitationLinks.map(
+                        (activeLink) => (
+                          <div
+                            className="border rounded p-3"
+                            key={activeLink.id}
+                          >
+                            <div className="small">
+                              Created:{' '}
+                              {new Date(
+                                activeLink.created_at,
+                              ).toLocaleString()}
+                            </div>
+
+                            <div className="small text-secondary mb-2">
+                              Expires:{' '}
+                              {new Date(
+                                activeLink.expires_at,
+                              ).toLocaleString()}
+                            </div>
+
+                            <button
+                              className="btn btn-outline-danger btn-sm"
+                              disabled={busy !== null}
+                              onClick={() =>
+                                void handleRevokeLink(
+                                  activeLink.id,
+                                )
+                              }
+                            >
+                              {busy ===
+                              `revoke-link-${activeLink.id}`
+                                ? 'Revoking...'
+                                : 'Revoke'}
+                            </button>
+                          </div>
+                        ),
+                      )}
+                    </div>
                   )}
                 </div>
               </div>

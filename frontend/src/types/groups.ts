@@ -29,3 +29,11 @@ export type GroupInvitationLink = {
   created_at: string
   expires_at: string
 }
+
+
+export type GroupInvitationLinkSummary = {
+  id: number
+  created_by: PublicUser
+  created_at: string
+  expires_at: string
+}
