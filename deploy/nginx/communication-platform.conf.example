@@ -1,11 +1,19 @@
 # Example Nginx site for Communication Platform.
 #
 # Replace chat.example.com with the actual production hostname(s).
-# This file assumes the repository lives at /srv/communication-platform.
 #
-# IMPORTANT: /media/ is intentionally NOT served by Nginx. Message attachments
-# are private application resources and must be downloaded through Django's
-# authorization-checked attachment endpoint.
+# This example matches the established V1 VPS layout:
+#
+#   /srv/communication-platform/app                  Git checkout
+#   /srv/communication-platform/app/frontend/dist    React production build
+#   /srv/communication-platform/app/backend/staticfiles
+#                                                    Django collectstatic output
+#   /srv/communication-platform/shared/media         private attachment storage
+#
+# IMPORTANT:
+# /media/ must NOT expose DJANGO_MEDIA_ROOT. Message attachments are private
+# application resources and are downloaded through Django's authorization-
+# checked attachment API.
 
 server {
     listen 80;
@@ -13,36 +21,34 @@ server {
 
     server_name chat.example.com;
 
-    # Keep HTTP only long enough to obtain/verify TLS, then redirect to HTTPS.
-    location / {
-        return 301 https://$host$request_uri;
-    }
+    return 301 https://$host$request_uri;
 }
 
 server {
-    listen 443 ssl http2;
-    listen [::]:443 ssl http2;
+    listen 443 ssl;
+    listen [::]:443 ssl;
 
     server_name chat.example.com;
 
-    # Configure certificates according to the TLS tooling used on the server.
     ssl_certificate /etc/letsencrypt/live/chat.example.com/fullchain.pem;
     ssl_certificate_key /etc/letsencrypt/live/chat.example.com/privkey.pem;
 
-    # React production build.
-    root /srv/communication-platform/frontend/dist;
+    # If Certbot manages TLS on the server, keep its generated include/dhparam
+    # lines as appropriate for that deployment.
+    # include /etc/letsencrypt/options-ssl-nginx.conf;
+    # ssl_dhparam /etc/letsencrypt/ssl-dhparams.pem;
+
+    root /srv/communication-platform/app/frontend/dist;
     index index.html;
 
-    # V1 permits up to 5 x 10 MiB attachments per message by default. Keep this
-    # above the maximum multipart request size, and revisit it if the Django
-    # attachment limits are changed.
+    # V1 defaults permit 5 attachments x 10 MiB each. Keep the proxy request
+    # limit above the maximum multipart request size. Revisit this value if
+    # MESSAGE_ATTACHMENT_MAX_SIZE_BYTES or MESSAGE_MAX_ATTACHMENTS changes.
     client_max_body_size 55m;
 
-    # Django collected static files (account pages/admin/static assets).
+    # Django collected static files.
     location /static/ {
-        alias /srv/communication-platform/backend/staticfiles/;
-        access_log off;
-        expires 7d;
+        alias /srv/communication-platform/app/backend/staticfiles/;
     }
 
     # Never expose private attachment storage directly.
@@ -53,35 +59,31 @@ server {
     # Django REST API.
     location /api/ {
         proxy_pass http://127.0.0.1:8000;
-        proxy_http_version 1.1;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
     }
 
-    # Django-rendered authentication/account pages.
+    # Django account/session pages.
     location /accounts/ {
         proxy_pass http://127.0.0.1:8000;
-        proxy_http_version 1.1;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
     }
 
-    # Optional Django admin. Remove this block and disable the route separately
-    # if the production deployment should not expose Django admin at all.
+    # Optional Django admin.
     location /admin/ {
         proxy_pass http://127.0.0.1:8000;
-        proxy_http_version 1.1;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
     }
 
-    # Authenticated Channels WebSocket endpoint.
+    # Django Channels / WebSockets.
     location /ws/ {
         proxy_pass http://127.0.0.1:8000;
         proxy_http_version 1.1;
@@ -91,11 +93,11 @@ server {
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
-        proxy_read_timeout 75s;
+        proxy_read_timeout 3600s;
+        proxy_send_timeout 3600s;
     }
 
-    # React Router SPA fallback. Requests for real frontend files are served as
-    # files; application routes fall back to index.html.
+    # React Router SPA fallback.
     location / {
         try_files $uri $uri/ /index.html;
     }

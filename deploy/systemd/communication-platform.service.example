@@ -1,18 +1,14 @@
 [Unit]
-Description=Communication Platform Daphne ASGI service
-After=network.target
-Wants=network.target
+Description=CommunicationPlatform Daphne ASGI Service
+After=network.target postgresql.service redis-server.service
+Requires=postgresql.service redis-server.service
 
 [Service]
 Type=simple
-
-# Use the account that owns/runs the application on the VPS. A dedicated
-# unprivileged service account is recommended.
-User=communication-platform
-Group=communication-platform
-
-WorkingDirectory=/srv/communication-platform/backend
-EnvironmentFile=/srv/communication-platform/.env.production
+User=communication
+Group=communication
+WorkingDirectory=/srv/communication-platform/app/backend
+EnvironmentFile=/etc/communication-platform.env
 
 ExecStart=/srv/communication-platform/.venv/bin/daphne \
     -b 127.0.0.1 \
@@ -20,13 +16,7 @@ ExecStart=/srv/communication-platform/.venv/bin/daphne \
     config.asgi:application
 
 Restart=on-failure
-RestartSec=3
-TimeoutStopSec=30
-KillSignal=SIGTERM
-
-# Python should write logs to stdout/stderr; systemd/journald captures them.
-StandardOutput=journal
-StandardError=journal
+RestartSec=5
 
 [Install]
 WantedBy=multi-user.target

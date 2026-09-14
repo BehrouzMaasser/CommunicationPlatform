@@ -2,40 +2,69 @@
 
 ## 1. Scope
 
-This document describes the V1 production deployment model for Communication Platform.
+This document describes the established V1 production deployment for
+Communication Platform.
 
-The current production stack is:
+The production stack is:
 
 ```text
 Nginx
   |
   +-- React production build
-  +-- /static/ files
+  +-- /static/ collected Django files
   +-- reverse proxy to Daphne
             |
             +-- Django / DRF
             +-- Django Channels
                     |
-               Redis
+                  Redis
 
 Django / DRF
     |
 PostgreSQL
 ```
 
-Message attachments are stored in `DJANGO_MEDIA_ROOT`, but that directory is **not public web content**. Attachment downloads are served only through the authorization-checked Django API.
-
-The repository examples assume the application checkout is located at:
-
-```text
-/srv/communication-platform
-```
-
-Adjust paths consistently if the real deployment uses another location.
+Message attachments are stored outside the Git checkout in
+`DJANGO_MEDIA_ROOT`. That directory is private storage and must not be exposed
+through an Nginx `/media/` alias. Attachment downloads go through Django's
+authorization-checked API.
 
 ---
 
-## 2. Deployment Branch Workflow
+## 2. Established VPS Layout
+
+V1 uses this server layout:
+
+```text
+/srv/communication-platform/
+├── app/                     Git checkout
+│   ├── backend/
+│   └── frontend/
+├── .venv/                   Python virtual environment
+└── shared/
+    └── media/               persistent private attachments
+
+/etc/communication-platform.env
+                             private production environment
+
+/etc/systemd/system/communication-platform.service
+                             Daphne service
+
+/etc/nginx/...               live Nginx configuration
+```
+
+Generated frontend and Django static files live inside the checkout:
+
+```text
+/srv/communication-platform/app/frontend/dist
+/srv/communication-platform/app/backend/staticfiles
+```
+
+Both are deployment artifacts and are regenerated when needed.
+
+---
+
+## 3. Deployment Branch Workflow
 
 The project intentionally uses:
 
@@ -49,61 +78,66 @@ deployment-development
 VPS
 ```
 
-The VPS remains on `deployment-development`.
+The VPS stays on `deployment-development`.
 
-Do not switch the VPS to `main` as part of the normal deployment process.
-
-A normal deployment begins with a clean working tree on the VPS and updates that branch with a fast-forward pull.
+The Git checkout is owned by the unprivileged `communication` user. When
+deploying from a root shell, run Git commands as that user rather than marking
+the repository globally safe for root.
 
 Example:
 
 ```bash
-cd /srv/communication-platform
-git status
-git switch deployment-development
-git pull --ff-only origin deployment-development
+cd /srv/communication-platform/app
+
+sudo -u communication -H git status
+sudo -u communication -H git branch --show-current
+sudo -u communication -H git fetch origin
+sudo -u communication -H git pull --ff-only origin deployment-development
 ```
 
-Do not deploy over uncommitted VPS changes.
+The working tree must be clean before deployment.
 
 ---
 
-## 3. Production Environment
+## 4. Production Environment
 
-Create a private production environment file outside version control at:
+The real production environment is stored outside Git at:
 
 ```text
-/srv/communication-platform/.env.production
+/etc/communication-platform.env
 ```
 
-Use `.env.production.example` as the template.
+Use the tracked `.env.production.example` only as a reference.
 
-At minimum, set real values for:
+Important V1 values include:
 
 ```text
 DJANGO_SETTINGS_MODULE=config.settings.production
+
 DJANGO_SECRET_KEY=...
 DJANGO_ALLOWED_HOSTS=...
 DJANGO_CSRF_TRUSTED_ORIGINS=...
-DJANGO_FRONTEND_BASE_URL=...
 
 POSTGRES_DB=...
 POSTGRES_USER=...
 POSTGRES_PASSWORD=...
 POSTGRES_HOST=127.0.0.1
 POSTGRES_PORT=5432
+
 POSTGRES_CONN_MAX_AGE=0
 
 REDIS_URL=redis://127.0.0.1:6379/0
 
-DJANGO_MEDIA_ROOT=/srv/communication-platform/media
+DJANGO_MEDIA_ROOT=/srv/communication-platform/shared/media
 ```
 
-For a same-origin production frontend, `DJANGO_FRONTEND_BASE_URL` and `DJANGO_CORS_ALLOWED_ORIGINS` may remain empty. Django then redirects to same-origin frontend paths.
+For same-origin production, `DJANGO_FRONTEND_BASE_URL` and
+`DJANGO_CORS_ALLOWED_ORIGINS` may remain unset/empty.
 
-The actual production hostname belongs in this private configuration and in Nginx. It is not application branding.
+The actual production hostname belongs in this private environment and the live
+Nginx configuration. It is deployment configuration, not product branding.
 
-### Database connection requirement
+### PostgreSQL connection requirement
 
 Under the current Daphne/ASGI deployment:
 
@@ -111,355 +145,322 @@ Under the current Daphne/ASGI deployment:
 POSTGRES_CONN_MAX_AGE=0
 ```
 
-is intentional and required. Production settings reject a non-zero value.
+is required and enforced by production settings.
 
-Do not increase PostgreSQL `max_connections` as a substitute for correct connection handling.
+Do not increase PostgreSQL `max_connections` as a substitute.
 
 ---
 
-## 4. PostgreSQL and Redis
+## 5. PostgreSQL and Redis
 
-PostgreSQL and Redis must not be exposed publicly.
+The established VPS runs PostgreSQL and Redis as system services.
 
-The repository Docker Compose configuration binds their published ports to loopback:
+The Daphne unit starts after and requires:
 
 ```text
-127.0.0.1:5432
-127.0.0.1:6379
+postgresql.service
+redis-server.service
 ```
 
-If Docker Compose is used on the VPS, ensure the private production database credentials are available to Compose before starting PostgreSQL.
+They should remain local/private and must not be publicly exposed.
 
-Example:
-
-```bash
-cd /srv/communication-platform
-set -a
-. ./.env.production
-set +a
-docker compose up -d postgres redis
-```
-
-Changing `POSTGRES_PASSWORD` in the environment does not change the password inside an already initialized PostgreSQL volume. Database credential changes must be performed deliberately in PostgreSQL.
+Docker Compose in the repository is primarily for local development and is not
+required by the established VPS deployment.
 
 ---
 
-## 5. Python Environment
+## 6. Update Python Dependencies
 
-Create the virtual environment once:
-
-```bash
-cd /srv/communication-platform
-python -m venv .venv
-```
-
-On each deployment, synchronize Python dependencies:
-
-```bash
-/srv/communication-platform/.venv/bin/python -m pip install \
-    -r /srv/communication-platform/backend/requirements.txt
-```
-
-The production process uses this same virtual environment.
-
----
-
-## 6. Frontend Build
-
-Install exactly the dependency versions described by the lockfile and build the production frontend:
-
-```bash
-cd /srv/communication-platform/frontend
-npm ci
-npm run build
-```
-
-The resulting production files are written to:
+The production virtual environment is outside the Git checkout:
 
 ```text
-/srv/communication-platform/frontend/dist
+/srv/communication-platform/.venv
 ```
 
-Nginx serves this directory directly.
+After pulling a release:
+
+```bash
+sudo -u communication -H \
+  /srv/communication-platform/.venv/bin/python -m pip install \
+  -r /srv/communication-platform/app/backend/requirements.txt
+```
 
 ---
 
-## 7. Running Production Django Commands
+## 7. Build the Frontend
+
+Install the exact locked frontend dependencies and build:
+
+```bash
+sudo -u communication -H bash -lc '
+  cd /srv/communication-platform/app/frontend
+  npm ci
+  npm run build
+'
+```
+
+Nginx serves:
+
+```text
+/srv/communication-platform/app/frontend/dist
+```
+
+---
+
+## 8. Run Production Django Commands
 
 `backend/manage.py` defaults to development settings for local convenience.
 
-Therefore production management commands must receive the production environment explicitly.
+The VPS production environment lives in `/etc/communication-platform.env`, so
+load it before running management commands.
 
-From the repository root:
+From a root shell:
 
 ```bash
-cd /srv/communication-platform
 set -a
-. ./.env.production
+. /etc/communication-platform.env
 set +a
 ```
 
-Confirm the environment before making production changes:
+Then run Django commands as the `communication` user while preserving that
+environment:
 
 ```bash
-echo "$DJANGO_SETTINGS_MODULE"
+runuser -u communication --preserve-environment -- \
+  /srv/communication-platform/.venv/bin/python \
+  /srv/communication-platform/app/backend/manage.py check
 ```
 
-It should be:
+Production deploy check:
+
+```bash
+runuser -u communication --preserve-environment -- \
+  /srv/communication-platform/.venv/bin/python \
+  /srv/communication-platform/app/backend/manage.py check --deploy
+```
+
+During initial HTTPS verification, `security.W004` is expected while
+`DJANGO_SECURE_HSTS_SECONDS=0`.
+
+Migration drift check:
+
+```bash
+runuser -u communication --preserve-environment -- \
+  /srv/communication-platform/.venv/bin/python \
+  /srv/communication-platform/app/backend/manage.py \
+  makemigrations --check --dry-run
+```
+
+Normal migration application:
+
+```bash
+runuser -u communication --preserve-environment -- \
+  /srv/communication-platform/.venv/bin/python \
+  /srv/communication-platform/app/backend/manage.py migrate --noinput
+```
+
+Do not perform the planned V1 destructive database/migration reset as part of
+an ordinary deployment.
+
+Collect static files:
+
+```bash
+runuser -u communication --preserve-environment -- \
+  /srv/communication-platform/.venv/bin/python \
+  /srv/communication-platform/app/backend/manage.py \
+  collectstatic --noinput
+```
+
+This generates:
 
 ```text
-config.settings.production
-```
-
-### Production checks
-
-```bash
-.venv/bin/python backend/manage.py check
-.venv/bin/python backend/manage.py check --deploy
-```
-
-Review `check --deploy` warnings deliberately. HSTS may intentionally remain at zero during initial HTTPS verification.
-
-### Migration drift check
-
-```bash
-.venv/bin/python backend/manage.py makemigrations --check --dry-run
-```
-
-A release deployment should not discover unexpected model changes.
-
-### Apply migrations
-
-```bash
-.venv/bin/python backend/manage.py migrate --noinput
-```
-
-Normal deployments use Django migrations. Destructive database resets are **not** part of the normal deployment procedure.
-
-The planned one-time V1 clean migration/database reset must be performed only after the V1 codebase is frozen and separately verified.
-
-### Collect static files
-
-```bash
-.venv/bin/python backend/manage.py collectstatic --noinput
-```
-
-Production collected static files are written to:
-
-```text
-/srv/communication-platform/backend/staticfiles
+/srv/communication-platform/app/backend/staticfiles
 ```
 
 ---
 
-## 8. Media / Attachment Storage
+## 9. Private Media / Attachments
 
-Production attachment storage defaults to the configured `DJANGO_MEDIA_ROOT`, for example:
+Persistent attachment storage is:
 
 ```text
-/srv/communication-platform/media
+/srv/communication-platform/shared/media
 ```
 
-The Daphne service account must be able to create and delete files there.
+Nginx must not serve that directory directly.
 
-Example, if using a dedicated `communication-platform` service account:
+The application authorizes attachment downloads through:
 
-```bash
-sudo mkdir -p /srv/communication-platform/media
-sudo chown -R communication-platform:communication-platform \
-    /srv/communication-platform/media
+```text
+/api/v1/attachments/<attachment_id>/
 ```
 
-### Security requirement
-
-Do **not** configure Nginx with a public alias such as:
+Recommended Nginx defense-in-depth:
 
 ```nginx
 location /media/ {
-    alias /srv/communication-platform/media/;
+    return 404;
 }
 ```
 
-That would bypass conversation authorization for private message attachments.
-
-The provided Nginx example instead returns `404` for `/media/`.
-
-Clients download attachments through:
-
-```text
-/api/v1/attachments/<attachment-id>/
-```
-
-where Django checks access to the owning message/conversation before returning the file.
-
----
-
-## 9. Daphne / systemd
-
-An example unit is provided at:
-
-```text
-deploy/systemd/communication-platform.service.example
-```
-
-Install it only after adapting the service account and paths to the VPS:
-
-```bash
-sudo cp \
-    deploy/systemd/communication-platform.service.example \
-    /etc/systemd/system/communication-platform.service
-```
-
-Then:
-
-```bash
-sudo systemctl daemon-reload
-sudo systemctl enable communication-platform
-sudo systemctl restart communication-platform
-sudo systemctl status communication-platform
-```
-
-Follow logs with:
-
-```bash
-journalctl -u communication-platform -f
-```
-
-Daphne should listen only on loopback:
-
-```text
-127.0.0.1:8000
-```
-
-Nginx is the public entry point.
+Never replace that block with an `alias` to `shared/media`.
 
 ---
 
 ## 10. Nginx
 
-An example site is provided at:
+The tracked example is:
 
 ```text
 deploy/nginx/communication-platform.conf.example
 ```
 
-Adapt at least:
+The live deployment may contain additional domain/TLS redirect server blocks.
+Keep those deployment-specific blocks when updating the main application
+server.
 
-- `server_name`
-- TLS certificate paths
-- repository path if different from `/srv/communication-platform`
-
-The example sets `client_max_body_size 55m` because the default V1 application limits permit up to five 10 MiB attachments in one multipart message request. If the application attachment limits change, review the Nginx request-body limit at the same time.
-
-The example routes:
+The main application server must provide:
 
 ```text
-/           -> React SPA / frontend files
-/api/       -> Daphne
-/accounts/  -> Daphne
-/admin/     -> Daphne
-/ws/        -> Daphne with WebSocket Upgrade headers
-/static/    -> collected Django static files
-/media/     -> 404 (private attachment storage is not public)
+/            React SPA + fallback
+/api/        Daphne
+/accounts/   Daphne
+/admin/      Daphne if intentionally enabled
+/ws/         Daphne with WebSocket upgrade
+/static/     Django collectstatic output
+/media/      denied; never an alias
 ```
 
-Install the adapted site according to the server's Nginx layout, then validate before reload:
+### Upload size
 
-```bash
-sudo nginx -t
-sudo systemctl reload nginx
-```
-
-The SPA fallback is important: application routes such as `/messages` and `/groups/...` must return the React `index.html` instead of a 404 when loaded directly or refreshed.
-
----
-
-## 11. Recommended Deployment Sequence
-
-For an ordinary code deployment:
+V1 defaults allow:
 
 ```text
-1. Verify deployment-development is clean/current.
-2. Pull deployment-development with --ff-only.
-3. Install/synchronize Python dependencies.
-4. npm ci.
-5. npm run build.
-6. Load the private production environment.
-7. Run Django checks.
-8. Run makemigrations --check --dry-run.
-9. Apply migrate --noinput.
-10. Run collectstatic --noinput.
-11. Restart Daphne/systemd service.
-12. Validate Nginx configuration and reload Nginx if its configuration changed.
-13. Run smoke tests.
+5 attachments × 10 MiB each
 ```
 
-If database migrations are included in a release, take an appropriate production database backup before migration according to the server's backup policy.
+so the Nginx default request-body limit is insufficient.
 
----
+The V1 example uses:
 
-## 12. Production Smoke Tests
+```nginx
+client_max_body_size 55m;
+```
 
-After deployment, verify at minimum:
+If application attachment limits change, revisit this value too.
 
-### Process / infrastructure
+### Validate Nginx
+
+After editing the live configuration:
 
 ```bash
-systemctl status communication-platform
-journalctl -u communication-platform --since "10 minutes ago"
-docker compose ps
+nginx -t
 ```
 
-Confirm PostgreSQL and Redis are not publicly bound.
+Only after a successful configuration test:
 
-### HTTP / SPA
-
-Verify:
-
-- the homepage loads over HTTPS;
-- a direct React route such as `/messages` does not return an Nginx 404;
-- `/accounts/login/` loads with its static CSS;
-- unauthenticated `/api/v1/users/me/` returns the expected authentication response;
-- authenticated REST requests work;
-- `/media/...` is not publicly served.
-
-### Realtime
-
-Verify:
-
-- authenticated WebSocket connection succeeds through `/ws/v1/`;
-- messages appear realtime between two clients;
-- typing/presence behave normally;
-- reconnect/reconciliation succeeds after temporarily disconnecting a client.
-
-### Attachments
-
-Verify:
-
-- an authorized participant can download an attachment through the API;
-- an unauthorized user cannot retrieve it;
-- guessing the underlying `/media/` path does not expose the file.
-
-### Database connections
-
-During normal application use, monitor PostgreSQL and confirm Daphne does not accumulate long-lived idle Django connections. `POSTGRES_CONN_MAX_AGE` must remain `0`.
+```bash
+systemctl reload nginx
+```
 
 ---
 
-## 13. Fresh-Checkout Release Verification
+## 11. Restart Daphne
 
-Before tagging `v1.0.0`, perform a clean installation test from a fresh checkout rather than relying only on the existing VPS working tree.
+After code/dependencies/migrations/static files are ready:
 
-The test should verify that the repository plus documented private environment values is sufficient to:
+```bash
+systemctl restart communication-platform
+systemctl status communication-platform --no-pager
+```
 
-1. provision PostgreSQL/Redis;
-2. install backend dependencies;
-3. install/build the frontend;
-4. create/apply the final migration set;
-5. collect static files;
-6. start Daphne;
-7. configure Nginx;
-8. register/login users;
-9. use friendships, DMs, groups, attachments, receipts, presence, and realtime behavior.
+Inspect recent logs:
 
-Only after the cleaned V1 passes that test should the final commit be tagged `v1.0.0` and the repository made public.
+```bash
+journalctl -u communication-platform -n 100 --no-pager
+```
+
+Follow logs while smoke-testing:
+
+```bash
+journalctl -u communication-platform -f
+```
+
+---
+
+## 12. Deployment Order
+
+A normal V1 deployment should use this order:
+
+```text
+1. verify clean deployment-development checkout
+2. pull deployment-development
+3. install Python dependencies
+4. npm ci
+5. npm run build
+6. load /etc/communication-platform.env
+7. Django check
+8. makemigrations --check --dry-run
+9. migrate --noinput
+10. collectstatic --noinput
+11. nginx -t if Nginx changed
+12. restart Daphne
+13. reload Nginx if Nginx changed
+14. smoke-test
+```
+
+---
+
+## 13. V1 Production Smoke Test
+
+Verify at minimum:
+
+- root SPA loads;
+- refreshing a React route does not produce a 404;
+- registration/login/logout work;
+- friend request/accept/remove work;
+- direct messaging works in realtime;
+- delivery/read receipts work;
+- typing and presence work;
+- existing DM history remains readable after unfriend;
+- new DM sending is blocked after unfriend;
+- group create/invite/accept/remove/leave/disband work;
+- invitation-link creation/list/revocation work after reload;
+- logged-out invite returns through login/signup to the invitation;
+- attachment upload/download works;
+- `/media/...` is not publicly accessible;
+- group membership revocation removes realtime access;
+- WebSocket reconnect/reconciliation works;
+- PostgreSQL idle connections remain healthy with
+  `POSTGRES_CONN_MAX_AGE=0`.
+
+---
+
+## 14. HSTS
+
+Keep:
+
+```text
+DJANGO_SECURE_HSTS_SECONDS=0
+```
+
+until the HTTPS deployment and redirects have been verified carefully.
+
+After HTTPS is confirmed stable, choose and deploy the production HSTS policy
+deliberately. Do not enable preload casually.
+
+---
+
+## 15. One-Time V1 Reset
+
+The planned clean migration/database reset is not part of the routine
+deployment process.
+
+Perform it only after:
+
+1. the cleaned V1 has passed local tests;
+2. the cleaned V1 has passed this production deployment/smoke test;
+3. the exact code to be frozen has been confirmed stable.
+
+After the one-time reset, verify a fresh empty-database installation before
+tagging the final release.
