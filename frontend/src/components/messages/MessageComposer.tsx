@@ -291,10 +291,19 @@ function MessageComposer({
     event:
       ReactKeyboardEvent<HTMLTextAreaElement>,
   ) {
+    const usesCompactComposer =
+      window.matchMedia(
+        '(max-width: 991.98px)',
+      ).matches
+      || window.matchMedia(
+        '(pointer: coarse)',
+      ).matches
+
     if (
       event.key !== 'Enter' ||
       event.shiftKey ||
-      event.nativeEvent.isComposing
+      event.nativeEvent.isComposing ||
+      usesCompactComposer
     ) {
       return
     }
@@ -482,8 +491,8 @@ function MessageComposer({
           }
         />
 
-        <div className="d-flex flex-column flex-sm-row justify-content-between gap-2">
-          <div className="d-flex align-items-center gap-2">
+        <div className="message-composer-toolbar d-flex flex-row justify-content-between align-items-center gap-2">
+          <div className="message-composer-actions d-flex align-items-center gap-2">
             <div
               className="emoji-picker-shell"
               ref={emojiPickerContainerRef}
@@ -518,10 +527,23 @@ function MessageComposer({
 
             <div>
               <label
-                className={`btn btn-outline-secondary${disabled ? ' disabled' : ''}`}
+                className={`btn btn-outline-secondary message-attachment-button${disabled ? ' disabled' : ''}`}
                 htmlFor="message-attachments"
+                aria-label="Attach files"
+                title="Attach files"
               >
-                Attach files
+                <svg
+                  className="message-action-icon"
+                  viewBox="0 0 24 24"
+                  aria-hidden="true"
+                >
+                  <path
+                    d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"
+                  />
+                </svg>
+                <span className="visually-hidden">
+                  Attach files
+                </span>
               </label>
 
               <input
@@ -542,7 +564,7 @@ function MessageComposer({
           </div>
 
           <button
-            className="btn btn-primary px-4"
+            className="btn btn-primary message-send-button px-3"
             type="submit"
             disabled={
               sending ||

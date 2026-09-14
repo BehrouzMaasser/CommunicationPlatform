@@ -325,6 +325,24 @@ function MessageThread({
                 message.sender.id ===
                 currentUserId
 
+              const deliveredCount =
+                message.receipts.filter(
+                  (receipt) =>
+                    receipt.delivered_at
+                    !== null,
+                ).length
+
+              const readCount =
+                message.receipts.filter(
+                  (receipt) =>
+                    receipt.read_at
+                    !== null,
+                ).length
+
+              const showReceiptState =
+                sentByCurrentUser
+                && message.receipts.length > 0
+
               return (
                 <div
                   className={`message-row d-flex ${sentByCurrentUser ? 'justify-content-start' : 'justify-content-end'}`}
@@ -380,42 +398,29 @@ function MessageThread({
                       </div>
                     )}
 
-                    {
-                      sentByCurrentUser &&
-                      message.receipts.length > 0 && (
-                        <div className="small text-secondary mt-2">
-                          Delivered to{' '}
-                          {
-                            message.receipts.filter(
-                              (receipt) =>
-                                receipt.delivered_at
-                                !== null,
-                            ).length
-                          }
-                          {' · '}
-                          Read by{' '}
-                          {
-                            message.receipts.filter(
-                              (receipt) =>
-                                receipt.read_at
-                                !== null,
-                            ).length
-                          }
-                        </div>
-                      )
-                    }
+                    {(onReply || showReceiptState) && (
+                      <div
+                        className={`message-actions-row d-flex align-items-center gap-3 mt-2 ${onReply ? 'justify-content-between' : 'justify-content-end'}`}
+                      >
+                        {onReply && (
+                          <button
+                            className="btn btn-sm btn-link px-0 py-0"
+                            type="button"
+                            onClick={() =>
+                              onReply(message)
+                            }
+                          >
+                            Reply
+                          </button>
+                        )}
 
-                    {onReply && (
-                      <div className="mt-2">
-                        <button
-                          className="btn btn-sm btn-link px-0 py-0"
-                          type="button"
-                          onClick={() =>
-                            onReply(message)
-                          }
-                        >
-                          Reply
-                        </button>
+                        {showReceiptState && (
+                          <span className="message-receipt-state small text-secondary text-nowrap">
+                            Delivered {deliveredCount}
+                            {' · '}
+                            Read {readCount}
+                          </span>
+                        )}
                       </div>
                     )}
                   </article>

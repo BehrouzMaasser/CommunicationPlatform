@@ -570,30 +570,19 @@ function GroupConversationPage() {
 
   return (
     <section className="conversation-page">
-      <div className="d-flex justify-content-between align-items-center gap-3 mb-3">
-        <Link
-          className="btn btn-link px-0"
-          to={`/groups/${group.id}`}
-        >
-          ← Group details
-        </Link>
-
-        <Link
-          className="btn btn-outline-secondary btn-sm"
-          to="/groups"
-        >
-          All groups
-        </Link>
-      </div>
-
       <div className="card shadow-sm conversation-card">
-        <div className="card-header bg-white py-3">
-          <h1 className="h4 mb-1">
-            {group.name}
-          </h1>
+        <div className="card-header bg-white conversation-header">
+          <div className="d-flex align-items-center justify-content-between gap-2">
+            <h1 className="h5 mb-0 text-truncate">
+              {group.name}
+            </h1>
 
-          <div className="small text-secondary">
-            Group chat · Group #{group.id}
+            <Link
+              className="btn btn-outline-secondary btn-sm conversation-header-action"
+              to={`/groups/${group.id}`}
+            >
+              Details
+            </Link>
           </div>
         </div>
 

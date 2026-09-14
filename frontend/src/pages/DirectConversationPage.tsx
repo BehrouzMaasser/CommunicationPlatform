@@ -496,25 +496,14 @@ function DirectConversationPage() {
 
   return (
     <section className="conversation-page">
-      <Link
-        className="btn btn-link px-0 mb-3"
-        to="/messages"
-      >
-        ← Back to messages
-      </Link>
-
       <div className="card shadow-sm conversation-card">
-        <div className="card-header bg-white py-3">
-          <h1 className="h4 mb-1">
-            @{conversation
-              .other_user
-              .username}
-          </h1>
-
-          <div className="small text-secondary d-flex align-items-center gap-2">
-            <span>
-              Direct conversation #{conversation.id}
-            </span>
+        <div className="card-header bg-white conversation-header">
+          <div className="d-flex align-items-center justify-content-between gap-2">
+            <h1 className="h5 mb-0 text-truncate">
+              @{conversation
+                .other_user
+                .username}
+            </h1>
 
             <span
               className={

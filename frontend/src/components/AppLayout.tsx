@@ -68,24 +68,31 @@ function ActivityBadge({
 }
 
 
+function getRealtimeStatusPresentation(
+  status: 'connected' | 'connecting' | 'disconnected',
+) {
+  return {
+    label: {
+      connected: 'Live',
+      connecting: 'Connecting',
+      disconnected: 'Offline',
+    }[status],
+    badgeClass: {
+      connected: 'text-bg-success',
+      connecting: 'text-bg-warning',
+      disconnected: 'text-bg-secondary',
+    }[status],
+  }
+}
+
+
 function RealtimeStatusBadge() {
   const { status } =
     useRealtime()
-
-  const label = {
-    connected: 'Live',
-    connecting: 'Connecting',
-    disconnected: 'Offline',
-  }[status]
-
-  const badgeClass = {
-    connected:
-      'text-bg-success',
-    connecting:
-      'text-bg-warning',
-    disconnected:
-      'text-bg-secondary',
-  }[status]
+  const {
+    label,
+    badgeClass,
+  } = getRealtimeStatusPresentation(status)
 
   return (
     <span
@@ -96,6 +103,78 @@ function RealtimeStatusBadge() {
       <span className="connection-status-dot" aria-hidden="true" />
       <span className="d-none d-xl-inline">{label}</span>
     </span>
+  )
+}
+
+
+function MobileAccountNav({
+  authStatus,
+  currentUser,
+  isLoggingOut,
+  onLogout,
+}: {
+  authStatus: AuthStatus
+  currentUser: CurrentUser | null
+  isLoggingOut: boolean
+  onLogout: () => void
+}) {
+  const { status } =
+    useRealtime()
+  const {
+    label,
+    badgeClass,
+  } = getRealtimeStatusPresentation(status)
+
+  return (
+    <div className="app-mobile-account-nav d-flex d-sm-none">
+      {authStatus === 'authenticated' && currentUser && (
+        <>
+          <a
+            className="app-mobile-user-link"
+            href="/accounts/me/"
+            title={`${currentUser.username} · ${label}`}
+          >
+            <span
+              className={`connection-status mobile-connection-status ${badgeClass}`}
+              aria-label={`Realtime status: ${label}`}
+            >
+              <span className="connection-status-dot" aria-hidden="true" />
+            </span>
+            <strong>{currentUser.username}</strong>
+          </a>
+
+          <details className="app-mobile-account-menu">
+            <summary aria-label="Open account menu">
+              <span aria-hidden="true">⋮</span>
+            </summary>
+            <div className="app-mobile-account-menu-panel">
+              <a href="/accounts/me/">Account</a>
+              <button
+                type="button"
+                disabled={isLoggingOut}
+                onClick={onLogout}
+              >
+                {isLoggingOut ? 'Signing out…' : 'Sign out'}
+              </button>
+            </div>
+          </details>
+        </>
+      )}
+
+      {authStatus === 'loading' && (
+        <span className="app-session-label ms-auto">Loading…</span>
+      )}
+
+      {authStatus === 'anonymous' && (
+        <a className="app-mobile-sign-in ms-auto" href="/accounts/login/">
+          Sign in
+        </a>
+      )}
+
+      {authStatus === 'error' && (
+        <span className="app-session-error ms-auto">Session unavailable</span>
+      )}
+    </div>
   )
 }
 
@@ -151,8 +230,17 @@ function AppLayoutContent({
             aria-label="Communication Platform home"
           >
             <span className="app-brand-mark" aria-hidden="true">CP</span>
-            <span>Communication Platform</span>
+            <span className="app-brand-name">Communication Platform</span>
           </NavLink>
+
+          <MobileAccountNav
+            authStatus={authStatus}
+            currentUser={currentUser}
+            isLoggingOut={isLoggingOut}
+            onLogout={() => {
+              void handleLogout()
+            }}
+          />
 
           <div className="navbar-nav app-main-nav flex-row">
             <NavLink
@@ -199,7 +287,7 @@ function AppLayoutContent({
             </NavLink>
           </div>
 
-          <div className="app-account-nav ms-auto d-flex align-items-center gap-2">
+          <div className="app-account-nav ms-auto d-none d-sm-flex align-items-center gap-2">
             {authStatus ===
               'authenticated' && (
               <RealtimeStatusBadge />

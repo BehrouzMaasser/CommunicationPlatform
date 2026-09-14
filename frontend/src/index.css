@@ -155,6 +155,129 @@ a {
   font-size: 0.9rem;
 }
 
+.app-mobile-account-nav {
+  align-items: center;
+  min-width: 0;
+  flex: 1 1 auto;
+  gap: 0.35rem;
+}
+
+.app-mobile-user-link {
+  display: inline-flex;
+  min-width: 0;
+  flex: 1 1 auto;
+  align-items: center;
+  gap: 0.4rem;
+  color: rgba(255, 255, 255, 0.9);
+  text-decoration: none;
+}
+
+.app-mobile-user-link:hover,
+.app-mobile-user-link:focus {
+  color: #fff;
+}
+
+.app-mobile-user-link strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.86rem;
+  font-weight: 700;
+}
+
+.mobile-connection-status {
+  min-width: 0;
+  flex: 0 0 auto;
+  padding: 0;
+  background: transparent !important;
+}
+
+.mobile-connection-status.text-bg-success,
+.mobile-connection-status.text-bg-warning,
+.mobile-connection-status.text-bg-secondary {
+  background: transparent !important;
+}
+
+.app-mobile-account-menu {
+  position: relative;
+  flex: 0 0 auto;
+}
+
+.app-mobile-account-menu summary {
+  display: grid;
+  width: 2rem;
+  height: 2rem;
+  place-items: center;
+  color: rgba(255, 255, 255, 0.76);
+  border-radius: 0.55rem;
+  cursor: pointer;
+  font-size: 1.2rem;
+  line-height: 1;
+  list-style: none;
+}
+
+.app-mobile-account-menu summary::-webkit-details-marker {
+  display: none;
+}
+
+.app-mobile-account-menu summary:hover,
+.app-mobile-account-menu summary:focus,
+.app-mobile-account-menu[open] summary {
+  color: #fff;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.app-mobile-account-menu-panel {
+  position: absolute;
+  top: calc(100% + 0.4rem);
+  right: 0;
+  z-index: 1040;
+  min-width: 8.5rem;
+  padding: 0.35rem;
+  background: #fff;
+  border: 1px solid var(--app-border);
+  border-radius: 0.7rem;
+  box-shadow: 0 12px 30px rgba(17, 24, 39, 0.16);
+}
+
+.app-mobile-account-menu-panel a,
+.app-mobile-account-menu-panel button {
+  display: block;
+  width: 100%;
+  padding: 0.48rem 0.58rem;
+  color: #374151;
+  background: transparent;
+  border: 0;
+  border-radius: 0.5rem;
+  text-align: left;
+  text-decoration: none;
+  font-size: 0.86rem;
+}
+
+.app-mobile-account-menu-panel a:hover,
+.app-mobile-account-menu-panel a:focus,
+.app-mobile-account-menu-panel button:hover,
+.app-mobile-account-menu-panel button:focus {
+  color: #111827;
+  background: #f3f4f6;
+}
+
+.app-mobile-account-menu-panel button:disabled {
+  opacity: 0.6;
+}
+
+.app-mobile-sign-in {
+  color: rgba(255, 255, 255, 0.88);
+  text-decoration: none;
+  font-size: 0.84rem;
+  font-weight: 650;
+}
+
+.app-mobile-sign-in:hover,
+.app-mobile-sign-in:focus {
+  color: #fff;
+}
+
 .app-user-chip {
   align-items: center;
   gap: 0.5rem;
@@ -609,25 +732,69 @@ a {
   .app-main {
     min-height: 0;
   }
+
+  .app-main:has(.conversation-page) {
+    overflow: hidden;
+    padding-top: 0.75rem !important;
+    padding-bottom: 0.75rem !important;
+  }
+
+  .app-shell:has(.conversation-page .message-composer-form textarea:focus) .app-navbar {
+    display: none;
+  }
+
+  .conversation-card:has(.message-composer-form textarea:focus) > .conversation-header {
+    display: none;
+  }
 }
 
 @media (max-width: 575.98px) {
+  .app-navbar {
+    min-height: 0;
+    padding-top: 0.45rem;
+    padding-bottom: 0.4rem;
+  }
+
   .app-navbar-inner {
     gap: 0.65rem;
+    row-gap: 0.35rem;
+  }
+
+  .app-brand {
+    margin-right: 0;
+  }
+
+  .app-brand-name {
+    display: none;
+  }
+
+  .app-brand-mark {
+    width: 1.85rem;
+    height: 1.85rem;
+    border-radius: 0.58rem;
+    font-size: 0.78rem;
   }
 
   .app-main-nav {
     justify-content: space-between;
+    padding-top: 0;
   }
 
   .app-navbar .nav-link {
-    padding-right: 0.58rem;
-    padding-left: 0.58rem;
+    padding: 0.32rem 0.58rem;
     font-size: 0.88rem;
   }
 
   .app-account-nav {
     gap: 0.35rem !important;
+    margin-left: auto;
+  }
+
+  .connection-status {
+    min-width: 1.7rem;
+    justify-content: center;
+    padding-right: 0.38rem;
+    padding-left: 0.38rem;
   }
 
   .btn-nav-primary,
@@ -663,6 +830,10 @@ a {
   min-height: 0;
   flex: 1 1 auto;
   flex-direction: column;
+}
+
+.conversation-header {
+  padding: 0.8rem 1rem;
 }
 
 .conversation-card-body {
@@ -754,19 +925,105 @@ a {
 }
 
 @media (max-width: 575.98px) {
+  .app-main:has(.conversation-page) {
+    --bs-gutter-x: 1rem;
+    padding-top: 0.4rem !important;
+    padding-bottom: 0.4rem !important;
+  }
+
+  .conversation-card {
+    border-radius: 0.75rem;
+  }
+
+  .conversation-header {
+    padding: 0.5rem 0.7rem;
+  }
+
+  .conversation-header h1 {
+    font-size: 1rem;
+  }
+
+  .conversation-header-action {
+    --bs-btn-padding-y: 0.2rem;
+    --bs-btn-padding-x: 0.5rem;
+    --bs-btn-font-size: 0.75rem;
+  }
+
+  .conversation-card-body {
+    padding: 0.5rem 0.6rem;
+  }
+
+  .conversation-card > .card-footer {
+    padding: 0.5rem 0.6rem !important;
+  }
+
   .message-bubble {
-    max-width: 88%;
+    max-width: 92%;
+    padding: 0.65rem 0.75rem;
   }
 
   .message-meta {
-    align-items: flex-start !important;
-    flex-direction: column;
-    gap: 0.1rem !important;
+    align-items: baseline !important;
+    flex-direction: row;
+    gap: 0.5rem !important;
+    margin-bottom: 0.4rem !important;
   }
+
+  .message-meta .small {
+    font-size: 0.7rem;
+  }
+
+  .message-reply-preview {
+    margin-bottom: 0.55rem;
+    padding: 0.4rem 0.55rem;
+  }
+
+  .message-actions-row {
+    margin-top: 0.35rem !important;
+  }
+
+  .message-receipt-state {
+    max-width: 70%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    font-size: 0.68rem;
+  }
+}
+
+.message-actions-row {
+  min-height: 1.35rem;
+}
+
+.message-receipt-state {
+  font-size: 0.74rem;
 }
 
 .message-composer-form {
   position: relative;
+}
+
+.message-composer-toolbar,
+.message-composer-actions {
+  min-width: 0;
+}
+
+.message-action-icon {
+  width: 1.15rem;
+  height: 1.15rem;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.message-attachment-button {
+  display: inline-grid;
+  min-width: 2.5rem;
+  min-height: 2.375rem;
+  place-items: center;
+  padding-right: 0.6rem;
+  padding-left: 0.6rem;
 }
 
 .emoji-picker-shell {
@@ -829,6 +1086,31 @@ a {
 }
 
 @media (max-width: 575.98px) {
+  .message-composer-form textarea {
+    margin-bottom: 0.4rem !important;
+  }
+
+  .message-composer-toolbar {
+    gap: 0.45rem !important;
+  }
+
+  .message-composer-actions {
+    gap: 0.4rem !important;
+  }
+
+  .emoji-toggle-button,
+  .message-attachment-button {
+    min-width: 2.4rem;
+    min-height: 2.25rem;
+    padding: 0.38rem 0.55rem;
+  }
+
+  .message-send-button {
+    --bs-btn-padding-y: 0.38rem;
+    --bs-btn-font-size: 0.875rem;
+    white-space: nowrap;
+  }
+
   .emoji-picker {
     width: min(18rem, calc(100vw - 2rem));
   }
