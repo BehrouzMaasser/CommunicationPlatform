@@ -1,165 +1,268 @@
 # Security Architecture
 
-## 1. Security Goals
+## 1. V1 Security Position
 
-The V1 platform provides server-authorized private communication. Stronger end-to-end privacy is a future capability and is not claimed for V1.
+Communication Platform V1 provides **server-authorized private application resources**.
 
-Security is divided into:
+V1 does **not** provide:
 
-1. transport security
-2. authentication
-3. authorization
-4. data protection
-5. end-to-end encryption
+- end-to-end encrypted messaging
+- privacy from the application server
+- encrypted voice/media functionality
 
----
-
-# 2. Transport Security
-
-Production HTTP communication must use HTTPS.
-
-Production WebSocket communication must use WSS.
-
-The application must never transmit authentication credentials or sensitive application data over unencrypted transport.
+The project must not describe V1 as end-to-end encrypted.
 
 ---
 
-# 3. Authentication
+## 2. Transport Security
 
-Authentication determines who a user is.
+Production traffic must use:
 
-Authentication does not determine what the user is allowed to access.
+- HTTPS for HTTP
+- WSS for WebSocket
 
-The backend remains responsible for authentication.
+Production settings enable secure session and CSRF cookies.
+
+Nginx terminates/exposes the public production transport and forwards the application traffic to Daphne as configured by deployment.
 
 ---
 
-# 4. Authorization
+## 3. Authentication
 
-Authorization determines whether an authenticated user may access a resource.
+Identity comes from Django session authentication.
+
+The client must not establish identity by submitting arbitrary user IDs, usernames, or claimed sender IDs.
+
+HTTP/DRF and Channels use the same authenticated Django user.
+
+Unauthenticated protected requests/connections must be rejected.
+
+---
+
+## 4. CSRF
+
+Session-authenticated unsafe HTTP requests require CSRF protection.
+
+The frontend sends the CSRF token using the standard request header.
+
+CSRF protection is not disabled for API convenience.
+
+---
+
+## 5. Authorization
+
+Authorization is server-side.
 
 Examples:
 
-```text
-User ∈ Conversation
-        ↓
-may access conversation
+- only DM participants may read that DM;
+- active friendship is additionally required to send a new DM;
+- only current group members may access group resources;
+- owner-only operations verify owner membership;
+- attachment download checks access through the owning message;
+- realtime conversation subscriptions are authorized;
+- typing publication is separately authorized;
+- delivery/read acknowledgement is authorized through message access.
 
-User ∉ Conversation
-        ↓
-must not access conversation
+Client-side UI gating is not a security boundary.
+
+---
+
+## 6. Private-Resource Semantics
+
+Knowing an object ID is not authorization.
+
+Where practical, inaccessible private resources are represented as not found rather than confirming that they exist.
+
+This applies especially to protected conversations/groups/messages/attachments.
+
+---
+
+## 7. Secrets and Repository Safety
+
+Real secrets must not be committed.
+
+Repository examples may contain placeholders only.
+
+Ignored sensitive material includes:
+
+- real `.env` files
+- private keys
+- credential files
+- local databases
+- SQL dumps
+- backups
+
+Tracked environment examples are:
+
+```text
+.env.example
+.env.production.example
 ```
 
-Authorization must be enforced server-side.
-
-Client-side checks are only UI conveniences and must never be treated as security controls.
+Production secret values are supplied through environment configuration.
 
 ---
 
-# 5. Database Protection
+## 8. Database / Redis Exposure
 
-Initially, message data may be stored normally in PostgreSQL.
+PostgreSQL stores durable application state.
 
-Database access must be restricted to the application and authorized administrators.
+Redis provides realtime infrastructure and ephemeral presence state.
 
-Production credentials must not be committed to the repository.
-
-Secrets must be provided through environment configuration or an appropriate secret-management mechanism.
-
----
-
-# 6. End-to-End Encryption
-
-The architecture must leave room for true end-to-end encryption.
-
-The desired message flow is:
+Docker Compose binds PostgreSQL and Redis published ports to:
 
 ```text
-Sender
-   |
-   | plaintext
-   v
-Client encryption
-   |
-   | ciphertext
-   v
-Server
-   |
-   | ciphertext
-   v
-Database
-   |
-   | ciphertext
-   v
-Recipient
-   |
-   | client decryption
-   v
-plaintext
+127.0.0.1
 ```
 
-The server should not need access to message plaintext after E2EE is implemented.
+They are not intended to be publicly exposed.
+
+Database/Redis credentials must remain private.
 
 ---
 
-# 7. Cryptographic Requirements
+## 9. ASGI Database Connections
 
-The project must not implement custom cryptographic algorithms.
+Production intentionally uses:
 
-Established cryptographic primitives and protocols must be used.
+```text
+POSTGRES_CONN_MAX_AGE=0
+```
 
-Before implementing E2EE, the project must define:
+under the current Daphne/ASGI architecture.
 
-* identity keys
-* session keys
-* key exchange
-* key storage
-* device identity
-* device addition/removal
-* key rotation
-* member addition
-* member removal
-* message authentication
-* replay protection
-* recovery procedures
+This prevents the previously observed accumulation of large numbers of idle PostgreSQL connections.
+
+Increasing PostgreSQL `max_connections` is not an acceptable substitute for correct application connection handling.
+
+If pooling is introduced later, it should be an explicit deployment architecture change.
 
 ---
 
-# 8. Voice Security
+## 10. WebSocket Security
 
-WebRTC media uses secure media transport.
+The WebSocket ASGI stack uses:
 
-However, transport encryption and end-to-end encryption are different security properties.
+- `AllowedHostsOriginValidator`
+- `AuthMiddlewareStack`
 
-If the architecture later requires that the SFU itself cannot inspect voice media, the voice subsystem will need an additional E2EE design.
+The consumer rejects unauthenticated connections.
 
-That design must be evaluated separately before implementation.
+Each subscription is authorized server-side.
 
----
+Current group membership is required for group subscription.
 
-# 9. Threat Model
+Direct subscription requires DM participant identity.
 
-Before implementing E2EE, we will explicitly define which attackers the system is designed to resist.
+When group access is revoked, active connections are force-unsubscribed.
 
-At minimum we will consider:
-
-* unauthorized users
-* compromised accounts
-* database compromise
-* malicious clients
-* compromised backend infrastructure
-* compromised SFU infrastructure
-* network interception
-* stolen authentication credentials
-* malicious room members
-
-The threat model determines which security properties are actually required.
+Every incoming realtime command is untrusted input and validated.
 
 ---
 
-# 10. Security Principle
+## 11. Presence Privacy
 
-Security features must be implemented based on explicit threat models and established protocols.
+Presence is shared only with current friends.
 
-The project must not claim to provide "private" or "end-to-end encrypted" communication until the corresponding security properties have actually been implemented and reviewed.
+Presence state is ephemeral.
 
+V1 intentionally does not expose last-online history.
+
+Friendship removal stops future presence sharing between the pair.
+
+---
+
+## 12. Attachment Security
+
+User-controlled original filenames are stored as metadata but are not used as storage paths.
+
+Stored object names are generated.
+
+Download authorization is performed through the owning message/conversation.
+
+Downloads use attachment responses rather than exposing raw media storage paths as authorization.
+
+V1 enforces file-count and file-size limits.
+
+V1 does not claim:
+
+- malware scanning
+- deep MIME/content verification
+
+The stored MIME value may originate from upload metadata and must not be treated as a strong security assertion.
+
+---
+
+## 13. Error / Debug Information
+
+The API must not expose:
+
+- stack traces
+- database exceptions
+- infrastructure credentials
+- secrets
+
+The React API client intentionally avoids turning arbitrary HTML/text 5xx bodies into user-facing error messages.
+
+Production must run with:
+
+```text
+DEBUG=False
+```
+
+---
+
+## 14. End-to-End Encryption
+
+Messaging E2EE is not implemented in V1.
+
+A future E2EE design must use established protocols/primitives and explicitly define at least:
+
+- device/identity keys
+- key agreement
+- key storage
+- device addition/removal
+- rotation
+- group-member addition/removal semantics
+- authentication/integrity
+- replay protection
+- recovery
+
+No custom cryptographic protocol should be invented merely for this project.
+
+---
+
+## 15. Future Voice Security
+
+Voice communication is not implemented in V1.
+
+WebRTC is the expected future media technology, but STUN/TURN and group media topology are not yet frozen.
+
+Before implementation, the voice threat model must decide:
+
+- what infrastructure may observe media;
+- whether TURN is required;
+- whether an SFU or other topology is used;
+- whether media E2EE beyond ordinary WebRTC transport security is required.
+
+Transport encryption and end-to-end encryption are distinct properties.
+
+---
+
+## 16. Threat Model
+
+Security review should consider at least:
+
+- unauthorized users
+- compromised user sessions/accounts
+- malicious authenticated clients
+- network interception
+- database compromise
+- Redis/infrastructure compromise
+- backend compromise
+- malicious conversation/group members
+- stolen credentials
+- future compromised voice infrastructure, if introduced
+
+Security claims must correspond to properties actually implemented and reviewed.

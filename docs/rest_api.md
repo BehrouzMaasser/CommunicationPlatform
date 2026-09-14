@@ -2,1412 +2,980 @@
 
 ## 1. Purpose
 
-This document defines the V1 HTTP/REST API for the communication platform.
+This document defines the implemented V1 HTTP/REST surface of Communication Platform.
 
-The REST API is responsible for:
-
-* session-authenticated application resources
-* user resources
-* friendships and friend requests
-* direct conversation management
-* group conversation management
-* group invitations
-* invitation links
-* message retrieval
-* message creation where appropriate
-* attachments
-* message replies
-* persistent resource state
-
-Realtime communication is handled through WebSockets and is defined separately.
-
-The REST API must conform to the domain rules defined in `docs/domain.md`.
-
----
-
-# 2. API Principles
-
-## 2.1 Versioning
-
-All application endpoints are versioned.
-
-Initial API prefix:
+Base API prefix:
 
 ```text
 /api/v1/
 ```
 
-Examples:
+Authentication uses the Django session.
 
-```text
-/api/v1/users/
-/api/v1/friends/
-/api/v1/dms/
-/api/v1/groups/
-```
-
-Future breaking API changes must use a new API version.
+Unsafe session-authenticated requests require CSRF protection.
 
 ---
 
-# 3. Authentication
+## 2. General Response Semantics
 
-Authentication is required for all user-specific application resources.
-
-V1 uses Django session-based authentication.
-
-A successful login establishes an authenticated session. The browser maintains that session using the session cookie.
-
-For an authenticated HTTP request, the server determines the authenticated user from the authentication session.
-
-Conceptually:
-
-```text
-HTTP Request
-     |
-     v
-Django Session
-     |
-     v
-Authenticated User
-     |
-     v
-request.user
-```
-
-The client must not establish its identity by supplying a `user_id`, `username`, or other user identifier in place of authentication credentials.
-
-Client-supplied user identifiers are treated as request data, not as proof of the caller's identity.
-
-Unauthenticated requests to protected resources return:
-
-```text
-401 Unauthorized
-```
-
-Authentication identity is independent from authorization.
-
-Authentication answers:
-
-> Who is making this request?
-
-Authorization determines:
-
-> Is this authenticated user allowed to perform this operation?
-
-Authorization is enforced by the relevant domain/application operation.
-
-The API must not expose:
-
-* passwords
-* password hashes
-* session credentials
-* authentication secrets
-* other authentication-sensitive data
-
-through ordinary resource representations.
-
-V1 does not use JWT authentication.
-
-Token-based authentication may be introduced in a future version if required by additional clients.
-
----
-
-# 4. Resource Identification
-
-Resources use stable unique identifiers.
-
-The API must not require clients to construct database-specific identifiers or understand database relationships beyond the public API contract.
-
-Example:
-
-```text
-GET /api/v1/dms/{dm_id}/
-```
-
-The client supplies the public resource identifier.
-
-The server determines whether the authenticated user is authorized to access it.
-
----
-
-# 5. Common HTTP Semantics
-
-The API uses standard HTTP semantics.
-
-### Successful retrieval
+Common status codes:
 
 ```text
 200 OK
-```
-
-### Successful creation
-
-```text
 201 Created
-```
-
-### Successful operation with no response body
-
-```text
 204 No Content
-```
-
-### Invalid request
-
-```text
 400 Bad Request
-```
-
-### Authentication required
-
-```text
 401 Unauthorized
-```
-
-### Authenticated but unauthorized
-
-```text
 403 Forbidden
-```
-
-### Resource unavailable/not found
-
-```text
 404 Not Found
-```
-
-### Conflict with current domain state
-
-```text
 409 Conflict
-```
-
-### Unexpected server failure
-
-```text
 500 Internal Server Error
 ```
 
-The final exception-to-status mapping must remain consistent across the API.
-
----
-
-# 6. Error Representation
-
-Errors use a consistent JSON representation.
-
-Conceptually:
+Domain errors generally use:
 
 ```json
 {
-    "detail": "Human-readable error message."
+  "detail": "Human-readable error message."
 }
 ```
 
-Validation errors may additionally identify fields:
+DRF serializer validation may return field-based error objects.
 
-```json
-{
-    "field": [
-        "Validation error."
-    ]
-}
-```
-
-The API must not expose:
-
-* database exceptions
-* stack traces
-* internal implementation details
-* secrets
-* infrastructure credentials
+Protected resources intentionally use private-resource semantics in several places: inaccessible resources may be represented as `404` rather than exposing their existence.
 
 ---
 
-# 7. Authentication Endpoints
+## 3. Pagination
 
-Register, login, and logout are not JSON REST endpoints in V1.
+The global DRF page size is:
 
-They are implemented through ordinary Django views, Django Forms, server-rendered templates, and Django session authentication as defined by `authentication.md`.
+```text
+50
+```
 
-The REST API receives the authenticated Django session cookie on subsequent requests.
+Standard DRF list endpoints return:
 
-A future version may add JSON/SPA authentication endpoints, but such endpoints are outside the V1 REST contract.
+```json
+{
+  "count": 1,
+  "next": null,
+  "previous": null,
+  "results": []
+}
+```
 
-# 8. Users
+One notable exception is the owner-only per-group pending invitation list, which is currently returned as a plain JSON list.
 
-## 8.1 Current User
+---
+
+## 4. Authentication Pages
+
+Registration/login/logout are not `/api/v1/` JSON authentication endpoints.
+
+```http
+GET  /accounts/register/
+POST /accounts/register/
+
+GET  /accounts/login/
+POST /accounts/login/
+
+POST /accounts/logout/
+
+GET  /accounts/me/
+```
+
+See `authentication.md`.
+
+---
+
+## 5. Users
+
+### Current user
 
 ```http
 GET /api/v1/users/me/
 ```
 
-Returns the authenticated user's account representation.
-
-Example:
+Response:
 
 ```json
 {
-    "id": "user-id",
-    "username": "alice",
-    "email": "alice@example.com"
+  "id": 1,
+  "username": "alice",
+  "email": "alice@example.com"
 }
 ```
 
-The response represents the authenticated user determined by the server.
-
-The client must not provide a user ID to select which user is returned.
-
-The endpoint does not expose another user's private account information.
-
-The response must not contain:
-
-* password
-* password hash
-* session credentials
-* authentication secrets
-
----
-
-# 9. User Lookup
-
-V1 exposes a user lookup/search endpoint for functionality that requires selecting users, such as sending friend requests.
+### User lookup
 
 ```http
-GET /api/v1/users/?search=alice
+GET /api/v1/users/?search=ali
 ```
 
-Authentication required.
-
-The V1 search query searches the public username.
-
-Email is not used as a public user-search mechanism.
-
-Only public user information may be returned.
-
-Example:
+Searches case-insensitively by username, excludes the current user, orders by username/id, and returns a paginated list of:
 
 ```json
 {
-    "results": [
-        {
-            "id": "user-id",
-            "username": "alice"
-        }
-    ]
+  "id": 2,
+  "username": "alice2"
 }
 ```
 
-The API must not expose through user search:
-
-* password
-* password hash
-* session information
-* authentication credentials
-* other private account information
+An empty search returns no users.
 
 ---
 
-# 10. Friend Requests
+## 6. Friend Requests
 
-## 10.1 Send Friend Request
+### Send
 
 ```http
 POST /api/v1/friend-requests/
-```
+Content-Type: application/json
 
-Request:
-
-```json
 {
-    "user_id": "target-user-id"
+  "user_id": 2
 }
 ```
 
-Creates a pending friend request.
-
-Successful response:
+Success:
 
 ```text
 201 Created
 ```
 
-The server must reject:
+Response:
 
-* requests to oneself
-* duplicate pending requests
-* requests where the users are already friends
-* invalid target users
+```json
+{
+  "id": 10,
+  "sender": {"id": 1, "username": "alice"},
+  "recipient": {"id": 2, "username": "bob"},
+  "created_at": "..."
+}
+```
 
----
+Important conflicts:
 
-# 11. List Friend Requests
+- self request -> `400`
+- target missing -> `404`
+- already friends -> `409`
+- pending request already exists in either direction -> `409`
 
-Incoming requests:
+### Incoming
 
 ```http
 GET /api/v1/friend-requests/incoming/
 ```
 
-Outgoing requests:
+Paginated.
+
+### Outgoing
 
 ```http
 GET /api/v1/friend-requests/outgoing/
 ```
 
-Pagination applies.
+Paginated.
 
----
-
-# 12. Accept Friend Request
+### Accept
 
 ```http
 POST /api/v1/friend-requests/{request_id}/accept/
 ```
 
-The authenticated user must be the request recipient.
-
-Successful response:
+Success:
 
 ```text
 200 OK
 ```
 
-Acceptance creates the mutual Friendship and deletes the pending FriendRequest row.
+Response is the new Friendship representation:
 
-No persistent accepted-request status is stored.
+```json
+{
+  "id": 20,
+  "friend": {"id": 2, "username": "bob"},
+  "created_at": "..."
+}
+```
 
----
+Only the recipient may accept.
 
-# 13. Reject Friend Request
+### Reject
 
 ```http
 POST /api/v1/friend-requests/{request_id}/reject/
 ```
 
-The authenticated user must be the request recipient.
-
-Successful response:
+Success:
 
 ```text
 204 No Content
 ```
 
-The pending FriendRequest row is deleted. No friendship is established.
+Only the recipient may reject.
 
-## 13.1 Cancel Sent Friend Request
+### Cancel sent request
 
 ```http
 DELETE /api/v1/friend-requests/{request_id}/
 ```
 
-Only the sender of the pending request may cancel it.
-
-Successful response:
+Success:
 
 ```text
 204 No Content
 ```
 
-Cancellation deletes the pending FriendRequest row and does not create a Friendship.
+Only the sender may cancel.
 
-# 14. Friends
+---
+
+## 7. Friends
+
+### List
 
 ```http
 GET /api/v1/friends/
 ```
 
-Returns the authenticated user's friends.
+Paginated list of public users:
 
-Pagination applies.
+```json
+{
+  "id": 2,
+  "username": "bob"
+}
+```
 
-The response contains public friend information required by the client.
+The list does not expose Friendship IDs.
 
----
-
-# 15. Friendship Removal
-
-V1 supports removing an established friendship through:
+### Unfriend
 
 ```http
 DELETE /api/v1/friends/{user_id}/
 ```
 
-This operation removes the friendship relationship.
+Success:
 
-It does not automatically:
+```text
+204 No Content
+```
 
-* delete an existing DM
-* delete DM messages
-* delete group memberships
-* delete other communication resources
-
-Friendship and conversation membership are separate domain concepts.
+Existing DM history remains intact.
 
 ---
 
-# 16. Direct Conversations
+## 8. Direct Conversations
 
-Direct conversations are exposed under `/dms/`.
-
----
-
-# 17. Get or Create DM
-
-```http
-POST /api/v1/dms/
-```
-
-Request:
-
-```json
-{
-    "user_id": "target-user-id"
-}
-```
-
-If a DirectConversation already exists for the authenticated user and target user, the existing conversation is returned.
-
-If no DirectConversation exists, the server may create one only if the two users are currently friends.
-
-A second DirectConversation must never be created for the same unordered pair.
-
-Example response:
-
-```json
-{
-    "id": "dm-id",
-    "participant": {
-        "id": "user-id",
-        "username": "bob",
-        "avatar": null
-    }
-}
-```
-
-The endpoint therefore has get-or-create semantics while enforcing Friendship as the V1 initiation requirement.
-
-# 18. List DMs
+### List
 
 ```http
 GET /api/v1/dms/
 ```
 
-Returns all DirectConversations in which the authenticated user is a participant.
+Paginated.
 
-V1 has no hidden/restored DM state.
-
-Pagination applies.
-
-Recommended ordering:
+Ordered by:
 
 ```text
-most recently active first
+last_activity_at DESC
+id DESC
 ```
 
-# 19. Retrieve DM
-
-```http
-GET /api/v1/dms/{dm_id}/
-```
-
-Returns DM metadata.
-
-The authenticated user must be one of the two participants.
-
-Friendship is not required for access once the DirectConversation already exists.
-
-# 20. DM Hiding
-
-There is no endpoint for hiding or participant-specific deletion of a DM in V1.
-
-# 21. DM Restoration
-
-There is no DM restoration endpoint in V1 because no hidden DM state exists.
-
-DM hiding/restoration may be introduced in a future API version.
-
-# 22. DM Messages
-
-Messages are subordinate resources of a DM.
-
-```text
-/api/v1/dms/{dm_id}/messages/
-```
-
----
-
-# 23. List DM Messages
-
-```http
-GET /api/v1/dms/{dm_id}/messages/
-```
-
-Returns messages visible to the authenticated participant.
-
-Messages are immutable.
-
-Pagination is mandatory.
-
-Recommended ordering:
-
-```text
-oldest -> newest
-```
-
-when using cursor pagination from a specified starting point.
-
-The API implementation may use reverse cursor pagination to efficiently load newer messages.
-
-The final pagination strategy must support:
-
-* loading recent history
-* loading older messages
-* receiving new messages through WebSocket
-
----
-
-# 24. Create DM Message
-
-```http
-POST /api/v1/dms/{dm_id}/messages/
-```
-
-The authenticated user must be a participant of the DM.
-
-Friendship is not required to continue using an already-existing DirectConversation.
-
-The endpoint accepts either JSON for text-only messages or multipart form data for messages containing attachments.
-
-Valid payloads are:
-
-```text
-text only
-attachment(s) only
-text + attachment(s)
-```
-
-At least one of non-empty `content` or one attachment is required.
-
-Example text-only request:
+Representation:
 
 ```json
 {
-    "content": "Hello Bob",
-    "reply_to": null
+  "id": 5,
+  "other_user": {
+    "id": 2,
+    "username": "bob"
+  },
+  "created_at": "...",
+  "last_activity_at": "..."
 }
 ```
 
-For an attachment-bearing request, files and optional `content`/`reply_to` are submitted in the same multipart message-creation operation.
+### Get or create
 
-Successful response:
+```http
+POST /api/v1/dms/
+
+{
+  "user_id": 2
+}
+```
+
+If a DM already exists:
+
+```text
+200 OK
+```
+
+and that existing DM is returned even if the friendship has since ended.
+
+If no DM exists and the users are friends:
 
 ```text
 201 Created
 ```
 
-The created message and attachments are immutable.
-
-# 25. Message Editing
-
-There is no endpoint for message editing.
-
-`PATCH` or `PUT` of an existing message is invalid in V1.
-
-# 26. DM Message Deletion
-
-DM message deletion is not supported in V1.
-
-There is no endpoint for unilateral message deletion, mutual deletion, or whole-history deletion.
-
-# 27. DM Message Deletion Request
-
-There is no DM message-deletion-request resource in V1.
-
-Mutual DM history deletion may be considered for a future API version.
-
-# 28. Message Replies
-
-A message can reference another message through:
-
-```json
-{
-    "content": "Yes, that works.",
-    "reply_to": "message-id"
-}
-```
-
-The referenced message must belong to the same DM.
-
-If it does not, the request is rejected.
-
-A reply is still an ordinary immutable message.
-
----
-
-# 29. Groups
-
-Group conversations are exposed under:
+If no DM exists and they are not friends:
 
 ```text
-/api/v1/groups/
+403 Forbidden
 ```
 
----
+A user cannot create a DM with themselves.
 
-# 30. Create Group
+### Retrieve
 
 ```http
-POST /api/v1/groups/
+GET /api/v1/dms/{conversation_id}/
 ```
 
-Request:
+Only one of the two participants may retrieve it.
 
-```json
-{
-    "name": "Gaming"
-}
-```
+Old DM access remains available after unfriending.
 
-The authenticated user becomes:
+There are no V1 endpoints for:
 
-```text
-OWNER
-```
-
-and an active member.
-
-Successful response:
-
-```text
-201 Created
-```
+- hiding a DM
+- restoring a DM
+- deleting a DM
 
 ---
 
-# 31. List Groups
+## 9. Groups
+
+### List groups
 
 ```http
 GET /api/v1/groups/
 ```
 
-Returns groups in which the authenticated user currently has active membership.
+Paginated current-membership groups.
 
-A user who has left a group does not receive it in the normal membership list.
+Ordered by latest activity.
 
----
-
-# 32. Retrieve Group
+### Create group
 
 ```http
-GET /api/v1/groups/{group_id}/
-```
+POST /api/v1/groups/
 
-The authenticated user must be an active member.
-
-The response includes:
-
-* group identifier
-* name
-* owner
-* membership information required by the client
-
----
-
-# 33. Update Group Metadata
-
-The owner may update mutable group metadata.
-
-Example:
-
-```http
-PATCH /api/v1/groups/{group_id}/
-```
-
-Potential mutable fields include:
-
-```json
 {
-    "name": "Weekend Gaming"
+  "name": "Gaming"
 }
 ```
 
-Only explicitly supported fields may be modified.
-
-Ownership is not changed through ordinary group metadata updates.
-
----
-
-# 34. Group Members
-
-```http
-GET /api/v1/groups/{group_id}/members/
-```
-
-Returns active group members.
-
-Only active members may access the member list.
-
----
-
-# 35. Invite Friend to Group
-
-```http
-POST /api/v1/groups/{group_id}/invitations/
-```
-
-Request:
-
-```json
-{
-    "user_id": "friend-user-id"
-}
-```
-
-Only the owner may perform this operation.
-
-The target user must satisfy the friendship requirement for direct friend-based invitations.
-
-A group invitation is not itself membership.
-
----
-
-# 36. Group Invitations
-
-Incoming invitations:
-
-```http
-GET /api/v1/group-invitations/
-```
-
-A user may accept:
-
-```http
-POST /api/v1/group-invitations/{invitation_id}/accept/
-```
-
-or reject:
-
-```http
-POST /api/v1/group-invitations/{invitation_id}/reject/
-```
-
-Accepting a valid invitation creates active group membership.
-
----
-
-# 37. Group Invitation Links
-
-Create invitation link:
-
-```http
-POST /api/v1/groups/{group_id}/invitation-links/
-```
-
-Only the owner may create invitation links.
-
-The response contains the shareable invitation representation.
-
-A user uses the invitation through a dedicated endpoint:
-
-```http
-POST /api/v1/group-invitations/{token}/join/
-```
-
-The exact public token representation must not expose internal database IDs.
-
----
-
-# 38. Revoke Invitation Link
-
-```http
-DELETE /api/v1/groups/{group_id}/invitation-links/{link_id}/
-```
-
-Only the owner may revoke an invitation link.
-
-A revoked link cannot subsequently authorize membership.
-
----
-
-# 39. Leave Group
-
-```http
-POST /api/v1/groups/{group_id}/leave/
-```
-
-An active member may leave the group.
-
-If an ordinary member leaves, only that membership is removed.
-
-If the current owner leaves, the group is immediately disbanded, even if other members remain. The group and dependent group data are deleted according to the domain deletion rules, and affected connected clients receive the realtime group-deletion event.
-
-Ownership is never transferred automatically.
-
-# 40. Remove Group Member
-
-```http
-DELETE /api/v1/groups/{group_id}/members/{user_id}/
-```
-
-Only the owner may remove another member.
-
-The owner cannot use this operation to remove themselves.
-
----
-
-# 41. Transfer Ownership
-
-```http
-POST /api/v1/groups/{group_id}/transfer-ownership/
-```
-
-Request:
-
-```json
-{
-    "user_id": "new-owner-id"
-}
-```
-
-The target must be an active member.
-
-After the operation:
-
-```text
-old owner -> MEMBER
-new owner -> OWNER
-```
-
-The group itself remains unchanged.
-
----
-
-# 42. Disband Group
-
-```http
-DELETE /api/v1/groups/{group_id}/
-```
-
-Only the owner may disband the group.
-
-This permanently deletes:
-
-* group
-* memberships
-* invitations
-* invitation links
-* group messages
-* message recipient state
-* message attachments
-* other dependent group data
-
-The operation must be transactional.
-
----
-
-# 43. Group Messages
-
-Group messages are subordinate resources:
-
-```text
-/api/v1/groups/{group_id}/messages/
-```
-
----
-
-# 44. List Group Messages
-
-```http
-GET /api/v1/groups/{group_id}/messages/
-```
-
-Only active members may retrieve messages.
-
-Pagination is mandatory.
-
-Messages are immutable.
-
----
-
-# 45. Create Group Message
-
-```http
-POST /api/v1/groups/{group_id}/messages/
-```
-
-The sender must be an active group member.
-
-As with DM messages, the endpoint accepts JSON for text-only messages or multipart form data for attachment-bearing messages.
-
-Valid payloads are:
-
-```text
-text only
-attachment(s) only
-text + attachment(s)
-```
-
-At least one of non-empty `content` or one attachment is required.
-
-Example text-only request:
-
-```json
-{
-    "content": "Anyone playing tonight?",
-    "reply_to": null
-}
-```
-
-Successful response:
+Success:
 
 ```text
 201 Created
 ```
 
-The created message and attachments are immutable.
+The creator becomes owner.
 
-# 46. Group Message Deletion
-
-Group message deletion is not supported in V1.
-
-There is no ordinary message deletion endpoint for group messages.
-
-Group messages are immutable for the lifetime of the group.
-
-If the group itself is deleted, its messages are deleted as dependent data.
-
----
-
-# 47. Attachments
-
-Attachments are created as part of message creation in V1.
-
-There is no standalone pre-upload endpoint such as:
-
-```http
-POST /api/v1/attachments/
-```
-
-Instead, attachment-bearing message endpoints accept multipart form data containing:
-
-* optional non-empty text `content`
-* optional `reply_to`
-* one or more files
-
-At least one of text content or a file is required.
-
-The application operation creates the Message and its `MessageAttachment` rows together. A failed operation must not leave a valid empty Message or an authorized orphan attachment resource.
-
-Binary files are not transported over WebSocket in V1.
-
-# 48. Attachment Retrieval
-
-```http
-GET /api/v1/attachments/{attachment_id}/
-```
-
-Access requires authorization through the attachment's owning message and messaging context.
-
-The API must not rely solely on obscurity of attachment identifiers and must not expose internal storage paths as authorization mechanisms.
-
-# 49. Attachment Deletion
-
-There is no ordinary client-facing attachment deletion operation in V1.
-
-Because V1 messages are immutable and not individually deletable, message attachments remain with their owning messages.
-
-Attachments are deleted when their owning group/context is legitimately destroyed, such as group disbanding.
-
-# 50. Message Representation
-
-A message representation should contain enough information for the client to render the message without unnecessary additional requests.
-
-Conceptually:
+Representation:
 
 ```json
 {
-    "id": "message-id",
-    "sender": {
-        "id": "user-id",
-        "username": "alice",
-        "avatar": null
-    },
-    "content": "Hello 👋",
-    "created_at": "2026-09-02T18:30:00Z",
-    "reply_to": null,
-    "attachments": [],
-    "state": "SENT"
+  "id": 7,
+  "name": "Gaming",
+  "created_at": "...",
+  "last_activity_at": "..."
 }
 ```
 
-The exact representation may differ between DM and group messages.
+### Retrieve group
+
+```http
+GET /api/v1/groups/{group_id}/
+```
+
+Requires current membership.
+
+### Rename
+
+```http
+PATCH /api/v1/groups/{group_id}/rename/
+
+{
+  "name": "New name"
+}
+```
+
+Requires owner.
+
+Success:
+
+```text
+200 OK
+```
+
+### Leave
+
+```http
+POST /api/v1/groups/{group_id}/leave/
+```
+
+Ordinary member:
+
+- membership removed;
+- group remains.
+
+Owner:
+
+- group is disbanded.
+
+Success:
+
+```text
+204 No Content
+```
+
+### Disband
+
+```http
+DELETE /api/v1/groups/{group_id}/
+```
+
+Requires owner.
+
+Success:
+
+```text
+204 No Content
+```
+
+There is no V1 ownership-transfer endpoint.
 
 ---
 
-# 51. DM Message State
+## 10. Group Members
 
-For the sender, the API may expose:
+### List
 
-```text
-SENT
+```http
+GET /api/v1/groups/{group_id}/members/
 ```
 
-The client may additionally represent:
+Requires current membership.
 
-```text
-SENDING
-FAILED
-```
+Paginated.
 
-These are not server-persisted message states.
-
-For the recipient:
-
-```text
-SENT
-DELIVERED
-READ
-```
-
-The effective recipient state is determined by delivery/read timestamps.
-
----
-
-# 52. Group Message State
-
-A group message may expose recipient information such as:
+Representation:
 
 ```json
 {
-    "delivery": {
-        "delivered_to": [
-            "user-id-1",
-            "user-id-2"
-        ],
-        "read_by": [
-            "user-id-1"
-        ]
-    }
+  "user": {
+    "id": 2,
+    "username": "bob"
+  },
+  "role": "MEMBER",
+  "joined_at": "..."
 }
 ```
 
-The server determines the authoritative state.
-
-The client must not be able to arbitrarily mark another user as having received or read a message.
-
----
-
-# 53. Read State
-
-REST may be used to retrieve persisted read state.
-
-However, read events are primarily realtime operations.
-
-The WebSocket contract will define how a client communicates:
-
-```text
-message.read
-```
-
-The REST API must not introduce a second incompatible read-state mechanism.
-
-If an HTTP fallback is required later, it must invoke the same domain service as the realtime operation.
-
----
-
-# 54. Delivery State
-
-Delivery state is similarly primarily managed by the realtime layer.
-
-The REST API exposes the persisted result but does not allow arbitrary clients to modify another user's delivery state.
-
----
-
-# 55. Presence
-
-Presence is primarily realtime in V1.
-
-The REST API does not expose a `last_online_at` value or last-online history.
-
-A dedicated REST presence endpoint is not required for V1. Current `ONLINE` / `OFFLINE` state is distributed by the realtime layer where authorized and needed by the client.
-
-# 56. Typing Indicators
-
-Typing indicators do not have REST endpoints in V1.
-
-They are ephemeral realtime events.
-
-The WebSocket protocol is responsible for:
-
-```text
-typing.started
-typing.stopped
-```
-
-No database record is created for normal typing activity.
-
----
-
-# 57. REST vs WebSocket Responsibility
-
-The separation is:
-
-| Capability            |        REST |                          WebSocket |
-| --------------------- | ----------: | ---------------------------------: |
-| Authentication        | Django views/session | Uses authenticated session |
-| User profiles         |         Yes |                    Optional events |
-| Friend requests       |         Yes |             Optional notifications |
-| Friendship            |         Yes |             Optional notifications |
-| DM creation           |         Yes |                                 No |
-| DM retrieval          |         Yes |                                 No |
-| Message history       |         Yes |                                 No |
-| Message creation      |         Yes |                                Yes |
-| Message delivery      | Read result |                                Yes |
-| Message read          | Read result |                                Yes |
-| Typing                |          No |                                Yes |
-| Presence              |    Snapshot |                                Yes |
-| Group creation        |         Yes |                                 No |
-| Group membership      |         Yes |                    Optional events |
-| Group messages        |         Yes | Yes, if realtime send is supported |
-| Attachments           |         Yes |       No binary transport required |
-| Invitation management |         Yes |             Optional notifications |
-
-REST establishes and retrieves persistent resources.
-
-WebSocket provides realtime behavior.
-
----
-
-# 58. Realtime Message Creation
-
-V1 allows messages to be created through WebSocket as a realtime command in addition to HTTP.
-
-If so, the WebSocket operation must invoke the same domain/application service as:
+### Remove member
 
 ```http
-POST /api/v1/dms/{dm_id}/messages/
+DELETE /api/v1/groups/{group_id}/members/{user_id}/
 ```
 
-or:
+Requires owner.
+
+The owner cannot remove the owner through this endpoint.
+
+Success:
+
+```text
+204 No Content
+```
+
+---
+
+## 11. Direct Group Invitations
+
+### Owner list for one group
+
+```http
+GET /api/v1/groups/{group_id}/invitations/
+```
+
+Requires owner.
+
+Current implementation returns a plain JSON list rather than the global paginated envelope.
+
+### Create invitation
+
+```http
+POST /api/v1/groups/{group_id}/invitations/
+
+{
+  "user_id": 2
+}
+```
+
+Requires owner.
+
+The target:
+
+- must exist;
+- must be a current friend of the owner;
+- must not already be a member;
+- must not already have a pending invitation for the group.
+
+Success:
+
+```text
+201 Created
+```
+
+Representation:
+
+```json
+{
+  "id": 8,
+  "group": {
+    "id": 7,
+    "name": "Gaming",
+    "created_at": "...",
+    "last_activity_at": "..."
+  },
+  "invited_by": {
+    "id": 1,
+    "username": "alice"
+  },
+  "recipient": {
+    "id": 2,
+    "username": "bob"
+  },
+  "created_at": "..."
+}
+```
+
+### Incoming invitations
+
+```http
+GET /api/v1/group-invitations/
+```
+
+Paginated invitations where the current user is recipient.
+
+### Accept
+
+```http
+POST /api/v1/group-invitations/{invitation_id}/accept/
+```
+
+Only recipient.
+
+Success:
+
+```text
+200 OK
+```
+
+Returns the created membership.
+
+### Reject
+
+```http
+POST /api/v1/group-invitations/{invitation_id}/reject/
+```
+
+Only recipient.
+
+Success:
+
+```text
+204 No Content
+```
+
+---
+
+## 12. Group Invitation Links
+
+### Create
+
+```http
+POST /api/v1/groups/{group_id}/invitation-links/
+```
+
+Requires owner.
+
+Success:
+
+```text
+201 Created
+```
+
+Response:
+
+```json
+{
+  "id": 3,
+  "token": "plaintext-token-returned-on-creation",
+  "created_at": "...",
+  "expires_at": "..."
+}
+```
+
+The database stores only the token hash.
+
+The link is valid for one day unless revoked.
+
+V1 has no endpoint to list previously created invitation links.
+
+### Revoke
+
+```http
+DELETE /api/v1/groups/{group_id}/invitation-links/{link_id}/
+```
+
+Requires owner.
+
+Success:
+
+```text
+204 No Content
+```
+
+### Join
+
+```http
+POST /api/v1/group-invitations/{token}/join/
+```
+
+Valid token + not already member:
+
+```text
+201 Created
+```
+
+Already a member:
+
+```text
+200 OK
+```
+
+Returns the membership in either case.
+
+Joining through a link does not require friendship with the owner.
+
+---
+
+## 13. Direct Messages
+
+### List
+
+```http
+GET /api/v1/dms/{conversation_id}/messages/
+```
+
+Requires DM participation.
+
+Paginated.
+
+Messages are ordered:
+
+```text
+created_at ASC
+id ASC
+```
+
+Read access remains after unfriending.
+
+### Create
+
+```http
+POST /api/v1/dms/{conversation_id}/messages/
+```
+
+Requires:
+
+- DM participation
+- current active friendship
+
+Message creation is REST-only in V1.
+
+The endpoint accepts JSON for text-only messages and multipart form data for attachments.
+
+Text-only example:
+
+```json
+{
+  "content": "Hello",
+  "reply_to_id": 123
+}
+```
+
+After unfriending, history still returns normally but creating a new DM message returns a friendship-required authorization error.
+
+---
+
+## 14. Group Messages
+
+### List
+
+```http
+GET /api/v1/groups/{group_id}/messages/
+```
+
+Requires current membership.
+
+Paginated and ordered oldest-first.
+
+### Create
 
 ```http
 POST /api/v1/groups/{group_id}/messages/
 ```
 
-There must not be two independent implementations of message-creation rules.
+Requires current membership.
 
-The same must apply to:
-
-* authorization
-* reply validation
-* attachment validation
-* persistence
-* message identifiers
-* delivery-state initialization
+Uses the same payload rules as DM message creation.
 
 ---
 
-# 59. Nested Resource Authorization
+## 15. Message Creation Payload
 
-A nested URL does not itself establish authorization.
-
-For example:
-
-```http
-GET /api/v1/groups/A/messages/123/
-```
-
-does not mean that message `123` is authorized merely because it appears beneath group `A`.
-
-The server must validate the authenticated user's authorization for the actual resource and its required context.
-
-Similarly:
-
-```http
-GET /api/v1/dms/A/messages/123/
-```
-
-must not rely solely on message ID lookup.
-
-The application layer must ensure that the message belongs to the requested DM and that the authenticated user is authorized to access that DM.
-
----
-
-# 60. Service Boundary
-
-API views/controllers are responsible for:
-
-* authentication context
-* request parsing
-* serializer validation
-* invoking application services
-* translating service results into HTTP responses
-
-They must not implement domain workflows directly.
-
-For example, the view must not manually perform:
+Fields:
 
 ```text
-find owner
-check member
-change role
-save owner
-save member
+content      optional string, defaults to ""
+reply_to_id  optional positive integer/null
+attachments  zero or more multipart files
 ```
 
-Ownership transfer belongs to a domain/application service.
-
-The REST layer invokes that service.
-
----
-
-# 61. Transactional Operations
-
-The following operations must execute transactionally:
-
-* accepting a friend request and creating friendship
-* creating a DM if one does not exist
-* sending a message with attachments
-* DM message/history deletion
-* accepting a group invitation and creating membership
-* transferring group ownership
-* removing a group member
-* disbanding a group
-* deleting a group after its final member leaves
-
-A partially completed operation must not leave the domain in an invalid state.
-
----
-
-# 62. Idempotency
-
-Operations that may be retried because of network failure should be designed with idempotency in mind.
-
-This is especially important for:
-
-* message creation
-* friend requests
-* invitation acceptance
-* group joining
-* ownership transfer
-
-The final implementation may use client-generated operation IDs or idempotency keys where necessary.
-
-Message creation in particular should not accidentally create duplicate messages when a client retries after a timeout.
-
----
-
-# 63. Pagination
-
-Collection endpoints must use pagination.
-
-At minimum:
+A message is valid when it has:
 
 ```text
-friends
-friend requests
-DMs
-groups
-group members
-messages
-invitations
+non-whitespace content OR at least one attachment
 ```
 
-The preferred strategy for message history is cursor-based pagination because message collections are append-heavy.
-
-Offset pagination should not be used for realtime message history unless there is a specific reason.
-
----
-
-# 64. Ordering
-
-Messages have a stable creation ordering.
-
-The API must expose:
+Attachment multipart example:
 
 ```text
-created_at
+content=photo
+reply_to_id=123
+attachments=<file 1>
+attachments=<file 2>
 ```
 
-and a unique identifier suitable for stable ordering.
+The response is:
 
-The client must not rely solely on timestamps because multiple messages may have identical timestamps.
+```text
+201 Created
+```
 
-The backend must provide deterministic pagination ordering.
+and uses the standard Message representation.
 
 ---
 
-# 65. API and Domain Separation
-
-The API representation is not the domain model.
-
-For example:
+## 16. Message Representation
 
 ```json
 {
-    "sender": {
-        "id": "123",
-        "username": "alice"
+  "id": 123,
+  "sender": {
+    "id": 1,
+    "username": "alice"
+  },
+  "content": "Hello",
+  "attachments": [
+    {
+      "id": 9,
+      "original_filename": "photo.jpg",
+      "mime_type": "image/jpeg",
+      "size_bytes": 12345,
+      "created_at": "...",
+      "download_url": "..."
     }
+  ],
+  "reply_to": {
+    "id": 120,
+    "sender": {
+      "id": 2,
+      "username": "bob"
+    },
+    "content": "Earlier message",
+    "attachments": [],
+    "created_at": "..."
+  },
+  "receipts": [
+    {
+      "user": {
+        "id": 2,
+        "username": "bob"
+      },
+      "delivered_at": null,
+      "read_at": null
+    }
+  ],
+  "created_at": "..."
 }
 ```
 
-does not require the domain `Message.sender` to be represented internally in exactly that shape.
+`reply_to` may be null.
 
-Serializers translate between:
+---
 
-```text
-HTTP representation
-        |
-        v
-Application/domain operation
-        |
-        v
-HTTP representation
+## 17. Message Detail
+
+```http
+GET /api/v1/messages/{message_id}/
 ```
 
-The API must remain independent of database schema details.
+The current user must be authorized through the message's conversation.
+
+For groups, this means current membership.
+
+For DMs, this means participant identity.
 
 ---
 
-# 66. V1 Non-Goals
+## 18. Attachments
 
-The REST API does not provide endpoints for:
+### Upload
 
-* voice rooms
-* voice calls
-* video
-* screen sharing
-* message reactions
-* message editing
-* message deletion
-* DM hiding/restoration
-* last-online history
-* JSON authentication endpoints for register/login/logout
-* end-to-end encryption management
+There is no standalone V1 attachment-upload endpoint.
 
-These capabilities may receive separate API contracts in future versions.
+Uploads occur as part of multipart message creation.
+
+### Download
+
+```http
+GET /api/v1/attachments/{attachment_id}/
+```
+
+Authorized users receive a file download with the stored original filename and MIME metadata.
+
+Unauthorized/inaccessible attachment IDs return `404`.
+
+There is no ordinary client-facing attachment-delete endpoint.
 
 ---
 
-# 67. Contract Boundary
+## 19. Activity Summary
 
-This document defines the HTTP interface.
+```http
+GET /api/v1/activity/summary/
+```
 
-It does not define:
+Response:
 
-* Django model implementation
-* serializer class structure
-* selector implementation
-* service class structure
-* Redis configuration
-* WebSocket event schemas
-* WebRTC signaling
-* SFU architecture
-* encryption/key-management protocol
+```json
+{
+  "pending_friend_requests": 1,
+  "pending_group_invitations": 2,
+  "unread_direct_messages": 3,
+  "unread_group_messages": 4,
+  "direct_conversations": [
+    {
+      "conversation_id": 5,
+      "unread_count": 3
+    }
+  ],
+  "groups": [
+    {
+      "group_id": 7,
+      "unread_count": 4
+    }
+  ]
+}
+```
 
-Those are implementation or subsequent contract concerns.
+The values are derived from durable domain tables.
 
-The WebSocket/Realtime contract defines the realtime connection, event, acknowledgement, subscription, ordering, and reconnection behavior.
+Unread group counts exclude groups where the user is no longer a current member.
+
+---
+
+## 20. Delivery / Read Mutation
+
+V1 does not expose REST endpoints for marking receipt state.
+
+Delivery/read acknowledgements are realtime commands:
+
+```text
+message.delivered
+message.read
+```
+
+Persistent receipt state is visible in Message representations and activity summaries.
+
+---
+
+## 21. Presence / Typing
+
+No REST presence or typing mutation endpoint exists in V1.
+
+Current presence and typing are realtime concerns.
+
+No last-online history endpoint exists.
+
+---
+
+## 22. REST vs WebSocket
+
+| Capability | REST / HTTP | WebSocket |
+|---|---|---|
+| Account register/login/logout | Django views | No |
+| Current user | Yes | Identity from session |
+| User lookup | Yes | No |
+| Friend/group mutations | Yes | Lifecycle notifications |
+| DM/group history | Yes | No |
+| **Message creation** | **Yes** | **No** |
+| Attachment upload | Yes, multipart message create | No |
+| Attachment download | Yes | No |
+| Conversation subscribe | No | Yes |
+| Delivery acknowledgement | No | Yes |
+| Read-through acknowledgement | No | Yes |
+| Typing | No | Yes |
+| Presence heartbeat | No | Yes |
+| Lifecycle events | Reconcile via REST | Yes |
+| Activity/unread reconciliation | Yes | Event-assisted |
+
+Persistent mutations belong to HTTP/services.
+
+Realtime transport does not implement a second message-creation path.
+
+---
+
+## 23. Transaction / Event Rule
+
+A successful persistent mutation may cause realtime publication.
+
+The authoritative order is:
+
+```text
+persist
+  |
+commit
+  |
+publish realtime event
+```
+
+A successful realtime event must not be published for a transaction that later rolls back.
+
+---
+
+## 24. V1 REST Non-Goals
+
+There are no V1 REST endpoints for:
+
+- JWT/token authentication
+- DM hide/restore/delete
+- message edit
+- ordinary message delete
+- message reactions
+- group ownership transfer
+- last-online history
+- voice rooms/calls
+- WebRTC signaling
+- encryption/key exchange

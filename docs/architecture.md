@@ -2,581 +2,562 @@
 
 ## 1. Purpose
 
-The Communication Platform is a private, browser-accessible realtime communication system.
+Communication Platform V1 is a browser-accessible realtime text communication system.
 
-V1 focuses exclusively on text communication and provides:
+V1 includes:
 
-* user accounts
-* friendships and friend requests
-* direct messaging
-* group text chats
-* message attachments
-* message replies
-* message delivery/read state
-* typing indicators
-* online/offline presence
-* future desktop-client compatibility
+- user accounts and session authentication
+- friend requests and friendships
+- direct conversations
+- group conversations
+- direct and group messaging
+- message replies
+- message attachments
+- delivery and read receipts
+- typing indicators
+- online/offline presence
+- friend/group lifecycle realtime events
+- durable unread/activity summaries
+- reconnect/reconciliation behavior in the client
 
-Voice rooms, voice calls, video, screen sharing, message reactions, and end-to-end encryption implementation are outside V1.
+Voice calls, group voice, video, screen sharing, reactions, message editing, ordinary message deletion, and end-to-end encryption are outside V1.
 
-The architecture must nevertheless leave clear boundaries for these future capabilities without making the V1 messaging system depend on them.
-
----
-
-## 2. Architectural Goals
-
-### 2.1 Realtime communication
-
-V1 realtime behavior includes:
-
-* new message delivery
-* delivery acknowledgements
-* read acknowledgements
-* typing indicators
-* presence updates
-* group membership events
-* friendship and invitation notifications where appropriate
-
-These events are delivered through the WebSocket layer.
-
-### 2.2 Separation of responsibilities
-
-Django is responsible for application state, authorization, and business rules.
-
-Django Channels provides the realtime WebSocket transport.
-
-PostgreSQL stores persistent domain state.
-
-Redis provides realtime coordination and ephemeral state where appropriate.
-
-The client is responsible for presentation and client-only state.
-
-### 2.3 Client independence
-
-The backend must not depend on the browser UI.
-
-The same backend protocols should eventually support:
-
-* web clients
-* desktop clients
-* potentially mobile clients
-
-### 2.4 Security by architecture
-
-The architecture must support stronger privacy mechanisms later without requiring a redesign of the fundamental messaging domain.
-
-Transport security and future end-to-end encryption are separate concerns.
+The application name is **Communication Platform**. A deployment domain is not product branding.
 
 ---
 
-# 3. High-Level Architecture
+## 2. Technology
+
+### Backend
+
+- Django 6.1
+- Django REST Framework
+- Django Channels
+- Daphne
+- PostgreSQL
+- Redis / `channels_redis`
+
+### Frontend
+
+- React
+- TypeScript
+- Vite
+- React Router
+- Bootstrap
+- custom CSS
+
+---
+
+## 3. High-Level Architecture
 
 ```text
-                         CLIENTS
+                         Browser
                             |
-             +--------------+--------------+
-             |              |              |
-           Web          Desktop         Future
-          Client         Client         Clients
-             |              |              |
-             +--------------+--------------+
+                  HTTPS / WebSocket
                             |
-                     HTTPS / WebSocket
+              +-------------+-------------+
+              |                           |
+              v                           v
+         Django / DRF              Django Channels
+              |                           |
+              +-------------+-------------+
                             |
-                    +-------v--------+
-                    |     Django     |
-                    |                |
-                    | REST API       |
-                    | Authentication |
-                    | Authorization  |
-                    | Domain Logic   |
-                    | WebSocket      |
-                    +---+--------+---+
-                        |        |
-                 +------+        +------+
-                 |                      |
-          +------v------+        +------v------+
-          | PostgreSQL  |        |    Redis    |
-          |             |        |             |
-          | persistent  |        | realtime    |
-          | state       |        | coordination|
-          +-------------+        +-------------+
-
-                    FUTURE VOICE BOUNDARY
-                              |
-                       WebRTC / SFU
-                    (not implemented in V1)
+                    Application services
+                            |
+                +-----------+-----------+
+                |                       |
+                v                       v
+           PostgreSQL                 Redis
+        persistent truth        realtime coordination
 ```
 
-The V1 application does not contain a voice subsystem.
+PostgreSQL is authoritative for durable application state.
+
+Redis is used for the Channels layer and ephemeral realtime state such as presence leases.
+
+The browser client owns presentation state. It does not own authorization or durable domain truth.
 
 ---
 
-# 4. Backend Responsibilities
+## 4. Presentation Boundary
 
-Django is responsible for:
+The main application UI is React.
 
-* authentication
-* users
-* friendships
-* friend requests
-* direct conversations
-* group conversations
-* conversation membership
-* invitations
-* messages
-* message recipient state
-* attachments and attachment authorization
-* presence coordination
-* API access
-* WebSocket access
-* application-level security
+Django also renders V1 account-related pages, including:
 
-Django is not responsible for:
+- registration
+- login
+- current-account information
 
-* rendering the client UI
-* determining client presentation state
-* trusting client-side authorization decisions
-* storing transient typing state as persistent domain data
+Logout is handled by an ordinary Django view.
+
+The backend must not depend on React-specific presentation behavior.
 
 ---
 
-# 5. Realtime Architecture
+## 5. HTTP vs Realtime Responsibilities
 
-Django Channels provides the WebSocket layer.
+V1 deliberately separates persistent mutations from realtime transport.
 
-Conceptually:
+### REST / HTTP owns
+
+- user lookup and current-user retrieval
+- friend-request and friendship mutations
+- direct-conversation creation/retrieval
+- group creation and lifecycle mutations
+- invitation and invitation-link mutations
+- message history retrieval
+- **all message creation**
+- attachment upload as part of multipart message creation
+- authorized attachment download
+- durable activity/unread summary retrieval
+
+### WebSocket owns
+
+- authenticated realtime connection
+- conversation subscribe/unsubscribe
+- delivery acknowledgements
+- read-through acknowledgements
+- presence heartbeat
+- typing start/stop commands
+- server-to-client realtime events
+
+V1 does **not** create messages through WebSocket.
+
+A message is created through REST and, after commit, the backend publishes the normal `message.created` realtime event.
+
+---
+
+## 6. Service / Selector Boundary
+
+State-changing domain operations live in services.
+
+Read-only domain retrieval lives in selectors.
+
+Presentation adapters such as DRF views and WebSocket consumers should remain thin and delegate domain decisions to services/selectors.
+
+Typical persistent mutation flow:
 
 ```text
-Client
-   |
-   | WebSocket
-   v
-Django Channels
-   |
-   +---- message events
-   +---- delivery/read events
-   +---- typing events
-   +---- presence events
-   +---- membership events
-   +---- friendship/invitation notifications
+HTTP request
+    |
+    v
+DRF view
+    |
+    v
+service
+    |
+    +-- validate
+    +-- authorize
+    +-- persist
+    |
+    v
+PostgreSQL commit
+    |
+    v
+realtime publisher
+    |
+    v
+Channels / Redis
 ```
 
-REST and WebSocket are two interfaces over the same application/domain layer.
-
-REST is responsible for persistent resource operations and history retrieval.
-
-WebSocket is responsible for realtime commands and events.
-
-Both interfaces must invoke the same application/domain services where they perform the same domain operation.
+Realtime publication for persistent mutations is scheduled after the database transaction commits.
 
 ---
 
-# 6. Messaging Architecture
+## 7. Direct Conversations
 
-Messages are persistent domain objects.
+A `DirectConversation` contains exactly two distinct users through the `user_1` and `user_2` fields.
 
-The conceptual flow for HTTP message creation is:
+V1 has no separate `DirectConversationParticipant` model.
 
-```text
-Client
-   |
-   | REST command
-   v
-Django API
-   |
-   v
-Application Service
-   |
-   +---- validate
-   +---- authorize
-   +---- persist
-   |
-   v
-PostgreSQL
-   |
-   v
-Realtime Event
-   |
-   v
-Redis / Channels
-   |
-   v
-Connected clients
-```
+The pair is canonicalized by user ID and protected by a unique database constraint, so an unordered pair of users can have only one direct conversation.
 
-The conceptual flow for WebSocket message creation is:
+Creating the first DM for a pair requires an active `Friendship`.
 
-```text
-Client
-   |
-   | WebSocket command
-   v
-Django Channels
-   |
-   v
-Application Service
-   |
-   +---- validate
-   +---- authorize
-   +---- persist
-   |
-   v
-PostgreSQL
-   |
-   v
-Realtime Event
-```
+If a DM already exists, removing the friendship does not:
 
-There must be one authoritative implementation of message-creation rules.
+- delete the DM
+- delete its messages
+- remove either participant's read access to the history
+- remove either participant's ability to subscribe to that DM's realtime conversation group
 
-The server is authoritative for:
+However, sending a **new direct message** requires an active friendship.
 
-* conversation membership
-* message creation
-* reply validity
-* attachment validity
-* delivery state
-* read state
-* message immutability
-* V1 message immutability and no-deletion rules
+DM typing publication also requires the friendship to still be active.
+
+V1 has no DM hide/restore state and no DM deletion operation.
 
 ---
 
-# 7. Direct Messaging Architecture
+## 8. Groups
 
-A direct conversation is a persistent resource shared by exactly two users.
+A group consists of:
 
-There is exactly one DirectConversation for an unordered pair of users.
+- `GroupConversation`
+- `GroupMembership`
+- one `OWNER` membership
+- zero or more `MEMBER` memberships
+- optional direct `GroupInvitation` records
+- optional `GroupInvitationLink` records
+- messages and dependent attachments/receipts
 
-Creating the first DirectConversation for a pair requires an existing Friendship.
-
-Once the DirectConversation exists, removing that friendship does not delete the DirectConversation, its messages, or participant access to the existing DM.
-
-V1 does not support:
-
-* participant-specific DM hiding
-* DM restoration
-* message deletion
-* mutual history deletion
-
-These may be introduced in a later version without changing the permanent DirectConversation identity.
-
-# 8. Group Messaging Architecture
-
-A group conversation is a multi-user text communication resource with:
-
-* one owner
-* active members
-* membership records
-* invitations
-* optional invitation links
-* messages
-
-Any user may create a group.
+Any authenticated user may create a group and becomes its owner.
 
 The owner may:
 
-* invite friends
-* remove members
-* transfer ownership
-* disband the group
+- rename the group
+- invite eligible friends
+- list pending direct invitations for the group
+- create invitation links
+- revoke invitation links
+- remove ordinary members
+- disband the group
 
-Members may leave.
+An ordinary member may leave.
 
-If the last active member leaves, the group and its dependent data are deleted.
+If an ordinary member leaves, only that membership is removed.
 
-If the owner disbands the group, the group and its dependent data are deleted.
+If the owner leaves, the group is disbanded immediately.
 
-Group message delivery/read state is tracked per recipient.
+V1 does **not** implement ownership transfer.
+
+Current group membership is the authorization boundary for group resources and realtime subscription.
 
 ---
 
-# 9. Attachments
+## 9. Group Invitations
 
-Attachments are first-class V1 message payloads.
+V1 has two distinct mechanisms.
 
-A persisted attachment belongs to exactly one Message.
+### Direct invitation
 
-V1 intentionally avoids a separate permanent draft-attachment model. Attachment-bearing messages are created using an atomic multipart HTTP operation:
+`GroupInvitation` targets one specific recipient.
+
+The inviter must:
+
+- be the group owner
+- currently be friends with the target user
+
+The target must not already be a member and must not already have a pending invitation for that group.
+
+Accepting the invitation creates membership and removes the invitation.
+
+Rejecting removes the invitation.
+
+### Invitation link
+
+`GroupInvitationLink` is separate from `GroupInvitation`.
+
+The stored record contains a hash of the token, not the plaintext token.
+
+The plaintext token is returned only when the link is created.
+
+V1 links:
+
+- expire after one day
+- are reusable while valid
+- may be revoked
+- may be used by users who are not friends with the owner
+
+A successful link join creates membership unless the user is already a member.
+
+A successful link join also removes any direct pending invitation for that same user/group.
+
+---
+
+## 10. Messaging
+
+A `Message` belongs to exactly one context:
+
+- one `DirectConversation`, or
+- one `GroupConversation`
+
+A database constraint enforces that exactly one context is present.
+
+Messages are immutable in V1.
+
+A message may contain:
+
+- non-empty text
+- one or more attachments
+- both
+
+A message with neither meaningful text nor attachments is invalid.
+
+Replies are represented by `reply_to` and must point to a message in the same conversation context.
+
+### Direct-message send authorization
+
+The sender must:
+
+- be a participant in the DM, and
+- currently have an active friendship with the other participant
+
+### Group-message send authorization
+
+The sender must be a current group member.
+
+---
+
+## 11. Attachments
+
+Attachments are created only as part of message creation.
+
+There is no separate client-facing draft-attachment resource in V1.
+
+The upload flow uses REST/multipart:
 
 ```text
-Client
-   |
-   | multipart message request
-   | (optional text + one or more files)
-   v
-Message Creation Service
-   |
-   +-- validate authorization and payload
-   +-- create Message
-   +-- create MessageAttachment row(s)
-   |
-   v
-COMMIT
-   |
-   v
-message.created realtime event
+multipart request
+    |
+    +-- content (optional)
+    +-- reply_to_id (optional)
+    +-- attachments (0..N)
+    |
+    v
+attachment/message service
+    |
+    v
+Message + MessageAttachment rows
+    |
+    v
+commit
+    |
+    v
+message.created
 ```
 
-A valid message may contain:
+Default configuration permits up to 5 attachments per message and up to 10 MiB per attachment; both limits are configurable through settings/environment variables.
 
-* text only
-* attachments only
-* text and attachments
+User-controlled filenames are not used as storage paths.
 
-A message with neither text nor attachments is invalid.
+The original filename is retained separately as metadata.
 
-Binary attachment data is not transported over WebSocket in V1. WebSocket message creation is therefore text-only; attachment-bearing messages use REST and still produce the normal realtime message event after commit.
+Attachment download is authorized through the owning message/conversation.
 
-Attachment access is always subject to authorization through the owning message and conversation.
+Physical attachment storage is deleted after commit when the corresponding attachment row is deleted.
 
-The API must not expose internal storage paths as authorization mechanisms.
+---
 
-When a group is deleted, its dependent messages and attachments are deleted as part of the group deletion operation.
+## 12. Message Receipts
 
-# 10. Message State Architecture
+`MessageReceipt` stores per-recipient delivery/read state.
 
-Client-side transmission state is:
-
-```text
-SENDING -> FAILED
-        \
-         -> SENT
-```
-
-After persistence, recipient state is tracked separately.
+Receipt rows are created when a message is created, freezing the recipient set at send time.
 
 For a DM:
 
-```text
-SENT -> DELIVERED -> READ
-```
+- the other participant receives a receipt
+- the sender does not
 
-For a group, delivery and read state are evaluated independently for every recipient:
+For a group:
 
-```text
-Message
-  |
-  +-- User B: DELIVERED / READ
-  +-- User C: DELIVERED
-  +-- User D: SENT
-```
+- each current member except the sender receives a receipt
+- users who join later do not retroactively receive receipt rows for older messages
 
-The client may display these states, but the server is authoritative for persisted delivery/read state.
-
----
-
-# 11. Presence Architecture
-
-V1 presence states are:
+Receipt fields:
 
 ```text
-ONLINE
-OFFLINE
+delivered_at
+read_at
 ```
 
-Presence is connection-oriented.
+`message.delivered` marks one recipient's receipt as delivered.
 
-A user with at least one active authenticated realtime connection is online.
+`message.read` is a read-through watermark: it marks all unread receipt rows for that user in the same conversation through the target message position.
 
-A user becomes offline when their final active realtime connection is gone.
+Reading also sets `delivered_at` when necessary.
 
-Redis may track active connections and transient presence state.
+---
 
-V1 does not persist or expose a last-online timestamp.
+## 13. Realtime Architecture
 
-Presence is not an authorization mechanism.
-
-# 12. Client Architecture
-
-The main application client is a React + TypeScript application served separately from Django application views. In V1, register/login/logout are provided by ordinary Django views and templates; after authentication, the React client uses the resulting Django session for REST and WebSocket access. A JSON/SPA authentication presentation may be introduced later.
-
-The client contains conceptual modules for:
+The single V1 endpoint is:
 
 ```text
-UI
- |
- +-- authentication
- +-- users/friends
- +-- direct messaging
- +-- group messaging
- +-- attachments
- +-- presence
- +-- WebSocket client
- +-- REST API client
+/ws/v1/
 ```
 
-The client may maintain presentation-only state such as:
+A normal client keeps one authenticated WebSocket and multiplexes conversation subscriptions over it.
 
-* SENDING
-* FAILED
-* currently displayed typing indicators
-* connection state
-* locally selected conversation
+Every connection joins a per-user Channels group.
 
-The client must not be the authority for authorization or persistent domain state.
+A conversation subscription additionally joins a per-conversation Channels group.
+
+### Personal user groups are used for
+
+- friendship lifecycle events
+- group invitation events
+- some group lifecycle events
+- message fan-out/reconciliation
+- read-state synchronization across tabs
+- force-unsubscribe instructions
+
+### Conversation groups are used for
+
+- `message.created`
+- delivery/read events
+- typing events
+- group lifecycle events relevant to active conversation subscribers
+
+Persistent mutations publish events after transaction commit.
+
+The same event envelope/event ID may be fanned out to more than one Channels group; the frontend deduplicates received event IDs.
 
 ---
 
-# 13. Future Desktop Clients
+## 14. Realtime Access Revocation
 
-Desktop clients must be able to use the same:
+Group realtime access follows current membership.
 
-* REST API
-* WebSocket protocol
-* authentication mechanism
-* messaging protocol
+When a member is removed or leaves, the server:
 
-The backend must not depend on browser-specific behavior.
+1. removes the membership in PostgreSQL;
+2. publishes the corresponding group lifecycle event;
+3. sends an internal force-unsubscribe instruction to that user's active connections;
+4. those connections emit `conversation.unsubscribed` with `reason: "access_revoked"`.
+
+Group deletion force-unsubscribes all former members.
+
+Direct conversations do not revoke read/subscription access merely because the friendship ends.
 
 ---
 
-# 14. Encryption Boundary
+## 15. Presence
 
-V1 does not implement end-to-end encryption.
+Presence is ephemeral and is not stored in PostgreSQL.
 
-Production transport must use:
+Production uses Redis-backed presence leases per user connection.
+
+A user is considered online while at least one live authenticated realtime connection lease remains.
+
+The browser sends periodic `presence.heartbeat` commands to renew its lease.
+
+Presence is visible only to current friends.
+
+On connect, the server sends a presence snapshot for the user's friends.
+
+Presence events contain current state and an expiry time; V1 does not persist or expose last-online history.
+
+---
+
+## 16. Typing
+
+Typing state is ephemeral.
+
+Commands are:
 
 ```text
-HTTPS
-WSS
+typing.start
+typing.stop
 ```
 
-Future end-to-end encrypted messaging should conceptually follow:
+The socket must currently be subscribed to the target conversation.
+
+Authorization is checked again when publishing typing:
+
+- DM: participant + active friendship
+- group: current membership
+
+Typing state is not persisted in PostgreSQL.
+
+---
+
+## 17. Activity / Unread State
+
+Durable attention state is derived from existing domain tables rather than duplicated into a notifications table.
+
+The activity summary derives:
+
+- pending incoming friend requests
+- pending incoming group invitations
+- unread direct-message receipt counts
+- unread group-message receipt counts
+
+Unread group counts include only groups where the user is still a current member.
+
+The frontend uses realtime events for responsiveness and the REST activity summary for reconciliation.
+
+---
+
+## 18. Production Runtime
+
+The production runtime uses:
+
+- Daphne
+- PostgreSQL
+- Redis
+- Nginx
+
+Production settings intentionally use:
 
 ```text
-User A
-   |
-   | encrypt locally
-   v
-ciphertext
-   |
-   v
-Django
-   |
-   v
-PostgreSQL
-   |
-   v
-ciphertext
-   |
-   | decrypt locally
-   v
-User B
+POSTGRES_CONN_MAX_AGE=0
 ```
 
-The future cryptographic design must use established protocols and primitives rather than custom cryptography.
+The repository production default is also `0`.
 
-The domain should be capable of carrying encrypted message payloads without changing the fundamental concepts of users, conversations, messages, replies, attachments, and recipient state.
+Persistent Django database connections under the current ASGI/Daphne deployment previously caused excessive idle PostgreSQL connections. Increasing PostgreSQL `max_connections` is not a substitute for correct connection handling.
+
+Docker Compose in this repository provides local PostgreSQL and Redis infrastructure. Their published ports are bound to `127.0.0.1`.
 
 ---
 
-# 15. Future Voice Boundary
+## 19. Security Boundary
 
-Voice communication is explicitly outside V1.
+The server is authoritative for:
 
-No V1 domain or messaging workflow depends on:
+- authentication
+- resource authorization
+- conversation membership/participation
+- friendship requirements
+- group ownership
+- message creation
+- reply validity
+- attachment access
+- receipt mutation
+- realtime subscription authorization
 
-* VoiceRoom
-* VoiceParticipant
-* WebRTC
-* SFU infrastructure
-* audio state
+Client-side checks exist for UX only.
 
-When voice is introduced, the expected architecture is:
+---
+
+## 20. Future Voice Boundary
+
+Voice is not implemented in V1.
+
+Post-V1 goals include:
+
+- direct voice calls
+- group voice chats
+
+WebRTC is the expected media technology.
+
+The existing authenticated Channels/WebSocket layer is expected to be reused for signaling where appropriate.
+
+Before implementation, the project must explicitly decide:
+
+- direct-call media topology
+- group-call media topology
+- STUN requirements
+- TURN requirements
+- whether an SFU or another group-media architecture is required
+- voice membership/authorization semantics
+- any additional media E2EE requirements
+
+Django should coordinate application-level authorization/signaling, not carry the audio media stream.
+
+---
+
+## 21. V1 Architectural Rule
 
 ```text
-Client
-   |
-   | WebRTC media
-   v
-SFU
+PostgreSQL = durable truth
+Redis      = realtime coordination / ephemeral presence
+Services   = mutation authority
+Selectors  = read authority
+REST       = persistent resource API and message creation
+WebSocket  = realtime subscription, ephemeral commands, receipts, events
+React      = presentation and client-local state
 ```
-
-Django will remain responsible for application-level authorization, voice-room membership, and signaling coordination.
-
-Django will not carry the actual audio media stream.
-
-Two-person voice sessions will be represented as voice rooms with two participants rather than as a separate communication architecture. Group voice will remain a first-class capability.
-
-Future voice-specific requirements such as per-participant incoming volume, microphone controls, mute/deafen state, and voice E2EE will be defined in a separate voice contract.
-
----
-
-# 16. Architectural Constraints
-
-The following constraints are mandatory for V1:
-
-1. Django is the application/domain authority.
-2. Client-side authorization checks are not security controls.
-3. PostgreSQL is the primary source of truth for persistent domain state.
-4. Redis is used for realtime coordination and ephemeral state, not as the authoritative message database.
-5. WebSockets do not replace REST for persistent resource management and history retrieval.
-6. REST and WebSocket operations that perform the same domain action must use the same application/domain service.
-7. Messages are immutable in V1.
-8. V1 does not implement reactions.
-9. V1 does not implement voice communication.
-10. Future voice media must not be routed through Django.
-11. Future encryption must use established cryptographic protocols and primitives.
-12. Desktop clients must be possible without redesigning the backend.
-13. Attachment authorization must follow message/conversation authorization.
-
----
-
-# 17. Initial Technology Decisions
-
-| Concern                  | Technology            |
-| ------------------------ | --------------------- |
-| Backend                  | Django                |
-| API                      | Django REST Framework |
-| Realtime                 | Django Channels       |
-| Database                 | PostgreSQL             |
-| Realtime infrastructure  | Redis                  |
-| Web client               | React + TypeScript    |
-| Containerization         | Docker                |
-| Production transport     | HTTPS / WSS            |
-
-Future voice technologies such as WebRTC and an SFU will be selected and specified before the voice subsystem is implemented.
-
----
-
-# 18. V1 Non-Goals
-
-The V1 implementation does not provide:
-
-* voice rooms
-* voice calls
-* video
-* screen sharing
-* message reactions
-* message editing
-* ordinary unilateral message deletion
-* end-to-end encryption
-* mobile applications
-* public communities
-* bots
-* federation
-
-Message attachments are **not** a non-goal; they are a required V1 capability.
-
----
-
-# 19. Contract Boundaries
-
-This document defines the system architecture and the boundaries between major subsystems.
-
-It does not define:
-
-* Django model implementation
-* serializer implementation
-* selector implementation
-* service class implementation
-* exact REST schemas
-* exact WebSocket event schemas
-* file-storage implementation
-* authentication implementation details
-* future WebRTC/SFU protocol
-* future encryption/key-management protocol
-
-Those concerns are defined by their respective contracts or implementation plans.

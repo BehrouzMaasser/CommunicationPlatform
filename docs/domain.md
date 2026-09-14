@@ -1,1647 +1,678 @@
-# Domain Model
+# Domain Contract
 
-## 1. Overview
+## 1. Purpose
 
-The platform is a browser-accessible communication platform centered on:
+This document defines the implemented V1 domain rules of Communication Platform.
 
-* user accounts
-* friendships
-* direct messaging
-* group chats
-* message attachments
-* message replies
-* message delivery/read state
-* typing indicators
-* online/offline presence
-
-The initial version focuses exclusively on text communication.
-
-Voice rooms, voice calls, video, screen sharing, message reactions, and end-to-end encryption implementation are outside the V1 implementation scope.
-
-The domain must nevertheless avoid architectural decisions that would prevent these capabilities from being introduced later.
-
-The primary V1 domain concepts are:
-
-```text
-User
- |
- +-- Friendship
- |
- +-- Presence
- |
- +-- DirectConversation
- |       |
- |       +-- DirectConversationParticipant
- |       |
- |       +-- DirectMessage
- |               |
- |               +-- MessageAttachment
- |               |
- |               +-- MessageRecipientState
- |               |
- |               +-- Reply
- |
- +-- GroupConversation
-         |
-         +-- GroupMembership
-         |
-         +-- GroupInvitation
-         |
-         +-- GroupMessage
-                 |
-                 +-- MessageAttachment
-                 |
-                 +-- MessageRecipientState
-                 |
-                 +-- Reply
-```
+The database and application services enforce these rules; frontend state is not authoritative.
 
 ---
 
-# 2. Domain Scope
-
-## 2.1 V1 capabilities
+## 2. V1 Domain Areas
 
 V1 includes:
 
-* user accounts
-* friendships
-* friend requests, including sender cancellation while pending
-* friendship-gated initiation of direct conversations
-* group conversations
-* group ownership
-* group invitations
-* invitation links
-* group membership management
-* immutable messages
-* text-only, attachment-only, and text-with-attachment messages
-* Unicode/emoji message content
-* replies, including replies to replies
-* message delivery state
-* message read state
-* typing indicators
-* online/offline presence
+- users
+- friend requests
+- friendships
+- direct conversations
+- group conversations
+- group memberships
+- direct group invitations
+- group invitation links
+- messages
+- replies
+- attachments
+- delivery/read receipts
+- current presence
+- typing state
+- durable unread/activity summaries
 
-## 2.2 Explicit V1 exclusions
+V1 excludes:
 
-The following are not implemented in V1:
-
-* voice rooms
-* voice calls
-* video calls
-* screen sharing
-* message reactions
-* message editing
-* message deletion
-* DM hiding or participant-specific conversation removal
-* DM restoration
-* last-online timestamps/history
-* end-to-end encryption implementation
-* JSON/SPA authentication endpoints for register/login/logout
-
-The architecture must remain compatible with future introduction of:
-
-* DM hiding/restoration
-* message/history deletion policies
-* JSON/SPA authentication endpoints
-* last-online timestamps
-* voice communication
-* media communication
-* reactions
-* richer moderation
-* end-to-end encrypted text
-* end-to-end encrypted voice
-* desktop clients
-* mobile clients
-
-# 3. User
-
-A `User` represents an authenticated person using the platform.
-
-A user has:
-
-* unique identity
-* unique username used as the public application identifier
-* authentication credentials
-* optional avatar
-* account state
-* creation timestamp
-
-The domain does not define a separate `display_name` field in V1. Public user representations use `username`.
-
-A user may:
-
-* establish friendships through the friend-request acceptance workflow
-* send friend requests
-* cancel their own pending friend requests
-* accept or reject incoming friend requests
-* initiate direct conversations with friends
-* participate in existing direct conversations
-* participate in group conversations
-* send messages
-* receive messages
-* send attachments as part of messages
-* reply to messages
-
-A user is the fundamental identity used throughout the domain.
-
-# 4. Friendship
-
-A `Friendship` represents an accepted relationship between two users.
-
-The platform uses an explicit request/accept workflow.
-
-The conceptual lifecycle is:
-
-```text
-No relationship
-      |
-      | User A sends request
-      v
-Pending
-      |
-      | User B accepts
-      v
-Friends
-```
-
-A rejected or declined request does not establish a friendship.
-
-The friendship model must support the request state independently from an established friendship.
-
-Conceptually:
-
-```text
-User A <--------> User B
-          friendship
-```
-
-A friendship is mutual.
-
-If Alice and Bob are friends:
-
-```text
-Alice -> Bob = friend
-Bob   -> Alice = friend
-```
-
-The domain must not represent this as two unrelated friendships.
+- voice/video
+- message editing
+- ordinary message deletion
+- reactions
+- DM hide/restore state
+- ownership transfer
+- last-online history
+- end-to-end encryption
 
 ---
 
-# 5. Friend Request
+## 3. User
 
-A friend request represents a pending request by one user to establish a friendship with another user.
+A User has an authenticated identity and a public username.
 
-A request has:
+Email is the login identifier.
 
-* requester
-* recipient
-* creation timestamp
-
-`FriendRequest` has no persistent status field in V1.
-
-The existence of the row means the request is pending.
-
-A request is directional:
-
-```text
-Alice -> Bob
-```
-
-means Alice requested friendship with Bob.
-
-The lifecycle is represented by persistence operations rather than status values:
-
-```text
-send       -> create FriendRequest
-accept     -> create Friendship and delete FriendRequest
-reject     -> delete FriendRequest
-cancel     -> delete FriendRequest
-```
-
-After acceptance, the resulting `Friendship` is the authoritative representation of the accepted relationship.
-
-The system must prevent:
-
-* a user requesting friendship with themselves
-* duplicate pending requests for the same relationship
-* friend requests between users who are already friends
-* duplicate friendships between the same pair of users
-
-Only the recipient may accept or reject a pending request.
-
-Only the sender may cancel a pending request.
-
-# 6. Presence
-
-Presence represents whether a user currently has at least one authenticated realtime connection.
-
-V1 presence states are:
-
-```text
-ONLINE
-OFFLINE
-```
-
-Presence is connection-oriented and ephemeral.
-
-A user becomes `ONLINE` when their first authenticated realtime connection becomes active and becomes `OFFLINE` when their final authenticated realtime connection ends.
-
-V1 does not persist or expose `last_online_at`.
-
-Presence should not be treated as a permanent user preference or as an authorization mechanism.
-
-The server is authoritative for current presence.
-
-# 7. Direct Messaging
-
-Direct messaging is a distinct domain concept from group chats.
-
-A `DirectConversation` represents a private conversation between exactly two users.
-
-A new direct conversation may be initiated only when the two users are currently friends.
-
-Example:
-
-```text
-Friendship(Alice, Bob)
-        |
-        v
-DirectConversation(Alice, Bob)
-```
-
-Once a DirectConversation exists, removing the friendship does not delete the conversation, its messages, or either participant's access to that existing conversation.
-
-A direct conversation always has exactly two distinct participants.
-
-# 8. Direct Conversation Uniqueness
-
-There must be exactly one direct conversation between any pair of users.
-
-For:
-
-```text
-Alice
-Bob
-```
-
-the system may have:
-
-```text
-DirectConversation #17
-```
-
-but must never create:
-
-```text
-DirectConversation #17
-DirectConversation #42
-```
-
-for the same pair.
-
-The order of the users does not matter.
-
-Therefore:
-
-```text
-Alice + Bob
-```
-
-and:
-
-```text
-Bob + Alice
-```
-
-refer to the same direct conversation.
-
-This uniqueness is a domain invariant and must ultimately be enforced at the persistence layer as well as in application logic.
+The domain uses user IDs internally for stable relationships.
 
 ---
 
-# 9. Direct Conversation Participants
+## 4. FriendRequest
 
-A `DirectConversationParticipant` represents one user's participation in a direct conversation.
+A `FriendRequest` contains:
 
-Each direct conversation has exactly two participants.
+- sender
+- recipient
+- created timestamp
+- updated timestamp
 
-Conceptually:
+The record itself means **pending**. V1 has no request status field.
 
-```text
-DirectConversation
- |
- +-- Participant -> Alice
- |
- +-- Participant -> Bob
-```
+Rules:
 
-V1 does not include participant-specific hidden/deleted/restored conversation state.
+- sender and recipient must differ;
+- users who are already friends cannot create another request;
+- there may be only one pending request for an unordered user pair;
+- therefore an opposite-direction pending request is also a conflict.
 
-A participant record therefore must not be required solely to implement DM visibility. If a participant model is retained for extensibility or other per-user conversation state, no V1 field may imply that a participant can hide or restore the conversation.
-
-# 10. Direct Conversation Deletion
-
-Direct conversation hiding or participant-specific deletion is not supported in V1.
-
-A participant cannot remove a DM from only their own history.
-
-The DirectConversation remains available to both participants according to the normal conversation authorization rules.
-
-The DirectConversation itself is a persistent resource and is not deleted merely because communication stops or the users cease to be friends.
-
-DM hiding/restoration may be introduced in a later version, but no V1 persistence or API contract should depend on it.
-
-# 11. Direct Conversation Restoration
-
-Direct conversation restoration is not supported in V1 because there is no hidden/deleted participant state.
-
-# 12. Reopening a Deleted DM
-
-There is no deleted or hidden DM state in V1.
-
-Whenever the same pair communicates through an existing DM, the same DirectConversation is reused.
-
-# 13. Permanent Direct Conversation Identity
-
-Direct conversations are persistent domain resources.
-
-They are not deleted as a result of:
-
-* friendship removal
-* temporary inactivity
-* either participant stopping communication
-
-There is exactly one DirectConversation for a given pair of users, and its identity remains stable.
-
-# 14. Direct Message Deletion
-
-Direct messages cannot be deleted in V1.
-
-There is no unilateral message deletion, mutual message deletion, or whole-history deletion mechanism.
-
-Message content and attachments therefore remain immutable for the lifetime of the DirectConversation in V1.
-
-Future versions may introduce explicit deletion policies without changing the permanent identity of the DirectConversation.
-
-# 15. Group Conversations
-
-A `GroupConversation` represents a multi-user text communication space.
-
-Unlike direct conversations, group conversations have:
-
-* a name
-* an owner
-* zero or more active members during lifecycle transitions
-* membership records
-* optional invitations
-
-A group may be created by any user.
-
-Example:
+Lifecycle:
 
 ```text
-GroupConversation: Gaming
-
-Owner:
-    Alice
-
-Members:
-    Alice
-    Bob
-    Charlie
-    David
+send    -> FriendRequest exists
+accept  -> Friendship created, FriendRequest deleted
+reject  -> FriendRequest deleted
+cancel  -> FriendRequest deleted
 ```
+
+Only the recipient may accept/reject.
+
+Only the sender may cancel.
 
 ---
 
-# 16. Group Ownership
+## 5. Friendship
 
-Every active group has exactly one owner.
+A `Friendship` is an undirected accepted relationship.
 
-The owner is also a member of the group.
+Persistence stores the pair canonically:
 
-The owner may:
+```text
+user_1_id < user_2_id
+```
 
-* invite users
-* remove members
-* transfer ownership
-* disband the group
+The database prevents duplicate pairs.
 
-A normal member may not perform these owner-only operations.
+Friendship creation is not a standalone public V1 command.
+
+It occurs only through successful friend-request acceptance.
+
+Either participant may remove the friendship.
+
+Removing a friendship does not delete existing messaging/group data.
 
 ---
 
-# 17. Group Membership
+## 6. Presence and Friendship
 
-A `GroupMembership` represents a user's membership in a group.
+V1 presence is shared with current friends only.
 
-A membership contains at minimum:
+Removing a friendship means future presence broadcasts are no longer sent between those users.
 
-* group
-* user
-* role
-* joined timestamp
+Presence is current/ephemeral state only; no `last_online_at` history is persisted or exposed.
 
-Initial roles are:
+---
+
+## 7. DirectConversation
+
+A direct conversation is represented directly by:
+
+```text
+DirectConversation.user_1
+DirectConversation.user_2
+```
+
+There is no `DirectConversationParticipant` model in V1.
+
+Rules:
+
+- exactly two distinct users;
+- canonical user ordering;
+- one DM per unordered pair;
+- database uniqueness protects that pair.
+
+### Creation
+
+If no DM exists, an active friendship is required.
+
+If the DM already exists, `get_or_create` returns that same DM even if the users are no longer friends.
+
+### Read/history access
+
+Either participant may list/retrieve the existing DM and its history after unfriending.
+
+### New message sending
+
+A participant may send a new DM only while the friendship is active.
+
+### Realtime subscription
+
+Either participant may subscribe to the existing DM after unfriending.
+
+### Typing
+
+Publishing typing state in a DM additionally requires the friendship to still be active.
+
+### No hide/delete state
+
+V1 does not implement:
+
+- participant-specific hiding
+- restoration
+- unilateral DM deletion
+- whole-history deletion
+
+The DM identity remains stable.
+
+---
+
+## 8. GroupConversation
+
+A group contains:
+
+- name
+- created timestamp
+- last activity timestamp
+- memberships
+- invitations / invitation links
+- messages
+
+The name is limited to 25 characters and must contain non-whitespace content.
+
+Any authenticated user may create a group.
+
+The creator receives the `OWNER` membership.
+
+---
+
+## 9. GroupMembership
+
+Roles:
 
 ```text
 OWNER
 MEMBER
 ```
 
-There is exactly one owner.
+Rules:
 
-All other active members have the `MEMBER` role.
+- a user may have at most one membership in a group;
+- an active group has at most one `OWNER` row, enforced by a conditional unique constraint;
+- the owner is also a member;
+- current membership is required to access group-protected resources.
 
-A user cannot have duplicate active membership in the same group.
+The service creates groups with exactly one owner.
 
----
-
-# 18. Joining a Group
-
-A user may become a group member through an authorized invitation mechanism.
-
-V1 supports:
-
-1. direct invitation
-2. invitation link
-
-The system must not allow an arbitrary user to add themselves to a private group merely by knowing its identifier.
-
-Membership is established by the server after validating the invitation.
+V1 has no ownership-transfer operation.
 
 ---
 
-# 19. Group Invitations
+## 10. Group Owner Capabilities
 
-A `GroupInvitation` represents an invitation to join a group.
+The owner may:
 
-An invitation may be directed at a specific user or represented by a shareable invitation link.
+- rename the group
+- create direct invitations
+- list the group's pending direct invitations
+- create invitation links
+- revoke invitation links
+- remove ordinary members
+- disband the group
 
-The invitation mechanism must establish:
-
-```text invitation
-      |
-      v
-authorized group membership
-```
-
-rather than allowing the invitation itself to function as membership.
+The owner cannot remove the owner membership using the ordinary member-removal operation.
 
 ---
 
-# 20. Friend-Based Group Invitations
+## 11. Leaving and Disbanding
 
-The owner may invite users from their friendship list.
+### Ordinary member leaves
 
-Example:
+The membership is deleted.
 
-```text
-Alice = owner
+The user immediately loses group access.
 
-Alice's friends:
-    Bob
-    Charlie
-    David
+Their historical messages remain part of the group while the group exists.
 
-Alice selects:
-    Bob
-    Charlie
+### Owner leaves
 
-Result:
-    Bob and Charlie receive group invitations
-```
+The group is disbanded immediately, even when other members remain.
 
-Only users who are friends with the owner are available through the owner's friend/contact invitation workflow.
+### Explicit disband
 
-A user who is not the owner's friend can still potentially join through a valid shareable invitation link.
+The owner may explicitly delete the group.
 
----
+Group deletion cascades through dependent group-domain rows, including:
 
-# 21. Group Invitation Links
+- memberships
+- direct group invitations
+- invitation links
+- group messages
+- message receipts
+- attachments
 
-A group may have a shareable invitation link.
-
-Conceptually:
-
-```text
-Group
- |
- +-- Invitation
-       |
-       +-- token
-```
-
-Possessing a valid invitation link allows a user to request/join the group according to the invitation policy.
-
-The invitation link must not expose authorization information beyond what is necessary to identify the invitation.
-
-V1 invitation links are reusable while valid.
-
-The V1 lifecycle supports at least:
-
-* creation
-* revocation
-* expiration
-
-An invitation link is valid for one day from its creation.
-
-A valid invitation link may be used by multiple users during its validity period.
-
-A revoked or expired invitation cannot be used to join the group.
-
-# 22. Leaving a Group
-
-A member may leave a group voluntarily.
-
-Example:
-
-```text
-Gaming
-Alice  OWNER
-Bob    MEMBER
-Charlie MEMBER
-
-Charlie leaves
-
-Gaming
-Alice  OWNER
-Bob    MEMBER
-```
-
-The member's active membership is removed.
-
-A member who leaves the group loses access to the group conversation and its messages.
-
-Historical group messages remain available to the remaining members unless the entire group is deleted.
-
-If the leaving member is the final remaining member, the group is deleted according to the last-member rule.
-
-# 23. Owner Leaving a Group
-
-If the group owner leaves the group, the group is disbanded.
-
-The group is not transferred automatically to another member.
-
-Example:
-
-```text
-Alice OWNER
-Bob   MEMBER
-Charlie MEMBER
-
-Alice leaves
-
-        |
-        v
-Group disbanded
-```
-
-The group conversation, memberships, and associated group data are deleted according to the group deletion rules.
-
-All remaining members lose access to the group and its messages.
-
-This rule also applies if the owner is the final remaining member.
-
-# 24. Ownership Transfer
-
-Ownership can be transferred from the current owner to another active member.
-
-Example:
-
-```text
-Before:
-
-Alice OWNER
-Bob   MEMBER
-
-After:
-
-Alice MEMBER
-Bob   OWNER
-```
-
-Ownership transfer does not create a new group.
-
-The GroupConversation retains its identity, messages, memberships, and invitations.
-
-Only the ownership role changes.
+Attachment files are removed from storage after the database transaction commits.
 
 ---
 
-# 25. Removing a Group Member
+## 12. Direct GroupInvitation
 
-Only the owner may remove another member.
+`GroupInvitation` is a user-targeted pending invitation.
 
-Example:
+It is separate from `GroupInvitationLink`.
 
-```text
-Alice OWNER
-Bob MEMBER
-Charlie MEMBER
+Fields include:
 
-Alice removes Charlie
+- group
+- invited_by
+- recipient
+- created_at
 
-Result:
+Rules:
 
-Alice OWNER
-Bob MEMBER
-```
+- inviter and recipient differ;
+- owner authorization is required;
+- recipient must not already be a member;
+- owner and target must currently be friends;
+- one pending direct invitation per `(group, recipient)`.
 
-A removed user loses access to the group conversation and its messages.
-
-The removed user cannot:
-
-* read group messages
-* send new group messages
-* receive group events
-* perform member operations
-
-The removed user's historical messages remain part of the group's stored data, but the removed user cannot access them through the group after removal.
-
-# 26. Disbanding a Group
-
-The owner may disband the group.
-
-Disbanding permanently removes the group and its associated domain data.
-
-Conceptually:
+Accept:
 
 ```text
-GroupConversation
- |
- +-- memberships
- +-- invitations
- +-- messages
- |     |
- |     +-- attachments
- |     +-- recipient states
- |     +-- replies
- |
- +-- group
+validate recipient
+create MEMBER membership
+delete invitation
+publish invitation accepted
+publish member added
 ```
 
-The deletion must be performed transactionally.
+Reject:
 
-After successful disbanding, the group no longer exists in the database.
+```text
+validate recipient
+delete invitation
+publish invitation rejected
+```
 
 ---
 
-# 27. Last-Member Rule
+## 13. GroupInvitationLink
 
-If the final active member leaves a group, the group is deleted.
+A shareable invitation link stores:
 
-Example:
+- group
+- creator
+- SHA-256 token hash
+- created timestamp
+- expiry timestamp
+- optional revoked timestamp
+
+The plaintext token is generated securely and returned to the creator at link creation time.
+
+The database does not store the plaintext token.
+
+V1 validity period:
 
 ```text
-Gaming
-
-Alice OWNER
-
-Alice leaves
-    |
-    v
-No active members
-    |
-    v
-Delete GroupConversation
+1 day
 ```
 
-This deletion follows the same cascading cleanup rules as owner disbanding.
+A valid link is reusable until expiry/revocation.
 
-The group must not remain as an orphaned database record.
+Joining through a link:
+
+- does not require friendship with the owner;
+- returns the existing membership if already a member;
+- otherwise creates a MEMBER membership;
+- removes any direct pending invitation for the same user/group;
+- publishes `group.member_added`.
 
 ---
 
-# 28. Message
+## 14. Message
 
-A message represents an immutable communication unit inside exactly one messaging context:
+A `Message` contains:
+
+- sender
+- exactly one conversation context
+- text content
+- optional reply target
+- created timestamp
+
+Exactly one of these must be set:
 
 ```text
-DirectConversation
+direct_conversation
+group_conversation
 ```
 
-or:
+Messages are immutable in V1.
 
-```text
-GroupConversation
-```
+There is no edit/delete service or ordinary edit/delete endpoint.
 
-A message has at minimum:
+---
 
-* unique identifier
-* sender
-* optional Unicode text content
-* creation timestamp
-
-A message may be:
-
-* text-only
-* attachment-only
-* text plus one or more attachments
+## 15. Message Payload Validity
 
 A message must contain at least one meaningful payload:
 
 ```text
-non-empty content OR at least one attachment
+non-whitespace text
+OR
+one or more attachments
 ```
 
-A message with neither text nor attachments is invalid.
+Valid:
 
-Messages are immutable after creation.
+- text only
+- attachment only
+- text + attachment(s)
 
-# 29. Message Creation
+Invalid:
 
-A message may only be created by a user who is authorized to send messages in the target communication context.
+- blank/whitespace-only text with no attachment
 
-For a direct conversation:
-
-```text
-sender ∈ DirectConversation.participants
-```
-
-For a group:
-
-```text
-sender ∈ active GroupMembership
-```
-
-The server is authoritative for this check.
-
-Message creation must validate the complete payload before committing the message. For attachment-bearing messages, the V1 transport uses an atomic multipart HTTP operation that creates the Message and its MessageAttachment rows as one application operation.
-
-Binary attachment data is not sent through the WebSocket protocol in V1.
-
-After a successful message commit, the same realtime `message.created` event is emitted regardless of whether the message was created through REST or WebSocket.
-
-The client must never be trusted to determine whether a sender belongs to the communication context.
-
-# 30. Message Editing
-
-Message editing is not supported in V1.
-
-Once a message has been accepted by the server:
-
-```text
-Message #123
-content = "hello"
-```
-
-the content cannot be changed.
-
-There is no V1 message-edit operation.
-
-This means the domain does not need an edited-message state.
+Message text is preserved as supplied after validation; validation does not normalize it with `strip()`.
 
 ---
 
-# 31. Message Content and Emojis
+## 16. Message Creation Authorization
 
-Message text content, when present, is Unicode text.
+### Direct message
 
-Emoji characters are therefore ordinary valid message content.
+The sender must:
 
-Examples:
+1. be a DM participant;
+2. have an active friendship with the other participant.
 
-```text
-Hello 👋
-😂
-🔥 Great!
-```
+This requirement applies even when the DM already existed before unfriending.
 
-Text content may be empty only when the message contains at least one attachment.
+### Group message
 
-No separate emoji domain model is required.
-
-Emoji rendering is a client responsibility.
-
-# 32. Message Attachments
-
-Attachments are a first-class V1 capability.
-
-A message may contain zero or more attachments.
-
-Conceptually:
-
-```text
-Message
- |
- +-- MessageAttachment
- +-- MessageAttachment
-```
-
-`MessageAttachment` is a child of `Message`; no separate permanent draft-upload domain model is required in V1.
-
-An attachment has at minimum:
-
-* unique identifier
-* owning message
-* stored file reference
-* original filename
-* MIME type
-* file size
-* creation timestamp
-
-An attachment-only message is valid.
-
-The V1 client submits attachment-bearing messages using multipart HTTP message creation. The server validates the text/files together and creates the message and attachment metadata as one application operation. If the operation fails, it must not leave a valid empty Message or an authorized orphan attachment resource.
-
-The exact physical file-storage backend is an infrastructure concern.
-
-# 33. Attachment Ownership
-
-Every persisted `MessageAttachment` belongs to exactly one persisted Message.
-
-The message belongs to its messaging context.
-
-Therefore:
-
-```text
-MessageAttachment
-    |
-    v
-Message
-    |
-    v
-DirectConversation / GroupConversation
-```
-
-Attachment authorization follows the authorization rules of the associated message.
-
-A user who cannot access the message must not be able to retrieve its attachment merely by knowing its identifier.
-
-# 34. Message Replies
-
-Messages may reply to other messages.
-
-A reply is itself a normal immutable message.
-
-Conceptually:
-
-```text
-Message #1
-    |
-    +---- Message #5
-             reply_to = Message #1
-```
-
-`reply_to` is optional.
-
-Therefore:
-
-```text
-reply_to = NULL
-```
-
-means the message is not a reply.
-
-A reply must reference a message from the same messaging context.
-
-A message in DM #1 cannot reply to a message in:
-
-```text
-DM #2
-```
-
-or:
-
-```text
-Group #3
-```
-
-The server must enforce this invariant.
+The sender must be a current member.
 
 ---
 
-# 35. Nested Replies
+## 17. Reply
 
-Nested replies are allowed in V1.
+`reply_to` may be null.
 
-A reply may itself be the target of another reply.
+When present, the target message must belong to the same direct/group conversation as the new message.
 
-Example:
-
-```text
-Message #1
-    |
-    +-- Message #5 (reply_to #1)
-            |
-            +-- Message #9 (reply_to #5)
-```
-
-The same-context authorization rule always applies: every `reply_to` target must belong to the same DM or group as the new message.
-
-The domain does not impose a maximum reply depth in V1.
-
-# 36. Message Delivery State
-
-Message transmission has two distinct categories of state.
-
-## Client transmission state
-
-The client may represent:
-
-```text
-SENDING
-FAILED
-```
-
-These are transient client states.
-
-They are not authoritative persisted message states.
-
-## Server-recognized state
-
-Once the server has successfully accepted and persisted the message:
-
-```text
-SENT
-```
-
-is established.
-
-Recipient state then tracks delivery and reading.
+A reply cannot target a message from another conversation.
 
 ---
 
-# 37. Direct Message Recipient State
+## 18. MessageAttachment
 
-A direct message has exactly one recipient.
+A `MessageAttachment` belongs to exactly one Message.
 
-The recipient state can therefore be represented as:
+Metadata:
 
-```text
-DirectMessage
- |
- +-- recipient
-       |
-       +-- delivered_at
-       +-- read_at
-```
+- original filename
+- MIME type
+- stored size
+- created timestamp
 
-The effective state is:
+Storage paths use generated UUID-based names rather than user-controlled filenames.
+
+Default limits:
 
 ```text
-delivered_at = NULL
-read_at      = NULL
+max attachments/message = 5
+max attachment size      = 10 MiB
 ```
 
-→ `SENT`
+Both are configurable.
 
-```text
-delivered_at != NULL
-read_at      = NULL
-```
+The client-supplied MIME type is metadata; V1 does not claim deep content inspection or malware scanning.
 
-→ `DELIVERED`
-
-```text
-delivered_at != NULL
-read_at      != NULL
-```
-
-→ `READ`
-
-The sender does not need a recipient state record for themselves.
+Attachments are downloaded through an authorization-checked endpoint and returned as downloads.
 
 ---
 
-# 38. Group Message Recipient State
+## 19. MessageReceipt
 
-Group messages require per-user recipient state.
+A `MessageReceipt` contains:
 
-A single group message may have different delivery/read states for different recipients.
+- message
+- recipient user
+- `delivered_at`
+- `read_at`
 
-Example:
+There is one receipt at most per `(message, user)`.
 
-```text
-Message #42
+The recipient set is frozen at message creation.
 
-Bob:
-    delivered = yes
-    read       = yes
+The sender never receives a receipt row for their own message.
 
-Charlie:
-    delivered = yes
-    read       = no
+### DM receipt set
 
-David:
-    delivered = no
-    read       = no
-```
+The other participant.
 
-Therefore the effective group state is derived from individual recipient states.
+### Group receipt set
 
-The domain must support:
+Every current group member except the sender.
 
-```text
-MessageRecipientState
-├── message
-├── user
-├── delivered_at
-└── read_at
-```
-
-A recipient state belongs to one message and one recipient.
+Later joiners do not receive receipt rows for older messages.
 
 ---
 
-# 39. Group Delivery Semantics
+## 20. Delivered State
 
-For group chats, the UI may display:
+A recipient may acknowledge delivery only for a message they can access.
 
-```text
-Delivered to:
-    Bob
-    Charlie
+If the user has a receipt row and it is not delivered yet, `delivered_at` is set.
 
-Read by:
-    Bob
-```
+The operation is idempotent.
 
-These values are derived from recipient states.
-
-The sender's own state is not considered a recipient state.
-
-A group message is considered delivered to a particular user when the server determines that the message has reached that user's active client/session according to the realtime delivery contract.
-
-The exact technical definition of "delivered" belongs to the WebSocket/realtime contract.
+A sender or non-original recipient may legitimately have no receipt row; in that case there is nothing to change.
 
 ---
 
-# 40. Read Semantics
+## 21. Read State
 
-A message becomes read for a recipient when the recipient's client explicitly communicates that the message has been viewed/read according to the realtime contract.
+Read acknowledgement is **read-through**, not only one-message mutation.
 
-Reading is therefore different from delivery.
+Given a target message in a conversation, the service marks all unread receipt rows for the current user through that target's `(created_at, id)` position.
 
-```text
-DELIVERED
-    |
-    | user reads message
-    v
-READ
-```
+Each changed receipt receives:
 
-A message cannot be `READ` for a recipient while remaining undelivered for that same recipient.
+- `read_at`
+- `delivered_at` if it was not already delivered
+
+The realtime `message.read` event includes the number of rows changed.
 
 ---
 
-# 41. Typing Indicators
+## 22. Message Ordering / Conversation Activity
 
-Typing indicators are ephemeral realtime events.
+Message history is ordered by:
 
-They are not persistent messages.
+```text
+created_at ASC
+id ASC
+```
 
-The domain does not create database records for:
+Direct/group conversation lists are ordered by:
+
+```text
+last_activity_at DESC
+id DESC
+```
+
+Creating a message updates the conversation/group `last_activity_at`.
+
+---
+
+## 23. Attachment Access
+
+Attachment authorization derives from current access to the owning message:
+
+- DM attachment: user is one of the two DM participants;
+- group attachment: user is a current member.
+
+A former group member cannot download group attachments after membership ends.
+
+An unfriended DM participant may still download attachments from their existing DM history.
+
+---
+
+## 24. Presence
+
+Presence is an ephemeral multi-connection lease.
+
+A user is online while at least one live authenticated realtime connection remains.
+
+Production presence leases are stored in Redis.
+
+Presence is not used as authorization.
+
+Presence is shared only with current friends.
+
+Payload state includes:
+
+```text
+online
+expires_at
+```
+
+V1 does not persist or expose historical last-online timestamps.
+
+---
+
+## 25. Typing
+
+Typing is ephemeral and not persisted.
+
+A socket may publish typing only when it is currently subscribed to that conversation.
+
+Authorization:
+
+- DM: participant + current friendship
+- group: current membership
+
+Server events are:
 
 ```text
 typing.started
 typing.stopped
 ```
 
-Instead:
+---
 
-```text
-User
- |
- | WebSocket
- v
-Realtime layer
- |
- v
-Other participants
-```
+## 26. Activity / Unread Summary
 
-A client may display:
+V1 does not duplicate durable unread state into a generic notifications table.
 
-```text
-Alice is typing...
-```
+The activity summary derives:
 
-Typing state disappears when the user stops typing or the realtime connection is lost.
+- incoming pending friend-request count
+- incoming pending group-invitation count
+- unread DM receipt count
+- unread group receipt count
+- per-DM unread counts
+- per-group unread counts
 
-The server remains authoritative over which users are currently connected to a communication context.
+Unread group state excludes groups where the user is no longer a member.
 
 ---
 
-# 42. Realtime State
-
-The following information is transient and should not normally be persisted in PostgreSQL:
-
-```text
-WebSocket connections
-typing indicators
-current online state
-message delivery events before persistence
-client sending state
-client failed state
-temporary realtime connection state
-```
-
-Redis/Channels or equivalent realtime infrastructure may be used to distribute these events.
-
----
-
-# 43. Persistent State
-
-The following domain information is persistent:
-
-```text
-User
-FriendRequest
-Friendship
-DirectConversation
-DirectConversationParticipant
-DirectMessage
-MessageRecipientState
-MessageAttachment
-
-GroupConversation
-GroupMembership
-GroupInvitation
-GroupMessage
-MessageRecipientState
-MessageAttachment
-```
-
-Not every item necessarily requires a standalone database model.
-
-The final persistence model will be determined by the implementation contracts.
-
----
-
-# 44. Client-Only State
-
-The client may maintain transient state such as:
-
-```text
-SENDING
-FAILED
-typing state
-draft message
-temporary upload progress
-UI state
-```
-
-These states do not become authoritative domain state merely because the frontend represents them.
-
-The server becomes authoritative when an operation has been successfully accepted and persisted.
-
----
-
-# 45. Authorization Principles
-
-Authorization is based on the user's relationship with the target resource.
+## 27. Authorization Principles
 
 The server is authoritative.
 
-A client must never be trusted to determine whether a user is allowed to:
+### DM read access
 
-* view a conversation
-* send a message
-* retrieve an attachment
-* reply to a message
-* read a message
-* join a group
-* invite another user
-* remove a group member
-* transfer ownership
-* disband a group
+Requires participant identity.
 
-Authorization checks must be performed server-side.
+Active friendship is not required for old history.
 
----
+### DM send / typing
 
-# 46. Direct Conversation Authorization
+Requires participant identity + active friendship.
 
-A user may access a direct conversation only if they are one of its two participants.
+### Group access
 
-The system must also account for the participant's local conversation visibility state.
+Requires current membership.
 
-Therefore:
+### Owner operations
 
-```text
-participant
-    +
-active visibility
-```
+Require an `OWNER` membership.
 
-determine whether the conversation appears normally in the user's DM list.
+### Attachment access
 
-Hiding a DM does not revoke the user's identity as a participant.
+Requires access through the owning conversation.
+
+### Receipt mutation
+
+Requires access to the message; only existing recipient receipt rows are changed.
+
+Identifiers are not authorization credentials.
 
 ---
 
-# 47. Group Conversation Authorization
+## 28. Persistent vs Ephemeral State
 
-A user may access a group conversation while they have active membership.
+### PostgreSQL
 
-A user who is not an active member must not be able to access protected group resources merely by knowing:
+- users
+- friend requests
+- friendships
+- conversations
+- memberships
+- invitations
+- invitation links
+- messages
+- attachments
+- receipts
 
-* the group ID
-* a message ID
-* an attachment ID
+### Redis / realtime infrastructure
 
-The owner has additional permissions defined by the group ownership contract.
+- Channels routing/fan-out
+- presence leases
+- transient realtime coordination
 
----
+### Frontend-local
 
-# 48. Friend Authorization
-
-Friendship does not automatically grant access to another user's conversations.
-
-For example:
-
-```text
-Alice and Bob are friends
-```
-
-does not imply:
-
-```text
-Alice can read Bob's other conversations
-```
-
-Friendship primarily provides:
-
-* social relationship
-* availability as a friend/contact for invitations
-* eligibility for initiating direct communication according to the messaging policy
-
-Conversation membership remains the authorization boundary for messages.
+- connection state
+- drafts
+- temporary send UI
+- transient typing display
+- notice/toast presentation
 
 ---
 
-# 49. Domain Invariants — Users
+## 29. Realtime Consequences of Domain Mutations
 
-The following invariants must hold:
+Persistent state changes publish realtime events only after commit.
 
-1. A user has a unique identity.
-2. A user cannot establish a friendship with themselves.
-3. Two users cannot have duplicate friendships.
-4. Two users cannot have multiple active friend requests representing the same pending relationship.
+Important group lifecycle behavior:
 
----
+- invitation accept -> `group_invitation.accepted` + `group.member_added`
+- member removal -> `group.member_removed` + forced unsubscribe
+- ordinary member leaves -> `group.member_left` + forced unsubscribe
+- rename -> `group.renamed`
+- owner leaves/disband -> `group.deleted` + forced unsubscribe for former members
 
-# 50. Domain Invariants — Direct Conversations
-
-The following invariants must hold:
-
-1. A DirectConversation has exactly two distinct participants.
-2. The two participants are unique as an unordered pair.
-3. A pair of users can have exactly one DirectConversation.
-4. A DirectConversation is not deleted through normal user conversation deletion.
-5. V1 has no participant-specific hide/restore state.
-6. Friendship removal does not delete an existing DirectConversation.
+Friendship lifecycle events do not delete DM history.
 
 ---
 
-# 51. Domain Invariants — Group Conversations
-
-The following invariants must hold:
-
-1. A group has exactly one owner while it exists.
-2. The owner is an active group member.
-3. A user cannot have duplicate active membership in a group.
-4. Only the owner may remove members.
-5. Only the owner may transfer ownership.
-6. Only the owner may disband the group.
-7. Ownership transfer assigns ownership to an existing active member.
-8. If the owner leaves, the group is disbanded regardless of how many other members remain.
-9. If no active members remain, the group is deleted.
-10. Disbanding deletes the entire group and its dependent data.
-
----
-
-# 52. Domain Invariants — Messages
-
-The following invariants must hold:
-
-1. Every message belongs to exactly one messaging context.
-2. The sender must be authorized to send in that context when the message is created.
-3. Messages are immutable after creation.
-4. A reply target must belong to the same messaging context.
-5. A message cannot have recipient state for an unauthorized recipient.
-6. A message cannot be marked read for a recipient before it is delivered to that recipient.
-7. A message must contain non-empty text or at least one attachment.
-8. DM and group messages cannot be deleted individually or through a mutual-history deletion flow in V1.
-9. A message's client-side `SENDING`/`FAILED` state is not authoritative persisted state.
-
----
-
-# 53. Domain Invariants — Attachments
-
-The following invariants must hold:
-
-1. Every attachment belongs to exactly one message.
-2. An attachment cannot be accessed independently of message authorization.
-3. Attachment metadata must remain consistent with the stored file.
-4. Group/context deletion must cascade to the attachments owned by messages in that deleted context.
-5. Future message-deletion features, if introduced, must clean up the corresponding attachments without leaving orphaned authorized resources.
-
----
-
-# 54. Domain Invariants — Presence
-
-The following invariants must hold:
-
-1. A user has at most one current presence state.
-2. Current online/offline state is realtime state.
-3. V1 does not persist a last-online timestamp.
-4. Presence must not be used as an authorization mechanism.
-
-A user being online does not imply permission to access any resource.
-
----
-
-# 55. Message Lifecycle
-
-The conceptual lifecycle of a message is:
-
-```text
-Client
-
-SENDING
-   |
-   +------> FAILED
-   |
-   v
-Server accepts
-   |
-   v
-SENT
-   |
-   v
-Recipient receives
-   |
-   v
-DELIVERED
-   |
-   v
-Recipient reads
-   |
-   v
-READ
-```
-
-For group conversations, `DELIVERED` and `READ` are evaluated independently for each recipient.
-
----
-
-# 56. DM Message Deletion Lifecycle
-
-V1 has no DM message-deletion lifecycle.
-
-After a DM message is successfully created, it remains part of the DirectConversation history for V1.
-
-There is no:
-
-* unilateral message deletion
-* mutual message deletion
-* mutual whole-history deletion
-* participant-specific DM hiding/restoration
-
-These capabilities may be considered for a future version and must be specified explicitly before implementation.
-
-# 57. Group Deletion Lifecycle
-
-A group may be deleted in V1 when:
-
-```text
-Owner explicitly disbands group
-        |
-        v
-Delete group and dependent data
-```
-
-or:
-
-```text
-Owner leaves group
-        |
-        v
-Disband group regardless of remaining members
-        |
-        v
-Delete group and dependent data
-```
-
-or, where applicable:
-
-```text
-Final active member leaves
-        |
-        v
-No active membership remains
-        |
-        v
-Delete group and dependent data
-```
-
-Group deletion removes the group, memberships, invitations, messages, recipient-state rows, and message attachments according to the persistence contract.
-
-The deletion must be atomic from the domain's perspective.
-
----
-
-# 58. Messaging and Encryption Boundary
-
-V1 does not implement end-to-end encryption.
-
-However, the message model must not make future encryption impossible.
-
-The architecture should permit message content to evolve from a conceptual representation such as:
-
-```text
-plaintext content
-```
-
-toward:
-
-```text
-encrypted payload
-+
-encryption metadata
-```
-
-without changing the fundamental concepts of:
-
-```text
-sender
-message
-conversation
-recipient state
-attachment
-reply
-```
-
-The eventual encryption architecture must ensure that encryption is designed together with:
-
-* message storage
-* attachments
-* identity
-* device management
-* key management
-* group membership changes
-* message deletion
-
-Encryption is therefore a future security implementation concern, not an excuse to postpone defining the domain boundaries.
-
----
-
-# 59. Future Voice Architecture Boundary
-
-Voice is explicitly outside V1.
-
-No V1 domain model should depend on:
-
-```text
-VoiceRoom
-VoiceParticipant
-WebRTC
-SFU
-audio state
-```
-
-When voice is introduced, it should integrate with the existing identity and authorization system rather than changing the fundamental messaging model.
-
-The future architecture is expected to use:
-
-```text
-Browser
-   |
-   | WebRTC
-   v
-SFU
-```
-
-while the application server controls authorization and realtime signaling.
-
-This document does not define the V2 voice domain.
-
----
-
-# 60. Future Reactions
-
-Message reactions are explicitly excluded from V1.
-
-The current message model therefore has no reaction collection or reaction state.
-
-Future reactions may be introduced without changing the fundamental message identity.
-
----
-
-# 61. Future Clients
-
-The V1 platform is accessed through a web browser.
-
-The domain must remain client-independent.
-
-Future clients may include:
-
-* desktop applications
-* mobile applications
-
-The domain and server-side authorization rules must not depend on the browser UI.
-
----
-
-# 62. Final V1 Conceptual Model
-
-The resulting V1 domain can be summarized as:
-
-```text
-                                  User
-                                   |
-             +---------------------+----------------------+
-             |                     |                      |
-             v                     v                      v
-       FriendRequest          Friendship              Presence
-             |
-             v
-        Friendship
-
-
-User
- |
- +----------------------------+
- |                            |
- v                            v
-DirectConversation       GroupConversation
- |                            |
- +-- DirectParticipant        +-- GroupMembership
- |                            |
- +-- DirectMessage            +-- GroupMessage
-       |                            |
-       +-- Reply                    +-- Reply
-       |                            |
-       +-- Attachment               +-- Attachment
-       |                            |
-       +-- RecipientState           +-- RecipientState
-```
-
-The major authorization boundaries are:
-
-```text
-User
-  |
-  +-- Friendship
-  |
-  +-- DirectConversation
-  |       |
-  |       +-- DirectParticipant
-  |       +-- DirectMessage
-  |
-  +-- GroupConversation
-          |
-          +-- GroupMembership
-          +-- GroupInvitation
-          +-- GroupMessage
-```
-
-The V1 realtime boundary is:
-
-```text
-Browser
-   |
-   +-- HTTP/REST ------> Application Server
-   |
-   +-- WebSocket ------> Realtime Layer
-                              |
-                              +-- presence
-                              +-- typing
-                              +-- message events
-                              +-- delivery events
-                              +-- read events
-```
-
-Persistent domain state belongs primarily to PostgreSQL.
-
-Realtime ephemeral state is handled by the realtime infrastructure.
-
-Client-only state remains on the client.
-
----
-
-# 63. Contract Status
-
-This document defines the V1 domain boundaries and invariants.
-
-It does not yet define:
-
-* REST endpoint URLs
-* request/response schemas
-* WebSocket event schemas
-* authentication protocol
-* file upload protocol
-* database table implementation
-* serializer implementation
-* service implementation
-* encryption protocol
-
-Those belong to subsequent contracts.
-
-The implementation must conform to this domain contract rather than defining the domain implicitly through Django models.
+## 30. V1 Non-Goals
+
+Not implemented in V1:
+
+- voice calls / group voice
+- WebRTC media/signaling contract
+- video / screen sharing
+- message edit
+- ordinary message delete
+- reactions
+- DM hide/restore
+- group ownership transfer
+- historical presence / last online
+- end-to-end encryption
+- account deletion/recovery workflows

@@ -2,596 +2,324 @@
 
 ## 1. Purpose
 
-This document defines the authentication behavior of the Communication Platform.
+This document defines V1 authentication behavior for Communication Platform.
 
-Authentication is responsible for establishing and maintaining the identity of a user.
+Authentication establishes **who the current user is**.
 
-It covers:
-
-* user registration
-* user login
-* user logout
-* authenticated HTTP requests
-* authenticated WebSocket connections
-* current authenticated user
-* session lifecycle
-* authentication failure behavior
-
-Authorization is outside the scope of this contract.
-
-Authorization rules are defined by the domain that owns the protected resource or operation.
+Authorization determines **what that authenticated user may access or do** and is owned by the relevant domain.
 
 ---
 
-# 2. Authentication Model
+## 2. User Identity
 
-The platform uses Django's authentication system.
+The custom Django `User` model extends `AbstractUser`.
 
-The custom `User` model is the platform's identity model.
-
-The user's email address is the authentication identifier.
+V1 uses:
 
 ```text
-email + password
-       ↓
-authentication
-       ↓
-authenticated User
+email    = authentication identifier
+username = public application identifier
+password = authentication credential
 ```
 
-The username is a public application identifier and is not used as the authentication identifier.
+`email` is unique.
 
-The `User` model therefore has:
+`username` is also unique through Django's user model behavior.
+
+The model configuration is:
 
 ```text
-email      → authentication identifier
-username   → public identifier
-password   → authentication credential
+USERNAME_FIELD = "email"
+REQUIRED_FIELDS = ["username"]
 ```
 
-The email address must be unique.
-
-The username must be unique.
+Users authenticate with email + password, not username + password.
 
 ---
 
-# 3. Authentication Mechanism
+## 3. Authentication Mechanism
 
-The initial web application uses session-based authentication.
+V1 uses Django session authentication.
 
-After successful authentication, Django creates an authenticated session for the user.
+It does not use:
 
-The browser maintains the session using a secure session cookie.
+- JWT
+- refresh tokens
+- OAuth
+- passkeys
 
-Subsequent authenticated HTTP requests use that session.
+After authentication, Django's session identifies the user for subsequent HTTP requests.
 
-Conceptually:
+DRF uses the same Django session.
 
-```text
-Browser
-   |
-   | credentials
-   v
-Django
-   |
-   | successful authentication
-   v
-Session
-   |
-   v
-Authenticated requests
+Channels uses the same Django session for WebSocket authentication.
+
+Production session cookies are configured as secure cookies.
+
+---
+
+## 4. Password Handling
+
+Application code must never store or compare plaintext passwords directly.
+
+Registration uses Django password validation and `set_password()`.
+
+Credential verification uses Django authentication.
+
+Passwords/password hashes must never appear in:
+
+- API responses
+- WebSocket events
+- logs
+- frontend state intended for display
+
+---
+
+## 5. Registration
+
+Endpoint:
+
+```http
+GET  /accounts/register/
+POST /accounts/register/
 ```
-
-The platform does not use JWT authentication for V1.
-
-A token-based authentication mechanism may be introduced in a later version if additional clients require it.
-
----
-
-# 4. Password Handling
-
-Passwords must never be stored in plaintext.
-
-Django's password hashing mechanism is responsible for password storage and verification.
-
-Application code must never:
-
-* store a plaintext password
-* return a password from an API
-* expose a password in logs
-* expose a password in WebSocket events
-* manually compare plaintext passwords against stored password values
-
-Password verification must use Django's authentication mechanisms.
-
----
-
-# 5. Registration
-
-An unauthenticated user may register an account.
 
 Registration requires:
 
-* email
-* username
-* password
+- email
+- username
+- password
 
-The email must be unique.
+The registration service validates:
 
-The username must be unique.
+- email uniqueness
+- username uniqueness
+- Django password validators
 
-Registration creates a new `User`.
+On successful V1 registration:
 
-A successful registration does not implicitly grant access to any conversation, group, friendship, or other user-owned resource.
+1. the user is created;
+2. the user is immediately logged in with Django `login()`;
+3. the browser is redirected to the configured frontend base URL.
 
-Registration is implemented as an ordinary Django view using Django Forms and server-rendered templates in V1.
+Registration does not grant conversation/group/friendship access beyond the newly authenticated account.
 
-Register/login/logout are intentionally outside the JSON REST API contract for V1. A JSON/SPA authentication interface may be introduced later without changing the session-based authentication model.
+Registration is implemented with an ordinary Django view, Django Form, service, and server-rendered template.
 
-The exact URL, template, and redirect behavior are defined by the presentation/application routing configuration.
+There is no JSON registration endpoint under `/api/v1/`.
 
 ---
 
-# 6. Login
+## 6. Login
 
-An unauthenticated user may authenticate using:
+Endpoint:
+
+```http
+GET  /accounts/login/
+POST /accounts/login/
+```
+
+Credentials:
 
 ```text
 email
 password
 ```
 
-A successful login establishes an authenticated Django session.
+A successful login establishes a Django session and redirects to the configured frontend base URL.
 
-After successful authentication:
+An already-authenticated user visiting the login page is redirected to the frontend.
 
-```text
-request.user
-```
-
-represents the authenticated user for HTTP requests.
-
-The authentication system must not authenticate a user solely because a valid username was supplied.
-
-The authentication identifier is the user's email address.
+Invalid credentials are shown as a form error.
 
 ---
 
-# 7. Logout
+## 7. Logout
 
-An authenticated user may log out.
+Endpoint:
 
-Logout invalidates the current authenticated session.
+```http
+POST /accounts/logout/
+```
 
-After logout, requests using that session must no longer be treated as authenticated.
+Logout requires an authenticated session.
 
-Logout does not:
+It calls Django logout behavior for the current session and redirects to the login page.
 
-* delete the user
-* delete friendships
-* delete conversations
-* delete messages
-* remove group membership
-* delete attachments
+Logout does not delete:
 
-It only terminates the current authentication session.
+- the account
+- friendships
+- conversations
+- messages
+- memberships
+- attachments
+
+Logging out one session does not inherently invalidate other sessions belonging to the same user.
 
 ---
 
-# 8. Current User
+## 8. Current User
 
-The platform provides a way for an authenticated client to obtain information about the currently authenticated user.
+Server-rendered account page:
 
-The current-user operation represents:
-
-```text
-Who am I authenticated as?
+```http
+GET /accounts/me/
 ```
 
-It must not expose sensitive authentication information.
+JSON API:
 
-The response may contain public account information such as:
-
-* user ID
-* username
-* email, where appropriate for the authenticated user
-* account-related information explicitly defined by the API
-
-It must never contain:
-
-* password
-* password hash
-* session credentials
-* authentication secrets
-
----
-
-# 9. Unauthenticated HTTP Requests
-
-Protected HTTP resources require authentication.
-
-If an unauthenticated client attempts to access a protected resource, the request must be rejected as unauthenticated.
-
-Authentication failure must be distinguishable from authorization failure.
-
-Conceptually:
-
-```text
-No authenticated user
-        ↓
-Authentication failure
-        ↓
-HTTP 401
+```http
+GET /api/v1/users/me/
 ```
 
-An authenticated user who is not permitted to perform an operation is an authorization failure and is handled by the relevant domain/API contract.
-
----
-
-# 10. CSRF Protection
-
-The V1 web application uses Django session authentication and therefore must retain Django's CSRF protection for state-changing HTTP requests.
-
-CSRF protection applies to unsafe HTTP methods such as:
-
-```text
-POST
-PUT
-PATCH
-DELETE
-```
-
-The client must provide a valid CSRF token when required by Django's CSRF middleware.
-
-For browser clients, the token may be obtained through Django's CSRF mechanism and submitted using the standard `X-CSRFToken` request header.
-
-A CSRF token is not an authentication credential and does not identify the user.
-
-The client must not submit a CSRF token as an arbitrary JSON field and expect Django's CSRF middleware to treat that field as the CSRF token.
-
-CSRF protection must not be disabled merely to make session-authenticated requests easier to test or consume.
-
-CSRF trusted origins must be narrowly configured for known development or production origins. Broad wildcard trust must not be used.
-
----
-
-# 10. WebSocket Authentication
-
-WebSocket connections are authenticated using the user's existing Django authentication session.
-
-The client does not establish a separate username/password authentication mechanism for WebSockets.
-
-Conceptually:
-
-```text
-Browser
-   |
-   | existing session
-   v
-WebSocket connection
-   |
-   v
-Channels authentication
-   |
-   v
-scope["user"]
-```
-
-A WebSocket connection must have an authenticated user before it can participate in authenticated communication.
-
-An unauthenticated WebSocket connection must be rejected.
-
-The WebSocket layer must not trust a user ID supplied by the client as proof of identity.
-
-For example, the client must not be able to establish identity by sending:
+The V1 JSON representation is:
 
 ```json
 {
-    "user_id": 42
+  "id": 1,
+  "username": "alice",
+  "email": "alice@example.com"
 }
 ```
 
-The authenticated user must come from the server-side authentication context.
+Sensitive authentication data must never be returned.
 
 ---
 
-# 11. Authentication and WebSocket Events
+## 9. DRF Authentication Behavior
 
-Authentication establishes the identity of the WebSocket connection.
+The REST API defaults to:
 
-It does not grant permission to access arbitrary conversations.
+- session authentication
+- authenticated access
 
-For example:
-
-```text
-User A
-  |
-  | authenticated WebSocket
-  v
-Channels
-```
-
-does not imply:
+The project uses a small `SessionAuthentication` subclass that supplies an authentication header so an unauthenticated API request is represented as:
 
 ```text
-User A → can access every group
-User A → can access every DM
-User A → can receive every message
+401 Unauthorized
 ```
 
-The relevant conversation/domain authorization rules must still be enforced.
+rather than being confused with an authenticated authorization failure.
 
-Therefore:
-
-```text
-Authentication
-    ↓
-Who is this connection?
-    ↓
-Authorization
-    ↓
-What may this connection access?
-```
+Authenticated requests that fail domain permission checks use the appropriate `403`, `404`, or other domain response.
 
 ---
 
-# 12. Session and Multiple Clients
+## 10. CSRF
 
-A user may have multiple authenticated sessions simultaneously.
+Because V1 uses cookie-backed session authentication, unsafe HTTP requests are protected by Django CSRF handling.
 
-For example:
+Unsafe methods include:
 
-```text
-User A
- ├── Browser session 1
- ├── Browser session 2
- └── Desktop client session
+- POST
+- PUT
+- PATCH
+- DELETE
+
+The React API client sends the `csrftoken` cookie value through:
+
+```http
+X-CSRFToken: ...
 ```
 
-Logging out one session does not inherently terminate all other sessions.
+when making unsafe same-origin requests.
 
-Global session invalidation is outside the initial V1 authentication requirements.
+CSRF is not authentication and must not be disabled to simplify API usage.
+
+Production trusted origins must be explicitly configured.
 
 ---
 
-# 13. Account State
+## 11. WebSocket Authentication
 
-The platform uses Django's account-active state.
+Endpoint:
 
-An inactive user must not be able to authenticate normally.
+```text
+/ws/v1/
+```
 
-An inactive account does not automatically imply deletion of the user's:
+The ASGI stack uses:
 
-* friendships
-* conversations
-* messages
-* groups
-* attachments
+- `AllowedHostsOriginValidator`
+- `AuthMiddlewareStack`
+- Channels URL routing
 
-Account lifecycle operations beyond activation/deactivation are outside this contract.
+The WebSocket consumer uses the authenticated user from:
+
+```text
+scope["user"]
+```
+
+An unauthenticated connection is closed with code:
+
+```text
+4401
+```
+
+The client cannot establish identity by supplying a `user_id`, username, or other claimed identity inside a WebSocket payload.
 
 ---
 
-# 14. Security Boundaries
+## 12. Authentication vs Authorization
 
-The client is never trusted to establish its own identity.
-
-The server is responsible for determining:
+Authentication answers:
 
 ```text
-authenticated user
+Who is this request/connection?
 ```
 
-The server must not rely on:
+Authorization answers questions such as:
 
-* user IDs supplied by the client
-* usernames supplied by the client
-* conversation participant IDs supplied by the client
-* WebSocket messages claiming an identity
+```text
+May this user read this DM?
+May this user send a new DM?
+May this user access this group?
+May this user remove this member?
+May this user download this attachment?
+May this socket subscribe to this conversation?
+```
 
-for authentication.
-
-Client-provided identifiers are data.
-
-The authenticated session is the source of identity.
+Those decisions remain server-side domain decisions.
 
 ---
 
-# 15. Authentication vs Authorization
+## 13. Multiple Clients
 
-Authentication is responsible for:
+A user may have multiple active sessions and multiple active WebSocket connections.
 
-* establishing identity
-* maintaining the authenticated session
-* identifying the authenticated HTTP request
-* identifying the authenticated WebSocket connection
+Presence and realtime fan-out are designed for multiple simultaneous connections.
 
-Authorization is responsible for determining whether the authenticated user may perform a particular operation.
-
-Examples of authorization belong to other domain contracts:
-
-```text
-Can this user read this DM?
-Can this user send a message to this group?
-Can this user remove this group member?
-Can this user transfer group ownership?
-Can this user invite this person?
-```
-
-Those questions must not be solved by the authentication subsystem.
+V1 does not provide global logout / revoke-all-sessions functionality.
 
 ---
 
-# 16. REST Authentication Operations
+## 14. Account State
 
-The V1 authentication surface must provide operations corresponding to:
+Django's normal active-user behavior applies.
 
-```text
-Register
-Login
-Logout
-Current authenticated user
-```
+An inactive account cannot authenticate normally.
 
-`Register`, `Login`, and `Logout` are ordinary Django presentation-layer operations in V1. They are not `/api/v1/` JSON endpoints.
+V1 does not provide an account-deletion workflow.
 
-The application REST API uses the resulting Django session for authenticated resource requests.
-
-A JSON/SPA authentication API may be added in a later version, but it must reuse the same authentication/session rules rather than creating a second identity model.
-
-# 17. Authentication Presentation Boundary
-
-Authentication is implemented through Django's built-in authentication/session infrastructure and ordinary Django views in V1.
-
-The following operations are Django-view responsibilities:
-
-```text
-Register
-Login
-Logout
-```
-
-These views may use Django Forms for transport/input validation and the authentication service for application-level authentication behavior.
-
-Conceptually:
-
-```text
-Django View
-     ↓
-Django Form
-     ↓
-Authentication Service
-     ↓
-Django Authentication / User
-     ↓
-Django Session
-```
-
-The presentation layer is responsible for reading the HTTP request, constructing forms, rendering templates, displaying validation errors, redirecting after successful operations, and establishing or terminating the Django session where appropriate.
-
-The authentication service is responsible for user registration, password hashing, credential verification, and application-level authentication behavior.
-
-Django's `login()` and `logout()` functions remain framework-level session operations and may be invoked by the presentation layer as the intended Django integration point.
-
-Authentication views must not directly manipulate the User model through the ORM for registration or authentication.
+Account deletion/recovery/device management are outside V1.
 
 ---
 
-# 18. Application REST API Boundary
+## 15. V1 Out of Scope
 
-The platform still provides a REST API for application resources.
+Authentication features outside V1 include:
 
-DRF is used for application operations such as:
+- OAuth/social login
+- JWT/token authentication
+- two-factor authentication
+- passkeys
+- email verification
+- password reset/recovery
+- phone-number authentication
+- device management
+- global logout
+- account deletion
+- cryptographic identity/key management
 
-```text
-Friends
-Friend requests
-Direct messages
-Group chats
-Messages
-Attachments
-```
-
-These resources use the authenticated Django session to determine the current user.
-
-DRF does not replace Django's authentication mechanism.
-
-Conceptually:
-
-```text
-Browser
-   |
-   | Django session cookie
-   v
-DRF endpoint
-   |
-   v
-request.user
-   |
-   v
-Application authorization
-   |
-   v
-Application service
-```
-
-The REST API contract defines the URLs, methods, request schemas, response schemas, and status codes for application resources.
-
-Authentication itself is not implemented as a separate JWT/token API in V1.
-
----
-
-# 19. WebSocket Authentication Boundary
-
-The WebSocket layer must expose the authenticated user to consumers through the server-side authentication context.
-
-Consumers may use this identity when invoking application services.
-
-Conceptually:
-
-```text
-WebSocket Consumer
-        |
-        v
-authenticated user
-        |
-        v
-Application Service
-```
-
-The consumer must not determine the authenticated user from arbitrary message payload data.
-
----
-
-# 20. Out of Scope for V1
-
-The following are intentionally excluded from this contract:
-
-* OAuth
-* Google/GitHub/etc. login
-* JWT
-* refresh tokens
-* two-factor authentication
-* passkeys
-* email verification
-* password reset
-* account recovery
-* phone-number authentication
-* encryption/key management
-* anonymous accounts
-* account deletion
-* device management
-* global logout from all sessions
-
-These may be introduced in later versions without changing the fundamental distinction between authentication and authorization.
-
----
-
-# 21. Architectural Principle
-
-The authentication subsystem establishes one fact:
-
-> **This request or connection belongs to this User.**
-
-It does not establish what the user is allowed to access.
-
-The resulting boundary is:
-
-```text
-                    Authentication
-                          |
-                          v
-                   Authenticated User
-                          |
-                          v
-                    Authorization
-                          |
-                          v
-                 Domain/Application
-                          |
-                          v
-                     Operation
-```
-
-Every protected operation must ultimately be associated with the authenticated user established by the authentication subsystem.
-
+These may be added later without changing the V1 distinction between authentication and authorization.

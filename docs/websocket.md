@@ -2,1098 +2,588 @@
 
 ## 1. Purpose
 
-This document defines the V1 realtime communication contract for the Communication Platform.
+This document defines the implemented V1 realtime contract.
 
-The WebSocket layer is responsible for realtime events that cannot be efficiently handled through ordinary HTTP requests.
+V1 realtime provides:
 
-V1 realtime functionality includes:
+- one authenticated WebSocket connection per client instance
+- conversation subscription/unsubscription
+- message-created fan-out
+- delivery/read acknowledgements and events
+- typing indicators
+- online/offline presence
+- friend-request/friendship lifecycle events
+- group invitation/lifecycle events
+- access-revocation unsubscribe behavior
 
-* realtime message delivery
-* message delivery acknowledgements
-* message read state
-* typing indicators
-* online/offline presence
-* last-online updates
-* group message fan-out
-* conversation membership changes
-* friend-request notifications where useful
-* group invitation notifications where useful
+V1 does **not** create messages through WebSocket.
 
-V1 does **not** include:
-
-* voice communication
-* video communication
-* WebRTC
-* screen sharing
-* message reactions
-* message editing
-* unilateral message deletion
-* end-to-end encryption
-
-Voice functionality will be specified in a future version.
+All messages, including text-only messages, are created through REST.
 
 ---
 
-# 2. Relationship With REST
-
-REST and WebSocket are two interfaces over the same application/domain layer.
-
-REST is responsible for persistent resource operations and history retrieval.
-
-WebSocket is responsible for realtime events.
-
-The two interfaces must not implement different domain rules.
-
-For example:
-
-```text
-REST message creation
-        |
-        v
-Application Service
-        |
-        v
-Database
-        |
-        v
-Realtime Event
-        |
-        v
-WebSocket clients
-```
-
-Likewise:
-
-```text
-WebSocket message creation
-        |
-        v
-Application Service
-        |
-        v
-Database
-        |
-        v
-Realtime Event
-```
-
-There must be one authoritative implementation of message-creation rules.
-
----
-
-# 3. Connection Endpoint
-
-The V1 WebSocket endpoint is:
+## 2. Endpoint
 
 ```text
 /ws/v1/
 ```
 
-Conversation-specific communication is multiplexed through the authenticated connection.
-
-The protocol must not require one physical WebSocket connection per conversation.
-
-A client should normally maintain one authenticated WebSocket connection.
+The client normally maintains one connection and multiplexes conversations through commands.
 
 ---
 
-# 4. Authentication
+## 3. Authentication
 
-A WebSocket connection must be authenticated before it can access user-specific realtime resources.
+The ASGI stack uses the existing Django session through `AuthMiddlewareStack`.
 
-An unauthenticated connection must not receive:
+Origin/host validation uses `AllowedHostsOriginValidator`.
 
-* messages
-* typing events
-* presence information
-* friend notifications
-* group notifications
-* delivery state
-* read state
+An unauthenticated connection is closed with:
 
-The WebSocket layer must use the same user identity as the HTTP authentication system.
+```text
+4401
+```
 
-The exact authentication mechanism is an implementation concern, but the authenticated identity must be available to the consumer.
+The authenticated identity comes from `scope["user"]`.
 
 ---
 
-# 5. Connection Lifecycle
+## 4. Event Envelope
 
-The lifecycle is:
-
-```text
-CONNECT
-   |
-   v
-AUTHENTICATE
-   |
-   v
-CONNECTED
-   |
-   +----> SUBSCRIBE / UNSUBSCRIBE
-   |
-   +----> SEND EVENTS
-   |
-   +----> RECEIVE EVENTS
-   |
-   v
-DISCONNECT
-```
-
-The server must clean up connection-specific state when the connection terminates.
-
----
-
-# 6. Connection Identifier
-
-Each WebSocket connection may have an internal connection identifier.
-
-Example:
-
-```text
-connection_id = "connection-uuid"
-```
-
-This identifier is server-side infrastructure information.
-
-It is not the user's identity.
-
-A user may have multiple simultaneous connections.
-
-For example:
-
-```text
-User A
- ├── Browser tab
- ├── Desktop application
- └── Mobile application
-```
-
-All three connections represent the same authenticated user.
-
----
-
-# 7. Multiple Connections
-
-The system must support multiple simultaneous connections for the same user.
-
-If a user has multiple active connections:
-
-```text
-User A
- ├── Connection 1
- ├── Connection 2
- └── Connection 3
-```
-
-an event intended for User A should normally be delivered to all relevant active connections.
-
-The server must not assume:
-
-```text
-one user = one WebSocket
-```
-
----
-
-# 8. Message Envelope
-
-All application-level WebSocket messages use a common envelope.
-
-Example:
+Server events use:
 
 ```json
 {
-    "type": "message.created",
-    "event_id": "event-uuid",
-    "timestamp": "2026-09-02T20:00:00Z",
-    "payload": {}
+  "type": "message.created",
+  "event_id": "uuid",
+  "timestamp": "2026-09-14T12:00:00Z",
+  "payload": {}
 }
 ```
 
-Required fields:
+Some command responses/errors also include:
+
+```json
+{
+  "request_id": "client-request-uuid"
+}
+```
+
+Fields:
+
+- `type`
+- `event_id`
+- `timestamp`
+- `payload`
+- optional `request_id`
+
+The frontend deduplicates already-seen `event_id` values.
+
+---
+
+## 5. Client Command Envelope
+
+The browser sends:
+
+```json
+{
+  "type": "conversation.subscribe",
+  "request_id": "uuid",
+  "payload": {}
+}
+```
+
+`payload` must be a JSON object.
+
+Unknown commands return an `error` event with code:
 
 ```text
-type
-event_id
-timestamp
-payload
+UNKNOWN_COMMAND
+```
+
+Malformed command payloads return:
+
+```text
+INVALID_COMMAND
 ```
 
 ---
 
-# 9. Event Type
+## 6. Implemented Client Commands
 
-`type` identifies the event.
-
-Examples:
+The V1 consumer handles exactly these public commands:
 
 ```text
-message.created
-message.sent
+conversation.subscribe
+conversation.unsubscribe
 message.delivered
 message.read
-typing.started
-typing.stopped
-presence.updated
-conversation.updated
-group.member_added
-group.member_removed
+presence.heartbeat
+typing.start
+typing.stop
 ```
 
-Event names use:
+There is no `message.create` command.
 
-```text
-resource.action
-```
-
-or:
-
-```text
-resource.subresource.action
-```
-
-format.
+There is no binary attachment transport over WebSocket.
 
 ---
 
-# 10. Event ID
+## 7. Connection Event
 
-Every server-generated event has a unique `event_id`.
+After a successful connection, the server emits:
 
-Example:
+```text
+connection.connected
+```
+
+Payload:
 
 ```json
 {
-    "event_id": "019b2d..."
+  "user_id": 1
 }
 ```
 
-Clients may use event IDs for:
+The connection also:
 
-* duplicate detection
-* debugging
-* reconnect reconciliation
-* logging
-
-Event IDs must not be treated as message IDs.
+1. joins the user's personal Channels group;
+2. registers/touches its presence lease;
+3. broadcasts the user's presence to current friends;
+4. sends the new connection a presence snapshot for its current friends.
 
 ---
 
-# 11. Timestamps
+## 8. Conversation Identity
 
-Server-generated events contain a server timestamp.
-
-Example:
+Conversation commands use:
 
 ```json
 {
-    "timestamp": "2026-09-02T20:00:00.123Z"
+  "conversation_type": "dm",
+  "conversation_id": 5
 }
 ```
 
-The server timestamp is authoritative for server event ordering.
-
-Clients must not use their local clocks as authoritative timestamps for server state.
-
----
-
-# 12. Conversation Subscription
-
-The client may subscribe to a conversation.
-
-Example:
-
-```json
-{
-    "type": "conversation.subscribe",
-    "request_id": "request-uuid",
-    "payload": {
-        "conversation_type": "dm",
-        "conversation_id": "dm-id"
-    }
-}
-```
-
-For groups:
-
-```json
-{
-    "type": "conversation.subscribe",
-    "request_id": "request-uuid",
-    "payload": {
-        "conversation_type": "group",
-        "conversation_id": "group-id"
-    }
-}
-```
-
-The server verifies authorization before accepting the subscription.
-
----
-
-# 13. Unsubscribe
-
-Client:
-
-```json
-{
-    "type": "conversation.unsubscribe",
-    "request_id": "request-uuid",
-    "payload": {
-        "conversation_type": "dm",
-        "conversation_id": "dm-id"
-    }
-}
-```
-
-The server stops delivering conversation-specific realtime events to that connection.
-
-Unsubscribing does not:
-
-* leave a group
-* change membership
-* change read state
-
-It only changes the current WebSocket subscription.
-
----
-
-# 14. Subscription Authorization
-
-A client cannot subscribe to an arbitrary conversation.
-
-For a DM:
+Valid types:
 
 ```text
-authenticated user
-        |
-        v
-must be one of the two participants
+dm
+group
 ```
 
-For a group:
-
-```text
-authenticated user
-        |
-        v
-must be an active member
-```
-
-Authorization is checked by the server.
-
-Conversation IDs must never function as authorization credentials.
+IDs must be positive integers.
 
 ---
 
-# 15. Message Creation
+## 9. Subscribe
 
-A client may create a text message through WebSocket using:
+Command:
 
 ```text
-message.create
+conversation.subscribe
 ```
 
 Example:
 
 ```json
 {
-    "type": "message.create",
-    "request_id": "request-uuid",
-    "payload": {
-        "conversation_type": "dm",
-        "conversation_id": "dm-id",
-        "content": "Hello",
-        "reply_to": null
-    }
+  "type": "conversation.subscribe",
+  "request_id": "uuid",
+  "payload": {
+    "conversation_type": "group",
+    "conversation_id": 7
+  }
 }
 ```
 
-V1 WebSocket message creation is text-only because binary attachments are created through multipart REST message creation.
+Authorization:
 
-Therefore a WebSocket `message.create` command must contain non-empty text content.
+### DM
 
-Attachment-only and text-plus-attachment messages use REST; after commit they are broadcast through the same `message.created` event used for text messages.
+The user must be one of the two DM participants.
 
-# 16. Message Creation Processing
+Active friendship is **not** required merely to subscribe/read old DM history.
 
-The server processes:
+### Group
+
+The user must be a current member.
+
+Success event:
 
 ```text
-message.create
-        |
-        v
-authenticate sender
-        |
-        v
-authorize conversation access
-        |
-        v
-validate content
-        |
-        v
-validate reply
-        |
-        v
-validate attachments
-        |
-        v
-create message
-        |
-        v
-persist message
-        |
-        v
-publish message.created
+conversation.subscribed
 ```
 
-All domain invariants must be enforced by the application/domain layer.
+with the same `request_id`.
 
 ---
 
-# 17. Message Creation Acknowledgement
+## 10. Unsubscribe
 
-The sender receives an acknowledgement.
+Command:
 
-Example:
+```text
+conversation.unsubscribe
+```
+
+Success event:
+
+```text
+conversation.unsubscribed
+```
+
+with the same `request_id`.
+
+The server can also force-unsubscribe group access.
+
+A forced unsubscribe emits:
 
 ```json
 {
-    "type": "message.created",
-    "event_id": "event-uuid",
-    "timestamp": "2026-09-02T20:00:00Z",
-    "payload": {
-        "request_id": "request-uuid",
-        "message": {}
-    }
+  "type": "conversation.unsubscribed",
+  "payload": {
+    "conversation_type": "group",
+    "conversation_id": 7,
+    "reason": "access_revoked"
+  }
 }
 ```
 
-The `request_id` allows the client to associate the server result with its local `SENDING` message.
+Forced unsubscribe occurs when group membership is removed/left or the group is deleted.
 
 ---
 
-# 18. Client Message State
+## 11. Message Creation
 
-The client may maintain:
+Message creation is **not** a WebSocket command in V1.
 
-```text
-SENDING
-FAILED
-SENT
-DELIVERED
-READ
-```
-
-These states have different authority.
-
-### SENDING
-
-Client-local state.
-
-The server has not yet confirmed persistence.
-
-### FAILED
-
-Client-local state indicating that the creation attempt failed.
-
-### SENT
-
-The server has successfully persisted the message.
-
-### DELIVERED
-
-The recipient's client has acknowledged receipt.
-
-### READ
-
-The recipient has acknowledged reading the message.
-
-The server is authoritative for persisted delivery/read state.
-
----
-
-# 19. Failed Message Creation
-
-If message creation fails:
-
-```json
-{
-    "type": "message.create_failed",
-    "event_id": "event-uuid",
-    "timestamp": "2026-09-02T20:00:00Z",
-    "payload": {
-        "request_id": "request-uuid",
-        "code": "MESSAGE_CREATE_FAILED",
-        "detail": "Message could not be created."
-    }
-}
-```
-
-The client may change:
+Flow:
 
 ```text
-SENDING -> FAILED
-```
-
-The server must not create a partial message.
-
----
-
-# 20. Message Created Event
-
-After successful persistence:
-
-```text
-message.created
-```
-
-is emitted.
-
-Example:
-
-```json
-{
-    "type": "message.created",
-    "event_id": "event-uuid",
-    "timestamp": "2026-09-02T20:00:00Z",
-    "payload": {
-        "conversation_type": "dm",
-        "conversation_id": "dm-id",
-        "message": {
-            "id": "message-id",
-            "sender": {
-                "id": "user-id",
-                "username": "alice"
-            },
-            "content": "Hello!",
-            "created_at": "2026-09-02T20:00:00Z",
-            "reply_to": null,
-            "attachments": []
-        }
-    }
-}
-```
-
----
-
-# 21. Group Message Fan-Out
-
-For a group message:
-
-```text
-Sender
+REST POST
    |
    v
-Application Service
+message persisted
    |
    v
-Database
+transaction commits
    |
    v
-Channel Layer
-   |
-   +----> Member A
-   +----> Member B
-   +----> Member C
-   +----> Member D
+message.created realtime event
 ```
 
-Every active group member with a relevant active connection receives the message event.
-
-The sender may receive the same canonical `message.created` event.
-
-Clients must deduplicate using the message ID/event ID.
-
----
-
-# 22. DM Message Fan-Out
-
-For a DM:
+REST endpoints:
 
 ```text
-Sender
-   |
-   +----> Sender's active connections
-   |
-   +----> Recipient's active connections
+POST /api/v1/dms/{id}/messages/
+POST /api/v1/groups/{id}/messages/
 ```
 
-The recipient must not receive a message through a connection that is not authorized for the DM.
+Attachments use multipart REST.
 
 ---
 
-# 23. Delivery Acknowledgement
+## 12. `message.created`
 
-A client acknowledges that it has received a message using:
+Published after a persisted message commits.
+
+Payload:
 
 ```json
 {
-    "type": "message.delivered",
-    "request_id": "request-uuid",
-    "payload": {
-        "conversation_type": "dm",
-        "conversation_id": "dm-id",
-        "message_id": "message-id"
-    }
+  "conversation_type": "dm",
+  "conversation_id": 5,
+  "message": {
+    "id": 123,
+    "sender": {
+      "id": 1,
+      "username": "alice"
+    },
+    "content": "Hello",
+    "attachments": [],
+    "reply_to": null,
+    "receipts": [],
+    "created_at": "..."
+  }
 }
 ```
 
-For group messages:
+The Message shape matches the REST message representation.
 
-```json
-{
-    "type": "message.delivered",
-    "request_id": "request-uuid",
-    "payload": {
-        "conversation_type": "group",
-        "conversation_id": "group-id",
-        "message_id": "message-id"
-    }
-}
-```
+Audience includes:
 
-The server records delivery for the authenticated user.
+- the conversation subscription group;
+- personal user groups for the sender and original recipients.
 
-The client cannot acknowledge delivery on behalf of another user.
+The same event envelope/event ID is used across the fan-out targets so a client in more than one target group can deduplicate it.
 
 ---
 
-# 24. DM Delivery State
+## 13. Delivery Acknowledgement
 
-For a DM:
+Client command:
 
 ```text
-SENT
-  |
-  v
-DELIVERED
-  |
-  v
-READ
+message.delivered
 ```
-
-Delivery occurs when the recipient's client acknowledges receipt.
-
-If the recipient is offline, the message remains undelivered.
-
-When the recipient reconnects and receives pending messages, the client acknowledges them.
-
----
-
-# 25. Group Delivery State
-
-For a group, delivery is tracked per recipient.
-
-Conceptually:
-
-```text
-Message A
-
-delivered_to:
-    User B
-    User C
-
-not delivered:
-    User D
-    User E
-```
-
-There is no single global `DELIVERED` state for a group message.
-
-The API/WebSocket representation may expose the users who have acknowledged delivery.
-
----
-
-# 26. Read Acknowledgement
-
-A client acknowledges that a message has been read:
-
-```json
-{
-    "type": "message.read",
-    "request_id": "request-uuid",
-    "payload": {
-        "conversation_type": "dm",
-        "conversation_id": "dm-id",
-        "message_id": "message-id"
-    }
-}
-```
-
-The server records the authenticated user's read state.
-
----
-
-# 27. Read Semantics
-
-A message is considered read when the client explicitly communicates that the message has been read.
-
-The server must not infer:
-
-```text
-message received = message read
-```
-
-unless the product later explicitly chooses that behavior.
-
-For V1:
-
-```text
-DELIVERED != READ
-```
-
----
-
-# 28. Group Read State
-
-Group read state is tracked per member.
 
 Example:
 
 ```json
 {
-    "message_id": "message-id",
-    "read_by": [
-        "user-id-1",
-        "user-id-2"
-    ]
+  "type": "message.delivered",
+  "request_id": "uuid",
+  "payload": {
+    "message_id": 123
+  }
 }
 ```
 
-A user may only mark their own read state.
+The target message must be accessible to the authenticated user.
+
+If the user has an original recipient receipt that has not been delivered, the service sets `delivered_at`.
+
+If no receipt row exists for that user (for example the sender), there is simply nothing to mutate.
+
+Repeated acknowledgement is idempotent.
+
+An inaccessible message produces an `error` event with:
+
+```text
+NOT_AUTHORIZED
+```
 
 ---
 
-# 29. Read Event Fan-Out
+## 14. `message.delivered`
 
-When a user reads a message, the server may emit:
+Published to the conversation group when a receipt changes.
+
+Payload:
+
+```json
+{
+  "conversation_type": "dm",
+  "conversation_id": 5,
+  "message_id": 123,
+  "user_id": 2,
+  "delivered_at": "..."
+}
+```
+
+---
+
+## 15. Read Acknowledgement
+
+Client command:
 
 ```text
 message.read
 ```
 
-to relevant participants.
-
-For a DM:
-
-```text
-recipient
-   |
-   v
-server
-   |
-   v
-sender
-```
-
-For a group:
-
-```text
-reader
-   |
-   v
-server
-   |
-   v
-relevant group members
-```
-
-The final fan-out optimization is an implementation detail.
-
----
-
-# 30. Typing Indicators
-
-Typing indicators are ephemeral.
-
-They are not persisted as messages.
-
-Start:
+Example:
 
 ```json
 {
-    "type": "typing.started",
-    "request_id": "request-uuid",
-    "payload": {
-        "conversation_type": "dm",
-        "conversation_id": "dm-id"
-    }
+  "type": "message.read",
+  "request_id": "uuid",
+  "payload": {
+    "message_id": 130
+  }
 }
 ```
 
-Stop:
+The message acts as a read-through watermark.
+
+The service marks every unread receipt belonging to the current user in that same conversation through the target message position.
+
+Reading also marks undelivered affected receipts as delivered.
+
+If no receipt changes are needed, no `message.read` event is published.
+
+---
+
+## 16. `message.read`
+
+Payload:
 
 ```json
 {
-    "type": "typing.stopped",
-    "request_id": "request-uuid",
-    "payload": {
-        "conversation_type": "dm",
-        "conversation_id": "dm-id"
-    }
+  "conversation_type": "group",
+  "conversation_id": 7,
+  "message_id": 130,
+  "user_id": 2,
+  "read_at": "...",
+  "read_count": 4
 }
 ```
 
-The server derives the user identity from authentication.
+Audience:
 
-The client cannot specify another user as the sender.
+- conversation group
+- reader's personal user group
 
----
-
-# 31. Typing Broadcast
-
-For a DM:
-
-```text
-User A typing
-      |
-      v
-User B
-```
-
-User A does not need to receive their own typing event.
-
-For a group:
-
-```text
-User A typing
-      |
-      +----> User B
-      +----> User C
-      +----> User D
-```
-
-The typing event is delivered to other active group members.
+The personal user-group delivery allows multiple tabs to keep unread state synchronized.
 
 ---
 
-# 32. Typing Expiration
+## 17. Typing Commands
 
-Typing indicators must be treated as ephemeral state.
+Commands:
 
-The server must not assume that:
+```text
+typing.start
+typing.stop
+```
+
+Payload:
+
+```json
+{
+  "conversation_type": "dm",
+  "conversation_id": 5
+}
+```
+
+Requirements:
+
+1. the socket must currently be subscribed to that conversation;
+2. the server must still authorize typing publication.
+
+Authorization:
+
+- DM: participant + active friendship with the other participant
+- group: current membership
+
+Therefore an unfriended DM participant may still read/subscribe to history but may not publish typing state.
+
+---
+
+## 18. Typing Events
+
+Server events:
 
 ```text
 typing.started
-```
-
-will always be followed by:
-
-```text
 typing.stopped
 ```
 
-because a browser can crash or disconnect.
-
-Clients must therefore expire typing indicators locally after a reasonable timeout.
-
-The server may also maintain a short-lived timeout.
-
-No persistent database record is required.
-
----
-
-# 33. Presence
-
-V1 presence states are:
-
-```text
-ONLINE
-OFFLINE
-```
-
-V1 does not expose or persist `last_online_at`.
-
-# 34. Presence Connection Semantics
-
-When a user's first authenticated realtime connection becomes active:
-
-```text
-OFFLINE -> ONLINE
-```
-
-When the user's last active connection disappears:
-
-```text
-ONLINE -> OFFLINE
-```
-
-Closing one of several active connections does not make the user offline.
-
-# 35. Presence Event
-
-Example:
+Payload:
 
 ```json
 {
-    "type": "presence.updated",
-    "event_id": "event-uuid",
-    "timestamp": "2026-09-02T20:00:00Z",
-    "payload": {
-        "user_id": "user-id",
-        "status": "ONLINE"
-    }
+  "conversation_type": "dm",
+  "conversation_id": 5,
+  "user_id": 1,
+  "username": "alice"
 }
 ```
 
-The payload contains current presence only.
+Typing is ephemeral and not stored in PostgreSQL.
 
-# 36. Presence Visibility
+---
 
-Presence events must not be broadcast globally by default.
+## 19. Presence Heartbeat
 
-The realtime layer must apply a centralized authorization policy before sending a user's current `ONLINE` / `OFFLINE` state to another user.
-
-The exact observer set is a presentation/privacy policy rather than a persistence concern and may be tightened without changing the presence-state model. V1 does not expose historical last-online information.
-
-# 37. Conversation Membership Events
-
-When group membership changes, relevant members may receive events.
-
-Example:
+Command:
 
 ```text
-group.member_added
-group.member_removed
-group.owner_changed
-group.deleted
+presence.heartbeat
 ```
 
-Example:
+Payload may be an empty object.
+
+The heartbeat renews the current connection's presence lease.
+
+There is no separate acknowledgement event for the heartbeat.
+
+---
+
+## 20. `presence.updated`
+
+Payload:
 
 ```json
 {
-    "type": "group.member_added",
-    "event_id": "event-uuid",
-    "timestamp": "2026-09-02T20:00:00Z",
-    "payload": {
-        "group_id": "group-id",
-        "user": {
-            "id": "user-id",
-            "username": "alice"
-        }
-    }
+  "user_id": 2,
+  "online": true,
+  "expires_at": "..."
 }
 ```
 
----
+Presence events are shared with current friends.
 
-# 38. Group Member Removal
+`expires_at` allows clients to stop showing a stale online state if heartbeats disappear.
 
-When a member is removed:
+On connect, the server sends one presence snapshot event for each current friend.
 
-```text
-group.member_removed
-```
-
-must be emitted to relevant clients.
-
-The removed user's connection must immediately lose authorization to the group's realtime channel.
-
-The server must not rely on the client unsubscribing voluntarily.
+V1 does not send/persist historical last-online timestamps.
 
 ---
 
-# 39. Group Leaving
+## 21. Friendship Events
 
-When an ordinary member leaves:
-
-```text
-group.member_removed
-```
-
-is emitted to the remaining members.
-
-The leaving user's connection loses access to the group.
-
-When the owner leaves, the group is disbanded according to the domain contract. All affected connected members receive:
-
-```text
-group.deleted
-```
-
-and their connections immediately lose authorization to the group's realtime channel.
-
-The server must not rely on clients voluntarily unsubscribing.
-
-# 40. Ownership Transfer
-
-When ownership changes:
-
-```text
-group.owner_changed
-```
-
-is emitted.
-
-Example:
-
-```json
-{
-    "type": "group.owner_changed",
-    "event_id": "event-uuid",
-    "timestamp": "2026-09-02T20:00:00Z",
-    "payload": {
-        "group_id": "group-id",
-        "previous_owner_id": "user-a",
-        "new_owner_id": "user-b"
-    }
-}
-```
-
----
-
-## 40.1 Group Deletion / Disbanding
-
-Whenever a group is deleted—whether because the owner explicitly disbands it or because the owner leaves—the server emits:
-
-```text
-group.deleted
-```
-
-to affected connected members after the deletion transaction commits.
-
-Example:
-
-```json
-{
-    "type": "group.deleted",
-    "event_id": "event-uuid",
-    "timestamp": "2026-09-02T20:00:00Z",
-    "payload": {
-        "group_id": "group-id"
-    }
-}
-```
-
-After this event, affected connections must no longer be authorized to subscribe to or receive events from that group.
-
----
-
-# 41. Friend Request Events
-
-Friend-request changes may be delivered realtime as notifications.
-
-V1 event types are:
+Implemented types:
 
 ```text
 friend_request.created
 friend_request.accepted
 friend_request.rejected
 friend_request.cancelled
+friendship.removed
 ```
 
-`friend_request.cancelled` is emitted to the recipient after the sender successfully cancels a pending request.
+All are sent to the affected users' personal realtime groups after the persistent mutation commits.
 
-These events are notifications rather than persistence commands. The application/domain operation must complete successfully before the event is published.
+### Created / rejected / cancelled payload
 
-# 42. Group Invitation Events
+```json
+{
+  "request_id": 10,
+  "sender": {
+    "id": 1,
+    "username": "alice"
+  },
+  "recipient": {
+    "id": 2,
+    "username": "bob"
+  }
+}
+```
 
-Group invitations may be delivered realtime.
+### Accepted payload
 
-Example:
+Adds:
+
+```json
+{
+  "friendship_id": 20
+}
+```
+
+### Friendship removed payload
+
+```json
+{
+  "user_a": {
+    "id": 1,
+    "username": "alice"
+  },
+  "user_b": {
+    "id": 2,
+    "username": "bob"
+  }
+}
+```
+
+There is no `friendship.created` realtime event in V1.
+
+---
+
+## 22. Direct Group Invitation Events
+
+Implemented:
 
 ```text
 group_invitation.created
@@ -1101,509 +591,211 @@ group_invitation.accepted
 group_invitation.rejected
 ```
 
-The event does not itself grant access.
-
-The server must perform the actual domain operation before membership exists.
-
----
-
-# 43. Event Ordering
-
-Events belonging to the same conversation should be delivered in a deterministic order.
-
-For messages, the authoritative ordering is based on persisted message ordering.
-
-Clients must not assume that network arrival order is sufficient.
-
-For example:
-
-```text
-message.created #101
-message.created #102
-message.created #103
-```
-
-must be reconstructed correctly if network delivery temporarily reorders events.
-
----
-
-# 44. Event Delivery Is Not Guaranteed
-
-WebSocket delivery is not a durable storage mechanism.
-
-A client may:
-
-* disconnect
-* lose network connectivity
-* crash
-* miss events
-* reconnect later
-
-Therefore:
-
-```text
-WebSocket = realtime transport
-Database = source of truth
-```
-
-A client must be able to recover missed state through REST.
-
----
-
-# 45. Reconnection
-
-After reconnecting, the client must:
-
-```text
-1. Authenticate
-2. Establish WebSocket connection
-3. Restore relevant subscriptions
-4. Synchronize missed persistent state
-5. Resume realtime operation
-```
-
-The client must not assume that the server retained every event missed during disconnection.
-
----
-
-# 46. Missed Message Recovery
-
-After reconnect:
-
-```text
-WebSocket reconnect
-        |
-        v
-GET message history / synchronization endpoint
-        |
-        v
-compare known message IDs
-        |
-        v
-apply missing messages
-        |
-        v
-resume realtime events
-```
-
-The exact synchronization mechanism may be refined during implementation.
-
----
-
-# 47. Duplicate Events
-
-Clients must tolerate duplicate events.
-
-This is particularly important during:
-
-* reconnect
-* message acknowledgement
-* multiple browser tabs
-* network retries
-
-Messages should be deduplicated by stable message ID.
-
-Events should be deduplicated by event ID where appropriate.
-
----
-
-# 48. Request IDs
-
-Client-originated commands should include:
-
-```text
-request_id
-```
-
-Example:
+### Created/rejected payload
 
 ```json
 {
-    "type": "message.create",
-    "request_id": "request-uuid",
-    "payload": {}
+  "invitation_id": 8,
+  "group_id": 7,
+  "invited_by_id": 1,
+  "recipient_id": 2
 }
 ```
 
-The server uses the request ID when returning command-specific results or errors.
+### Accepted payload
 
-This allows the client to correlate:
+Also contains:
 
-```text
-local operation
-        |
-        v
-server response
+```json
+{
+  "group_name": "Gaming",
+  "recipient_username": "bob"
+}
 ```
 
-without relying on timing.
+These events are sent to inviter + recipient personal user groups.
+
+Accepting also produces `group.member_added`.
+
+Invitation-link creation/revocation has no dedicated V1 realtime event.
+
+A link join produces `group.member_added` when a new membership is created.
 
 ---
 
-# 49. Idempotency and Retries
+## 23. Group Lifecycle Events
 
-Network failures can create ambiguity:
-
-```text
-Client sends message
-        |
-        v
-Server persists message
-        |
-        X
-connection drops before acknowledgement
-```
-
-The client may retry.
-
-The server must therefore support idempotent message creation.
-
-The recommended mechanism is:
+Implemented types:
 
 ```text
-request_id / client_operation_id
-```
-
-combined with the authenticated user and conversation.
-
-A retry of the same logical operation must not create a second message.
-
----
-
-# 50. Command vs Event
-
-Client-to-server messages are commands.
-
-Examples:
-
-```text
-message.create
-message.delivered
-message.read
-typing.started
-typing.stopped
-conversation.subscribe
-conversation.unsubscribe
-```
-
-Server-to-client messages are events.
-
-Examples:
-
-```text
-message.created
-message.create_failed
-message.delivered
-message.read
-typing.started
-typing.stopped
-presence.updated
 group.member_added
+group.member_removed
+group.member_left
+group.renamed
+group.deleted
+```
+
+There is no `group.owner_changed` event because V1 has no ownership-transfer feature.
+
+### Member added / removed / left
+
+```json
+{
+  "group_id": 7,
+  "user_id": 2
+}
+```
+
+### Renamed
+
+```json
+{
+  "group_id": 7,
+  "name": "New group name"
+}
+```
+
+### Deleted
+
+```json
+{
+  "group_id": 7
+}
+```
+
+Group lifecycle events are published to appropriate current/former user groups and, where applicable, the conversation group.
+
+---
+
+## 24. Group Access Revocation
+
+### Owner removes member
+
+Persistent event:
+
+```text
 group.member_removed
 ```
 
-The server must not trust a client-generated event as authoritative state.
+The removed user is included in the notification audience, then force-unsubscribed.
+
+### Ordinary member leaves
+
+Persistent event:
+
+```text
+group.member_left
+```
+
+The leaving user is included in the audience, then force-unsubscribed.
+
+### Owner leaves or disbands
+
+Persistent event:
+
+```text
+group.deleted
+```
+
+All former members are force-unsubscribed.
 
 ---
 
-# 51. WebSocket Error Envelope
+## 25. Error Event
 
-Errors use a consistent structure.
-
-Example:
+Shape:
 
 ```json
 {
-    "type": "error",
-    "request_id": "request-uuid",
-    "payload": {
-        "code": "NOT_AUTHORIZED",
-        "detail": "You are not a member of this conversation."
-    }
+  "type": "error",
+  "event_id": "uuid",
+  "timestamp": "...",
+  "request_id": "uuid-if-supplied",
+  "payload": {
+    "code": "NOT_AUTHORIZED",
+    "detail": "..."
+  }
 }
 ```
 
-The client must be able to distinguish:
+Implemented command-level codes include:
 
 ```text
-validation failure
-authorization failure
-resource failure
-domain conflict
-server failure
-```
-
-using stable error codes.
-
----
-
-# 52. Authorization Errors
-
-Examples include:
-
-```text
-NOT_AUTHENTICATED
+INVALID_COMMAND
+UNKNOWN_COMMAND
 NOT_AUTHORIZED
-CONVERSATION_NOT_FOUND
-NOT_A_MEMBER
-NOT_A_PARTICIPANT
 ```
 
-The server must avoid revealing sensitive information through authorization errors.
-
-For example, the existence of an inaccessible conversation should not necessarily be disclosed.
+The consumer deliberately uses generic authorization errors rather than exposing private resource details.
 
 ---
 
-# 53. Message Reply Validation
+## 26. Event Delivery / Reconciliation
 
-When creating:
+WebSocket events improve responsiveness but are not the sole source of persistent truth.
+
+Canonical state remains in PostgreSQL and is retrieved through REST.
+
+The frontend reconnects automatically using increasing delays.
+
+When a page reconnects, its subscription hook resubscribes the open conversation.
+
+Durable attention state is reconciled from:
 
 ```text
-message.create
+GET /api/v1/activity/summary/
 ```
 
-with:
-
-```json
-{
-    "reply_to": "message-id"
-}
-```
-
-the referenced message must:
-
-1. exist
-2. belong to the same conversation
-3. be accessible to the sender
-
-Otherwise the operation fails.
+Other pages may refetch their canonical REST resources in response to lifecycle events.
 
 ---
 
-# 54. Attachment Validation
+## 27. Multiple Connections
 
-Binary attachments are not created or attached through WebSocket commands in V1.
+One user may have multiple WebSocket connections.
 
-A WebSocket `message.create` command is text-only and must not contain `attachment_ids` or binary file data.
+Every connection joins the user's personal group.
 
-Attachment-bearing messages are created through multipart REST message creation. Once committed, their attachment metadata is included in the normal `message.created` event so subscribed clients can render the message without a separate realtime upload protocol.
+Presence remains online until the last live connection lease disappears/expires.
 
-# 55. Immutable Messages
+Personal events can therefore reach multiple tabs/devices.
 
-The WebSocket protocol contains no commands for:
+---
+
+## 28. Transaction Authority
+
+Persistent domain events are scheduled with transaction commit hooks.
+
+Rule:
 
 ```text
-message.edit
-message.update
-message.delete
+database commit first
+realtime success event second
 ```
 
-Messages are immutable after creation.
-
-V1 has no direct-message mutual deletion or history-deletion command. Message deletion may be introduced only in a future protocol version with a corresponding domain contract.
-
-# 56. No Reactions
-
-V1 contains no realtime events for reactions.
-
-There are no:
-
-```text
-reaction.added
-reaction.removed
-```
-
-events.
-
-Reactions may be added in a future protocol version.
+A realtime event does not replace the database state it describes.
 
 ---
 
-# 57. No Voice
-
-V1 contains no:
-
-```text
-voice.room.created
-voice.joined
-voice.left
-voice.muted
-voice.unmuted
-```
-
-or similar events.
-
-The WebSocket architecture must remain extensible enough to support these later without redesigning the existing messaging protocol.
-
----
-
-# 58. Redis / Channel Layer
-
-Redis is infrastructure for realtime coordination and channel-layer messaging.
-
-Conceptually:
-
-```text
-Django Channels
-       |
-       v
-Redis Channel Layer
-       |
-       +------> WebSocket connection A
-       +------> WebSocket connection B
-       +------> WebSocket connection C
-```
-
-Redis is not the authoritative message database.
-
-Persistent message data belongs in the relational database.
-
-Ephemeral state such as connection presence and typing state may use Redis.
-
----
-
-# 59. Presence Storage
-
-Presence is connection-oriented and ephemeral in V1.
-
-Redis may track:
-
-```text
-user -> active connections
-```
-
-The user is considered online while at least one authenticated realtime connection exists and offline when the final connection disappears.
-
-V1 does not persist a `last_online_at` timestamp.
-
-# 60. Typing Storage
-
-Typing state is ephemeral.
-
-It should not be persisted in PostgreSQL.
-
-Redis or in-memory/channel-layer state may be used when necessary.
-
-A typing event should disappear automatically after a short period.
-
----
-
-# 61. Database Transactions and Events
-
-Persistent state changes must be committed before their corresponding realtime event is considered authoritative.
-
-Conceptually:
-
-```text
-BEGIN TRANSACTION
-        |
-        v
-persist domain change
-        |
-        v
-COMMIT
-        |
-        v
-publish realtime event
-```
-
-The implementation must avoid publishing a successful event for a database operation that ultimately rolls back.
-
----
-
-# 62. Realtime Event Authority
-
-The WebSocket consumer is not the domain authority.
-
-It is an adapter.
-
-The preferred architecture is:
-
-```text
-WebSocket Consumer
-        |
-        v
-Application Service
-        |
-        +----> Domain
-        |
-        +----> Database
-        |
-        v
-Event / Channel Layer
-```
-
-The consumer should remain thin.
-
----
-
-# 63. Client Responsibilities
-
-The frontend is responsible for:
-
-* maintaining the WebSocket connection
-* reconnecting
-* resubscribing
-* displaying typing state
-* maintaining local `SENDING` / `FAILED` state
-* acknowledging delivery
-* acknowledging read state
-* deduplicating events
-* synchronizing missed messages
-* rendering presence
-* handling connection failures
-
-The frontend must not determine authoritative domain state.
-
----
-
-# 64. Server Responsibilities
-
-The server is responsible for:
-
-* authentication
-* authorization
-* domain validation
-* persistence
-* message ordering
-* delivery state
-* read state
-* presence state
-* event routing
-* group fan-out
-* subscription authorization
-* idempotency
-* reconnect-safe behavior
-
----
-
-# 65. V1 Event Catalog
-
-The initial event catalog is:
+## 29. V1 Event Catalog
 
 ### Connection
 
 ```text
 connection.connected
-connection.error
 ```
 
 ### Conversation
 
 ```text
-conversation.subscribe
 conversation.subscribed
-conversation.unsubscribe
 conversation.unsubscribed
 ```
 
-### Messages
+### Messages / receipts
 
 ```text
-message.create
 message.created
-message.create_failed
 message.delivered
 message.read
 ```
@@ -1621,22 +813,14 @@ typing.stopped
 presence.updated
 ```
 
-### Groups
-
-```text
-group.member_added
-group.member_removed
-group.owner_changed
-group.deleted
-```
-
-### Friend requests
+### Friendships
 
 ```text
 friend_request.created
 friend_request.accepted
 friend_request.rejected
 friend_request.cancelled
+friendship.removed
 ```
 
 ### Group invitations
@@ -1647,6 +831,16 @@ group_invitation.accepted
 group_invitation.rejected
 ```
 
+### Groups
+
+```text
+group.member_added
+group.member_removed
+group.member_left
+group.renamed
+group.deleted
+```
+
 ### Errors
 
 ```text
@@ -1655,137 +849,19 @@ error
 
 ---
 
-# 66. V1 Non-Goals
+## 30. V1 Non-Goals
 
-The WebSocket implementation does not include:
+The realtime protocol does not include:
 
-* voice rooms
-* WebRTC signaling
-* audio transport
-* video
-* screen sharing
-* message editing
-* message reactions
-* unilateral message deletion
-* encryption protocol
-* key exchange
-* encrypted media transport
+- message creation
+- attachment binary upload
+- message edit/delete
+- reactions
+- DM hide/restore
+- group ownership transfer
+- voice/WebRTC signaling
+- audio/video/screen-share transport
+- E2EE/key exchange
+- last-online history
 
-These belong to future contracts.
-
----
-
-# 67. Security Boundary
-
-The WebSocket server must assume that every client message is untrusted.
-
-The client may attempt to:
-
-* subscribe to another user's DM
-* send to a group they left
-* acknowledge another user's message
-* mark another user's message as read
-* spoof another sender
-* provide invalid attachment IDs
-* reuse another user's request ID
-
-All such attempts must be rejected by server-side authorization and domain validation.
-
-The client controls presentation.
-
-The server controls authority.
-
----
-
-# 68. Future Encryption Compatibility
-
-The V1 protocol should not make encryption impossible later.
-
-Message payloads should therefore be conceptually separable from transport metadata.
-
-For example:
-
-```json
-{
-    "type": "message.created",
-    "payload": {
-        "conversation_id": "conversation-id",
-        "message": {
-            "id": "message-id",
-            "content": "Hello"
-        }
-    }
-}
-```
-
-Future encrypted messaging may replace:
-
-```text
-content
-```
-
-with encrypted payload information without requiring a fundamental redesign of:
-
-* message IDs
-* conversations
-* delivery acknowledgements
-* read acknowledgements
-* WebSocket routing
-* event IDs
-
-Encryption itself is intentionally outside V1.
-
----
-
-# 69. Contract Summary
-
-The V1 realtime architecture is:
-
-```text
-                     ┌──────────────────────┐
-                     │      Frontend        │
-                     └──────────┬───────────┘
-                                │
-                         WebSocket / REST
-                                │
-                                v
-                     ┌──────────────────────┐
-                     │    Django / API      │
-                     │      Adapters        │
-                     └──────────┬───────────┘
-                                │
-                                v
-                     ┌──────────────────────┐
-                     │ Application Services │
-                     └──────────┬───────────┘
-                                │
-                    ┌───────────┴───────────┐
-                    v                       v
-             ┌─────────────┐        ┌─────────────┐
-             │ PostgreSQL   │        │    Redis    │
-             │ Persistent   │        │  Realtime   │
-             │ State        │        │  State      │
-             └─────────────┘        └──────┬──────┘
-                                           │
-                                           v
-                                  ┌─────────────────┐
-                                  │ Django Channels │
-                                  └────────┬────────┘
-                                           │
-                              ┌────────────┼────────────┐
-                              v            v            v
-                           Client A     Client B     Client C
-```
-
-The fundamental architectural rule is:
-
-```text
-PostgreSQL = persistent truth
-Redis      = realtime coordination / ephemeral state
-Channels   = realtime transport
-Services   = domain/application authority
-REST       = resource API
-WebSocket  = realtime API
-```
-
-Voice communication is deliberately excluded from the V1 realtime implementation. A future voice contract may add WebRTC/SFU signaling events without changing the V1 messaging event model.
+Future voice signaling may reuse the authenticated realtime connection, but that contract will be designed after V1 is frozen.
