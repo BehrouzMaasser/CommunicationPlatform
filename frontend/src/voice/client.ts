@@ -174,11 +174,70 @@ export class VoiceMediaClient {
       return
     }
 
+    /*
+     * Explicitly release microphone capture before
+     * disconnecting the room. Room.disconnect(true)
+     * normally stops local tracks as well, but some
+     * mobile Safari/iOS combinations can otherwise
+     * leave the microphone recording indicator active.
+     */
+    try {
+      await room
+        .localParticipant
+        .setMicrophoneEnabled(false)
+    } catch {
+      /*
+       * Teardown must continue even if signaling has
+       * already disappeared.
+       */
+    }
+
+    this.stopLocalMicrophone(room)
+
     this.unbindRoom(room)
 
     this.removeAudioElements()
 
     await room.disconnect(true)
+  }
+
+
+  private stopLocalMicrophone(
+    room: Room,
+  ): void {
+    const liveKit = this.liveKit
+
+    if (!liveKit) {
+      return
+    }
+
+    const publication =
+      room.localParticipant
+        .getTrackPublication(
+          liveKit.Track.Source.Microphone,
+        )
+
+    const track =
+      publication?.track
+
+    if (!track) {
+      return
+    }
+
+    /*
+     * LocalTrack.stop() releases LiveKit's managed
+     * capture track. Stop the underlying browser track
+     * defensively as well so WebKit cannot keep the
+     * physical microphone source alive.
+     */
+    track.stop()
+
+    if (
+      track.mediaStreamTrack
+        .readyState !== 'ended'
+    ) {
+      track.mediaStreamTrack.stop()
+    }
   }
 
 
