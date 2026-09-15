@@ -4,6 +4,8 @@ from apps.accounts.api.v1.serializers import PublicUserSerializer
 from apps.voice.models import (
     VoiceParticipation,
     VoiceRoom,
+    VoiceRoomInvitation,
+    VoiceRoomInvitationLink,
     VoiceRoomMembership,
     VoiceSession,
 )
@@ -140,3 +142,87 @@ class VoiceRoomMembershipSerializer(
             "joined_at",
         )
         read_only_fields = fields
+
+
+class VoiceRoomInvitationCreateSerializer(
+    serializers.Serializer
+):
+    user_id = serializers.IntegerField(
+        min_value=1,
+    )
+
+
+class VoiceRoomInvitationSerializer(
+    serializers.ModelSerializer
+):
+    room_id = serializers.UUIDField(
+        source="room.id",
+        read_only=True,
+    )
+    room_name = serializers.CharField(
+        source="room.name",
+        read_only=True,
+    )
+    invited_by = PublicUserSerializer(
+        read_only=True,
+    )
+    recipient = PublicUserSerializer(
+        read_only=True,
+    )
+
+    class Meta:
+        model = VoiceRoomInvitation
+        fields = (
+            "id",
+            "room_id",
+            "room_name",
+            "invited_by",
+            "recipient",
+            "created_at",
+        )
+        read_only_fields = fields
+
+
+class VoiceRoomInvitationLinkSerializer(
+    serializers.ModelSerializer
+):
+    created_by = PublicUserSerializer(
+        read_only=True,
+    )
+    token = serializers.SerializerMethodField()
+
+    class Meta:
+        model = VoiceRoomInvitationLink
+        fields = (
+            "id",
+            "created_by",
+            "token",
+            "created_at",
+            "expires_at",
+            "revoked_at",
+        )
+        read_only_fields = fields
+
+    def get_token(
+        self,
+        link,
+    ) -> str | None:
+        from apps.voice.services.voice_room_invitation_link import (
+            VoiceRoomInvitationLinkService,
+        )
+
+        return (
+            VoiceRoomInvitationLinkService
+            .recover_token(
+                link=link,
+            )
+        )
+
+
+class VoiceRoomInvitationLinkJoinSerializer(
+    serializers.Serializer
+):
+    token = serializers.CharField(
+        allow_blank=False,
+        trim_whitespace=True,
+    )

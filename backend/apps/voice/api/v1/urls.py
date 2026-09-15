@@ -10,6 +10,11 @@ from apps.voice.api.v1.views import (
     GroupVoiceView,
     VoiceMediaCredentialsView,
     VoiceRoomDetailView,
+    VoiceRoomIncomingInvitationListView,
+    VoiceRoomInvitationAcceptView,
+    VoiceRoomInvitationCancelView,
+    VoiceRoomInvitationCollectionView,
+    VoiceRoomInvitationRejectView,
     VoiceRoomLeaveView,
     VoiceRoomListCreateView,
     VoiceRoomMemberDeleteView,
@@ -23,6 +28,31 @@ urlpatterns = [
         "voice/rooms/",
         VoiceRoomListCreateView.as_view(),
         name="voice-room-list-create",
+    ),
+    path(
+        "voice/rooms/<uuid:room_id>/invitations/",
+        VoiceRoomInvitationCollectionView.as_view(),
+        name="voice-room-invitation-collection",
+    ),
+    path(
+        "voice/rooms/<uuid:room_id>/invitations/<uuid:invitation_id>/",
+        VoiceRoomInvitationCancelView.as_view(),
+        name="voice-room-invitation-cancel",
+    ),
+    path(
+        "voice/room-invitations/",
+        VoiceRoomIncomingInvitationListView.as_view(),
+        name="voice-room-incoming-invitation-list",
+    ),
+    path(
+        "voice/room-invitations/<uuid:invitation_id>/accept/",
+        VoiceRoomInvitationAcceptView.as_view(),
+        name="voice-room-invitation-accept",
+    ),
+    path(
+        "voice/room-invitations/<uuid:invitation_id>/reject/",
+        VoiceRoomInvitationRejectView.as_view(),
+        name="voice-room-invitation-reject",
     ),
     path(
         "voice/rooms/<uuid:room_id>/",

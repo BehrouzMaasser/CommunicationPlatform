@@ -11,6 +11,12 @@ from apps.voice.exceptions import (
     VoiceInvalidState,
     VoiceParticipationClaimed,
     VoiceParticipationNotActive,
+    UserAlreadyVoiceRoomMember,
+    VoiceRoomFriendshipRequired,
+    VoiceRoomInvitationAlreadyPending,
+    VoiceRoomInvitationNotFound,
+    VoiceRoomInvitationRecipientRequired,
+    VoiceRoomInvitationTargetNotFound,
     VoiceRoomMembershipRequired,
     VoiceRoomNameRequired,
     VoiceRoomNotFound,
@@ -114,6 +120,36 @@ _EXCEPTION_MAP = {
         status.HTTP_400_BAD_REQUEST,
         "VOICE_ROOM_NAME_REQUIRED",
         "A voice-room name is required.",
+    ),
+    VoiceRoomInvitationTargetNotFound: (
+        status.HTTP_404_NOT_FOUND,
+        "VOICE_ROOM_INVITATION_TARGET_NOT_FOUND",
+        "The requested invitation target was not found.",
+    ),
+    VoiceRoomInvitationNotFound: (
+        status.HTTP_404_NOT_FOUND,
+        "VOICE_ROOM_INVITATION_NOT_FOUND",
+        "The requested voice-room invitation was not found.",
+    ),
+    VoiceRoomInvitationRecipientRequired: (
+        status.HTTP_404_NOT_FOUND,
+        "VOICE_ROOM_INVITATION_NOT_FOUND",
+        "The requested voice-room invitation was not found.",
+    ),
+    VoiceRoomInvitationAlreadyPending: (
+        status.HTTP_409_CONFLICT,
+        "VOICE_ROOM_INVITATION_ALREADY_PENDING",
+        "A pending invitation already exists for this user.",
+    ),
+    VoiceRoomFriendshipRequired: (
+        status.HTTP_403_FORBIDDEN,
+        "VOICE_ROOM_FRIENDSHIP_REQUIRED",
+        "A current friendship is required to invite this user.",
+    ),
+    UserAlreadyVoiceRoomMember: (
+        status.HTTP_409_CONFLICT,
+        "USER_ALREADY_VOICE_ROOM_MEMBER",
+        "The user is already a member of this voice room.",
     ),
 }
 
