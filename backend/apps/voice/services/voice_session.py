@@ -1060,6 +1060,176 @@ class VoiceSessionService:
         return session
 
     @classmethod
+    def revoke_voice_room_participant(
+        cls,
+        *,
+        room_id,
+        user_id: int,
+    ) -> bool:
+        """
+        Revoke one user's active media participation without removing
+        persistent VoiceRoom membership.
+
+        The room is locked first to preserve room -> user -> session ->
+        participation lock ordering.
+        """
+
+        with transaction.atomic():
+            room = VoiceRoomService._get_room_for_update(
+                room_id=room_id,
+            )
+
+            cls._lock_users(
+                user_ids=[user_id],
+            )
+
+            session = (
+                VoiceSession.objects
+                .select_for_update()
+                .filter(
+                    kind=VoiceSession.Kind.ROOM,
+                    voice_room=room,
+                    status=VoiceSession.Status.ACTIVE,
+                )
+                .first()
+            )
+
+            if session is None:
+                return False
+
+            participation = (
+                VoiceParticipation.objects
+                .select_for_update()
+                .filter(
+                    session=session,
+                    user_id=user_id,
+                    left_at__isnull=True,
+                )
+                .first()
+            )
+
+            if participation is None:
+                return False
+
+            participation.left_at = timezone.now()
+            participation.save(
+                update_fields=["left_at"],
+            )
+
+            session_ended = not (
+                VoiceParticipation.objects.filter(
+                    session=session,
+                    left_at__isnull=True,
+                ).exists()
+            )
+
+            if session_ended:
+                cls._finish_session_locked(
+                    session=session,
+                    end_reason=VoiceSession.EndReason.EMPTY,
+                )
+
+                VoiceMediaCleanup.delete_room_after_commit(
+                    room_name=session.media_room_name,
+                )
+            else:
+                (
+                    VoiceMediaCleanup
+                    .remove_participant_after_commit(
+                        room_name=session.media_room_name,
+                        participant_identity=(
+                            participation
+                            .media_participant_identity
+                        ),
+                    )
+                )
+
+            audience_user_ids = set(
+                cls._voice_room_member_user_ids(
+                    room_id=room.pk,
+                )
+            )
+
+            # Keep the revoked account in the event audience even if this
+            # method is later reused after membership has already changed.
+            audience_user_ids.add(user_id)
+
+            (
+                VoiceRealtimePublisher
+                .room_participant_revoked_after_commit(
+                    session_id=session.pk,
+                    participation_id=participation.pk,
+                    room_id=room.pk,
+                    user_id=user_id,
+                    audience_user_ids=audience_user_ids,
+                    session_ended=session_ended,
+                )
+            )
+
+            return True
+
+    @classmethod
+    def revoke_voice_room_session(
+        cls,
+        *,
+        room_id,
+    ) -> bool:
+        """
+        End the whole active media session for a persistent VoiceRoom.
+
+        Used when the persistent room itself is deleted.
+        """
+
+        with transaction.atomic():
+            room = VoiceRoomService._get_room_for_update(
+                room_id=room_id,
+            )
+
+            session = (
+                VoiceSession.objects
+                .select_for_update()
+                .filter(
+                    kind=VoiceSession.Kind.ROOM,
+                    voice_room=room,
+                    status=VoiceSession.Status.ACTIVE,
+                )
+                .first()
+            )
+
+            if session is None:
+                return False
+
+            audience_user_ids = (
+                cls._voice_room_member_user_ids(
+                    room_id=room.pk,
+                )
+            )
+
+            cls._finish_session_locked(
+                session=session,
+                end_reason=(
+                    VoiceSession.EndReason.ACCESS_REVOKED
+                ),
+            )
+
+            VoiceMediaCleanup.delete_room_after_commit(
+                room_name=session.media_room_name,
+            )
+
+            (
+                VoiceRealtimePublisher
+                .room_session_ended_after_commit(
+                    session_id=session.pk,
+                    room_id=room.pk,
+                    audience_user_ids=audience_user_ids,
+                    end_reason=session.end_reason,
+                    ended_at=session.ended_at,
+                )
+            )
+
+            return True
+
+    @classmethod
     def revoke_group_participant(
         cls,
         *,

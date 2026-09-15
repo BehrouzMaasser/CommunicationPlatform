@@ -152,6 +152,18 @@ class VoiceRoomService:
                 )
             )
 
+            from apps.voice.services.voice_session import (
+                VoiceSessionService,
+            )
+
+            (
+                VoiceSessionService
+                .revoke_voice_room_participant(
+                    room_id=room.pk,
+                    user_id=current_user.pk,
+                )
+            )
+
             membership.delete()
 
     @classmethod
@@ -182,6 +194,18 @@ class VoiceRoomService:
                 )
             )
 
+            from apps.voice.services.voice_session import (
+                VoiceSessionService,
+            )
+
+            (
+                VoiceSessionService
+                .revoke_voice_room_participant(
+                    room_id=room.pk,
+                    user_id=target_user.pk,
+                )
+            )
+
             membership.delete()
 
     @classmethod
@@ -199,6 +223,17 @@ class VoiceRoomService:
             cls._require_owner(
                 room=room,
                 user=current_user,
+            )
+
+            from apps.voice.services.voice_session import (
+                VoiceSessionService,
+            )
+
+            (
+                VoiceSessionService
+                .revoke_voice_room_session(
+                    room_id=room.pk,
+                )
             )
 
             room.delete()
