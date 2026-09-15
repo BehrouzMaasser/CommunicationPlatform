@@ -14,6 +14,7 @@ from apps.conversations.models import (
     GroupMembership,
 )
 from apps.conversations.realtime import GroupRealtimePublisher
+from apps.voice.services.voice_session import VoiceSessionService
 
 
 User = get_user_model()
@@ -190,6 +191,11 @@ class GroupConversationService:
 
             membership.delete()
 
+            VoiceSessionService.revoke_group_participant(
+                group_id=group_id,
+                user_id=member_user_id,
+            )
+
             audience_user_ids = cls._member_user_ids(
                 group=group,
             )
@@ -234,6 +240,11 @@ class GroupConversationService:
             member_user_id = membership.user_id
 
             membership.delete()
+
+            VoiceSessionService.revoke_group_participant(
+                group_id=group_id,
+                user_id=member_user_id,
+            )
 
             audience_user_ids = cls._member_user_ids(
                 group=group,
@@ -281,6 +292,10 @@ class GroupConversationService:
 
         audience_user_ids = cls._member_user_ids(
             group=group,
+        )
+
+        VoiceSessionService.revoke_group_session(
+            group_id=group_id,
         )
 
         group.delete()

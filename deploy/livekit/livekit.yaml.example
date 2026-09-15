@@ -1,0 +1,38 @@
+# Communication Platform LiveKit example.
+#
+# Copy to /etc/communication-platform-livekit.yaml and replace the key/secret.
+# Keep that real file root-readable and OUTSIDE the Git checkout.
+
+port: 7880
+
+logging:
+  level: info
+
+# Reuse the existing local Redis service, but isolate LiveKit from Django
+# Channels by using a different Redis logical database.
+redis:
+  address: 127.0.0.1:6379
+  db: 1
+
+keys:
+  replace-with-generated-api-key: replace-with-a-long-random-api-secret
+
+rtc:
+  tcp_port: 7881
+  port_range_start: 50000
+  port_range_end: 50199
+  use_external_ip: true
+
+# UDP TURN is enabled on the same media process. TURN/TLS on TCP/443 is not
+# enabled in this single-public-IP layout because Nginx already owns 443.
+# If strict-firewall clients later require TURN/TLS, add it deliberately via
+# an L4/SNI setup, a second public IP, or a separate TURN endpoint.
+turn:
+  enabled: true
+  udp_port: 3478
+
+room:
+  # Rooms are created lazily when an authorized participant connects.
+  auto_create: true
+  empty_timeout: 300
+  departure_timeout: 20

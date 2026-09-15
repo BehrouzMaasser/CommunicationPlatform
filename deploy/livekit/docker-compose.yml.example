@@ -1,0 +1,18 @@
+services:
+  livekit:
+    # Pin the media server so deploys are reproducible. Review release notes
+    # deliberately before changing this version.
+    image: livekit/livekit-server:v1.13.6
+    container_name: communication-platform-livekit
+    restart: unless-stopped
+
+    # LiveKit recommends host networking for self-hosted production because
+    # WebRTC is latency/packet-rate sensitive and needs direct UDP/TCP ports.
+    network_mode: host
+
+    command:
+      - --config
+      - /etc/livekit/livekit.yaml
+
+    volumes:
+      - /etc/communication-platform-livekit.yaml:/etc/livekit/livekit.yaml:ro

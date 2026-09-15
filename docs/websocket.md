@@ -702,7 +702,68 @@ All former members are force-unsubscribed.
 
 ---
 
-## 25. Error Event
+## 25. Voice Lifecycle Events (v1.1 alpha)
+
+Voice uses the existing personal user groups for notifications. There are no
+client-to-server voice mutation commands on `/ws/v1/`; authoritative mutations
+remain REST operations.
+
+Direct-call events:
+
+```text
+voice.direct_call.ringing
+voice.direct_call.accepted
+voice.direct_call.rejected
+voice.direct_call.cancelled
+voice.direct_call.missed
+voice.direct_call.ended
+```
+
+Direct-call events are delivered to both accounts' personal groups, so every
+signed-in tab/device can react. The accepted event includes:
+
+```json
+{
+  "session_id": "uuid",
+  "caller_id": 1,
+  "recipient_id": 2,
+  "accepted_by_client_instance_id": "uuid",
+  "activated_at": "..."
+}
+```
+
+The callee's other devices compare the winning client-instance ID with their
+local ID and stop ringing when another device won.
+
+Group voice events:
+
+```text
+voice.group.participant_joined
+voice.group.participant_left
+voice.group.participant_revoked
+voice.group.session_ended
+```
+
+Join/leave activity is broadcast to current group members. A user whose group
+membership was removed is explicitly included in the revocation audience so
+their client can immediately tear down local voice state.
+
+Voice events are not a substitute for state recovery. After startup or a
+WebSocket reconnect, clients reconcile with:
+
+```text
+GET /api/v1/voice/state/
+```
+
+Group pages may also reconcile with:
+
+```text
+GET /api/v1/groups/{group_id}/voice/
+```
+
+---
+
+## 26. Error Event
 
 Shape:
 
@@ -731,7 +792,7 @@ The consumer deliberately uses generic authorization errors rather than exposing
 
 ---
 
-## 26. Event Delivery / Reconciliation
+## 27. Event Delivery / Reconciliation
 
 WebSocket events improve responsiveness but are not the sole source of persistent truth.
 
@@ -751,7 +812,7 @@ Other pages may refetch their canonical REST resources in response to lifecycle 
 
 ---
 
-## 27. Multiple Connections
+## 28. Multiple Connections
 
 One user may have multiple WebSocket connections.
 
@@ -763,7 +824,7 @@ Personal events can therefore reach multiple tabs/devices.
 
 ---
 
-## 28. Transaction Authority
+## 29. Transaction Authority
 
 Persistent domain events are scheduled with transaction commit hooks.
 
@@ -778,7 +839,7 @@ A realtime event does not replace the database state it describes.
 
 ---
 
-## 29. V1 Event Catalog
+## 30. V1 Event Catalog
 
 ### Connection
 
@@ -843,6 +904,21 @@ group.renamed
 group.deleted
 ```
 
+### Voice
+
+```text
+voice.direct_call.ringing
+voice.direct_call.accepted
+voice.direct_call.rejected
+voice.direct_call.cancelled
+voice.direct_call.missed
+voice.direct_call.ended
+voice.group.participant_joined
+voice.group.participant_left
+voice.group.participant_revoked
+voice.group.session_ended
+```
+
 ### Errors
 
 ```text
@@ -851,7 +927,7 @@ error
 
 ---
 
-## 30. V1 Non-Goals
+## 31. V1 Non-Goals
 
 The realtime protocol does not include:
 
@@ -861,9 +937,9 @@ The realtime protocol does not include:
 - reactions
 - DM hide/restore
 - group ownership transfer
-- voice/WebRTC signaling
-- audio/video/screen-share transport
+- client-to-server voice mutation commands
+- audio/video/screen-share transport through Django/Channels
 - E2EE/key exchange
 - last-online history
 
-Future voice signaling may reuse the authenticated realtime connection, but that contract will be designed after V1 is frozen.
+Voice lifecycle notifications reuse the authenticated realtime connection in v1.1, while media transport remains outside Django/Channels.

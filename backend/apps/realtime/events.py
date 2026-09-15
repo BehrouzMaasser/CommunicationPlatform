@@ -36,6 +36,18 @@ class RealtimeEventType(str, Enum):
     TYPING_STOPPED = "typing.stopped"
     PRESENCE_UPDATED = "presence.updated"
 
+    VOICE_DIRECT_CALL_RINGING = "voice.direct_call.ringing"
+    VOICE_DIRECT_CALL_ACCEPTED = "voice.direct_call.accepted"
+    VOICE_DIRECT_CALL_REJECTED = "voice.direct_call.rejected"
+    VOICE_DIRECT_CALL_CANCELLED = "voice.direct_call.cancelled"
+    VOICE_DIRECT_CALL_MISSED = "voice.direct_call.missed"
+    VOICE_DIRECT_CALL_ENDED = "voice.direct_call.ended"
+
+    VOICE_GROUP_PARTICIPANT_JOINED = "voice.group.participant_joined"
+    VOICE_GROUP_PARTICIPANT_LEFT = "voice.group.participant_left"
+    VOICE_GROUP_PARTICIPANT_REVOKED = "voice.group.participant_revoked"
+    VOICE_GROUP_SESSION_ENDED = "voice.group.session_ended"
+
 
 def build_realtime_event(
     *,

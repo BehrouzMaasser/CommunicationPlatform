@@ -68,6 +68,41 @@ DATABASES["default"].update(  # noqa: F405
 REDIS_URL = _required_env("REDIS_URL")
 CHANNEL_LAYERS["default"]["CONFIG"]["hosts"] = [REDIS_URL]  # noqa: F405
 
+
+# Voice is optional while the v1.1.0 feature is being developed. Once enabled
+# in production, fail fast if the media server credentials are incomplete or
+# the browser-facing endpoint is not secure.
+if VOICE_ENABLED:  # noqa: F405
+    LIVEKIT_URL = _required_env("LIVEKIT_URL")
+    LIVEKIT_INTERNAL_URL = _required_env("LIVEKIT_INTERNAL_URL")
+    LIVEKIT_API_KEY = _required_env("LIVEKIT_API_KEY")
+    LIVEKIT_API_SECRET = _required_env("LIVEKIT_API_SECRET")
+
+    if not LIVEKIT_URL.startswith("wss://"):
+        raise ImproperlyConfigured(
+            "LIVEKIT_URL must use wss:// when voice is enabled in production."
+        )
+
+    if not LIVEKIT_INTERNAL_URL.startswith(("http://", "https://")):
+        raise ImproperlyConfigured(
+            "LIVEKIT_INTERNAL_URL must use http:// or https://."
+        )
+
+    if not 60 <= VOICE_LIVEKIT_TOKEN_TTL_SECONDS <= 3600:  # noqa: F405
+        raise ImproperlyConfigured(
+            "VOICE_LIVEKIT_TOKEN_TTL_SECONDS must be between 60 and 3600."
+        )
+
+    if not 1 <= VOICE_LIVEKIT_ADMIN_TIMEOUT_SECONDS <= 10:  # noqa: F405
+        raise ImproperlyConfigured(
+            "VOICE_LIVEKIT_ADMIN_TIMEOUT_SECONDS must be between 1 and 10."
+        )
+
+    if not 10 <= VOICE_DIRECT_CALL_RING_TIMEOUT_SECONDS <= 120:  # noqa: F405
+        raise ImproperlyConfigured(
+            "VOICE_DIRECT_CALL_RING_TIMEOUT_SECONDS must be between 10 and 120."
+        )
+
 STATIC_ROOT = BASE_DIR / "staticfiles"  # noqa: F405
 MEDIA_ROOT = Path(  # noqa: F405
     os.getenv("DJANGO_MEDIA_ROOT", str(BASE_DIR / "media"))  # noqa: F405

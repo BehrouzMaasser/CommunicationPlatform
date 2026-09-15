@@ -26,4 +26,8 @@ urlpatterns = [
         "",
         include("apps.attachments.api.v1.urls"),
     ),
+    path(
+        "",
+        include("apps.voice.api.v1.urls"),
+    ),
 ]

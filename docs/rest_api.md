@@ -29,6 +29,7 @@ Common status codes:
 403 Forbidden
 404 Not Found
 409 Conflict
+503 Service Unavailable
 500 Internal Server Error
 ```
 
@@ -41,6 +42,9 @@ Domain errors generally use:
 ```
 
 DRF serializer validation may return field-based error objects.
+
+Voice-domain errors also include a stable machine-readable `code` field alongside
+`detail`.
 
 Protected resources intentionally use private-resource semantics in several places: inaccessible resources may be represented as `404` rather than exposing their existence.
 
@@ -984,6 +988,8 @@ No last-online history endpoint exists.
 | Presence heartbeat | No | Yes |
 | Lifecycle events | Reconcile via REST | Yes |
 | Activity/unread reconciliation | Yes | Event-assisted |
+| Voice lifecycle/state | Yes | Lifecycle notifications |
+| Voice media transport | LiveKit credentials only | No audio transport |
 
 Persistent mutations belong to HTTP/services.
 
@@ -1009,7 +1015,101 @@ A successful realtime event must not be published for a transaction that later r
 
 ---
 
-## 24. V1 REST Non-Goals
+## 24. Voice (v1.1 alpha)
+
+Public voice lifecycle mutations are authoritative REST operations. The existing
+WebSocket connection only delivers committed lifecycle notifications.
+
+### Reconcile current account voice state
+
+```http
+GET /api/v1/voice/state/
+```
+
+Returns:
+
+```json
+{
+  "session": null,
+  "current_participation": null,
+  "participants": []
+}
+```
+
+When the account has a ringing/active session, `session` contains the direct or
+group session, `current_participation` includes this account's role and claimed
+`client_instance_id`, and `participants` contains only public user information.
+Another account's client-instance identifier is not exposed.
+
+This endpoint is the canonical reconnect/recovery path and also lazily expires
+overdue ringing calls.
+
+### Start direct call
+
+```http
+POST /api/v1/voice/direct-calls/
+Content-Type: application/json
+
+{
+  "user_id": 2,
+  "client_instance_id": "uuid"
+}
+```
+
+The target must be a current friend and both accounts must be free of another
+open voice participation. Success returns `201 Created`.
+
+### Direct-call actions
+
+```http
+POST /api/v1/voice/direct-calls/{session_id}/accept/
+POST /api/v1/voice/direct-calls/{session_id}/reject/
+POST /api/v1/voice/direct-calls/{session_id}/cancel/
+POST /api/v1/voice/direct-calls/{session_id}/end/
+```
+
+`accept` requires:
+
+```json
+{
+  "client_instance_id": "uuid"
+}
+```
+
+The first callee client instance to accept atomically claims the participation.
+A different device attempting to claim it receives `409`.
+
+### Group voice state / join / leave
+
+```http
+GET  /api/v1/groups/{group_id}/voice/
+POST /api/v1/groups/{group_id}/voice/
+POST /api/v1/groups/{group_id}/voice/leave/
+```
+
+GET and mutations require current group membership. Join/leave payloads contain
+`client_instance_id`. Any current member may query the room state before joining.
+
+### Media credentials
+
+```http
+POST /api/v1/voice/sessions/{session_id}/media-credentials/
+
+{
+  "client_instance_id": "uuid"
+}
+```
+
+Credentials are issued only for an active participation owned by that client
+instance. Group access is rechecked at issuance time. The response contains the
+LiveKit server URL and a short-lived participant token.
+
+When `VOICE_ENABLED=False`, valid public voice operations return `503` and do
+not create voice state.
+
+---
+
+## 25. V1 REST Non-Goals
 
 There are no V1 REST endpoints for:
 
@@ -1020,6 +1120,6 @@ There are no V1 REST endpoints for:
 - message reactions
 - group ownership transfer
 - last-online history
-- voice rooms/calls
-- WebRTC signaling
+- browser-to-browser custom WebRTC signaling endpoints
+- audio/video/screen-share transport through Django
 - encryption/key exchange
