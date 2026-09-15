@@ -11,6 +11,12 @@ from apps.voice.exceptions import (
     VoiceInvalidState,
     VoiceParticipationClaimed,
     VoiceParticipationNotActive,
+    VoiceRoomMembershipRequired,
+    VoiceRoomNameRequired,
+    VoiceRoomNotFound,
+    VoiceRoomOwnerCannotBeRemoved,
+    VoiceRoomOwnerCannotLeave,
+    VoiceRoomOwnerRequired,
     VoiceSessionNotFound,
     VoiceTargetUserNotFound,
     VoiceUnavailable,
@@ -78,6 +84,36 @@ _EXCEPTION_MAP = {
         status.HTTP_409_CONFLICT,
         "VOICE_PARTICIPATION_CLAIMED",
         "This voice participation is owned by another client instance.",
+    ),
+    VoiceRoomNotFound: (
+        status.HTTP_404_NOT_FOUND,
+        "VOICE_ROOM_NOT_FOUND",
+        "The requested voice room was not found.",
+    ),
+    VoiceRoomMembershipRequired: (
+        status.HTTP_404_NOT_FOUND,
+        "VOICE_ROOM_MEMBERSHIP_NOT_FOUND",
+        "The requested voice-room membership was not found.",
+    ),
+    VoiceRoomOwnerRequired: (
+        status.HTTP_403_FORBIDDEN,
+        "VOICE_ROOM_OWNER_REQUIRED",
+        "Only the voice-room owner may perform this action.",
+    ),
+    VoiceRoomOwnerCannotLeave: (
+        status.HTTP_409_CONFLICT,
+        "VOICE_ROOM_OWNER_CANNOT_LEAVE",
+        "The voice-room owner cannot leave their own room.",
+    ),
+    VoiceRoomOwnerCannotBeRemoved: (
+        status.HTTP_409_CONFLICT,
+        "VOICE_ROOM_OWNER_CANNOT_BE_REMOVED",
+        "The voice-room owner cannot be removed.",
+    ),
+    VoiceRoomNameRequired: (
+        status.HTTP_400_BAD_REQUEST,
+        "VOICE_ROOM_NAME_REQUIRED",
+        "A voice-room name is required.",
     ),
 }
 

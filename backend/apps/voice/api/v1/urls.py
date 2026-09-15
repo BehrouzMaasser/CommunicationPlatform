@@ -9,11 +9,41 @@ from apps.voice.api.v1.views import (
     GroupVoiceLeaveView,
     GroupVoiceView,
     VoiceMediaCredentialsView,
+    VoiceRoomDetailView,
+    VoiceRoomLeaveView,
+    VoiceRoomListCreateView,
+    VoiceRoomMemberDeleteView,
+    VoiceRoomMemberListView,
     VoiceStateView,
 )
 
 
 urlpatterns = [
+    path(
+        "voice/rooms/",
+        VoiceRoomListCreateView.as_view(),
+        name="voice-room-list-create",
+    ),
+    path(
+        "voice/rooms/<uuid:room_id>/",
+        VoiceRoomDetailView.as_view(),
+        name="voice-room-detail",
+    ),
+    path(
+        "voice/rooms/<uuid:room_id>/members/",
+        VoiceRoomMemberListView.as_view(),
+        name="voice-room-member-list",
+    ),
+    path(
+        "voice/rooms/<uuid:room_id>/members/me/",
+        VoiceRoomLeaveView.as_view(),
+        name="voice-room-leave",
+    ),
+    path(
+        "voice/rooms/<uuid:room_id>/members/<int:user_id>/",
+        VoiceRoomMemberDeleteView.as_view(),
+        name="voice-room-member-delete",
+    ),
     path(
         "voice/state/",
         VoiceStateView.as_view(),

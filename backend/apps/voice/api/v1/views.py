@@ -1,5 +1,6 @@
 from django.conf import settings
-from rest_framework import status
+from django.contrib.auth import get_user_model
+from rest_framework import generics, status
 from rest_framework.exceptions import NotFound
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -11,18 +12,43 @@ from apps.voice.api.v1.serializers import (
     CurrentVoiceParticipationSerializer,
     DirectCallStartSerializer,
     VoiceMediaCredentialsSerializer,
+    VoiceRoomMembershipSerializer,
+    VoiceRoomNameSerializer,
+    VoiceRoomSerializer,
     VoiceParticipationSerializer,
     VoiceSessionSerializer,
 )
 from apps.voice.exceptions import VoiceError, VoiceUnavailable
+from apps.voice.selectors.voice_room import VoiceRoomSelector
 from apps.voice.selectors.voice_session import VoiceSessionSelector
 from apps.voice.services.media_access import VoiceMediaAccessService
+from apps.voice.services.voice_room import VoiceRoomService
 from apps.voice.services.voice_session import VoiceSessionService
+
+
+User = get_user_model()
 
 
 def _require_voice_enabled() -> None:
     if not settings.VOICE_ENABLED:
         raise VoiceUnavailable("Voice communication is disabled.")
+
+
+
+def _get_voice_room_for_member_or_404(
+    *,
+    user,
+    room_id,
+):
+    room = VoiceRoomSelector.get_for_member(
+        user=user,
+        room_id=room_id,
+    )
+
+    if room is None:
+        raise NotFound
+
+    return room
 
 
 def _voice_state_data(*, session, current_user) -> dict:
@@ -292,3 +318,273 @@ class VoiceMediaCredentialsView(APIView):
             return Response(output.data)
 
         return _handle_voice_operation(operation)
+
+
+class VoiceRoomListCreateView(
+    generics.ListAPIView
+):
+    serializer_class = VoiceRoomSerializer
+
+    def get_queryset(self):
+        return VoiceRoomSelector.list_for_user(
+            user=self.request.user,
+        )
+
+    def get(
+        self,
+        request,
+        *args,
+        **kwargs,
+    ):
+        def operation():
+            return self.list(
+                request,
+                *args,
+                **kwargs,
+            )
+
+        return _handle_voice_operation(
+            operation
+        )
+
+    def post(
+        self,
+        request,
+        *args,
+        **kwargs,
+    ):
+        serializer = VoiceRoomNameSerializer(
+            data=request.data,
+        )
+        serializer.is_valid(
+            raise_exception=True
+        )
+
+        def operation():
+            room = VoiceRoomService.create_room(
+                current_user=request.user,
+                name=(
+                    serializer
+                    .validated_data["name"]
+                ),
+            )
+
+            return Response(
+                VoiceRoomSerializer(
+                    room
+                ).data,
+                status=(
+                    status.HTTP_201_CREATED
+                ),
+            )
+
+        return _handle_voice_operation(
+            operation
+        )
+
+
+class VoiceRoomDetailView(APIView):
+
+    def get(
+        self,
+        request,
+        room_id,
+    ):
+        def operation():
+            room = (
+                _get_voice_room_for_member_or_404(
+                    user=request.user,
+                    room_id=room_id,
+                )
+            )
+
+            return Response(
+                VoiceRoomSerializer(
+                    room
+                ).data
+            )
+
+        return _handle_voice_operation(
+            operation
+        )
+
+    def patch(
+        self,
+        request,
+        room_id,
+    ):
+        serializer = VoiceRoomNameSerializer(
+            data=request.data,
+        )
+        serializer.is_valid(
+            raise_exception=True
+        )
+
+        def operation():
+            (
+                _get_voice_room_for_member_or_404(
+                    user=request.user,
+                    room_id=room_id,
+                )
+            )
+
+            room = VoiceRoomService.rename_room(
+                current_user=request.user,
+                room_id=room_id,
+                name=(
+                    serializer
+                    .validated_data["name"]
+                ),
+            )
+
+            return Response(
+                VoiceRoomSerializer(
+                    room
+                ).data
+            )
+
+        return _handle_voice_operation(
+            operation
+        )
+
+    def delete(
+        self,
+        request,
+        room_id,
+    ):
+        def operation():
+            (
+                _get_voice_room_for_member_or_404(
+                    user=request.user,
+                    room_id=room_id,
+                )
+            )
+
+            VoiceRoomService.delete_room(
+                current_user=request.user,
+                room_id=room_id,
+            )
+
+            return Response(
+                status=status.HTTP_204_NO_CONTENT
+            )
+
+        return _handle_voice_operation(
+            operation
+        )
+
+
+class VoiceRoomMemberListView(
+    generics.ListAPIView
+):
+    serializer_class = (
+        VoiceRoomMembershipSerializer
+    )
+
+    def get_queryset(self):
+        room = (
+            _get_voice_room_for_member_or_404(
+                user=self.request.user,
+                room_id=self.kwargs["room_id"],
+            )
+        )
+
+        return VoiceRoomSelector.list_members(
+            room=room,
+        )
+
+    def get(
+        self,
+        request,
+        *args,
+        **kwargs,
+    ):
+        def operation():
+            return self.list(
+                request,
+                *args,
+                **kwargs,
+            )
+
+        return _handle_voice_operation(
+            operation
+        )
+
+
+class VoiceRoomLeaveView(APIView):
+
+    def delete(
+        self,
+        request,
+        room_id,
+    ):
+        def operation():
+            (
+                _get_voice_room_for_member_or_404(
+                    user=request.user,
+                    room_id=room_id,
+                )
+            )
+
+            VoiceRoomService.leave_room(
+                current_user=request.user,
+                room_id=room_id,
+            )
+
+            return Response(
+                status=status.HTTP_204_NO_CONTENT
+            )
+
+        return _handle_voice_operation(
+            operation
+        )
+
+
+class VoiceRoomMemberDeleteView(APIView):
+
+    def delete(
+        self,
+        request,
+        room_id,
+        user_id,
+    ):
+        def operation():
+            room = (
+                _get_voice_room_for_member_or_404(
+                    user=request.user,
+                    room_id=room_id,
+                )
+            )
+
+            # Check ownership before resolving
+            # the target user so ordinary members
+            # cannot probe arbitrary user ids.
+            VoiceRoomService._require_owner(
+                room=room,
+                user=request.user,
+            )
+
+            target_user = (
+                User.objects
+                .filter(
+                    pk=user_id,
+                )
+                .first()
+            )
+
+            if target_user is None:
+                raise NotFound
+
+            VoiceRoomService.remove_member(
+                current_user=request.user,
+                room_id=room_id,
+                target_user=target_user,
+            )
+
+            return Response(
+                status=status.HTTP_204_NO_CONTENT
+            )
+
+        return _handle_voice_operation(
+            operation
+        )
