@@ -48,3 +48,59 @@ class VoiceParticipationNotActive(VoiceError):
 
 class VoiceParticipationClaimed(VoiceError):
     """Raised when another client instance already owns the participation."""
+
+
+class VoiceRoomNotFound(VoiceError):
+    """Raised when a voice room does not exist or is not accessible."""
+
+
+class VoiceRoomOwnerRequired(VoiceError):
+    """Raised when an operation requires voice-room ownership."""
+
+
+class VoiceRoomMembershipRequired(VoiceError):
+    """Raised when current voice-room membership is required."""
+
+
+class VoiceRoomOwnerCannotLeave(VoiceError):
+    """Raised when the owner attempts to leave their own room."""
+
+
+class VoiceRoomOwnerCannotBeRemoved(VoiceError):
+    """Raised when an operation attempts to remove the room owner."""
+
+
+class VoiceRoomNameRequired(VoiceError):
+    """Raised when a voice-room name is empty."""
+
+
+class VoiceRoomInvitationTargetNotFound(VoiceError):
+    """Raised when the target user for a room invitation does not exist."""
+
+
+class VoiceRoomInvitationNotFound(VoiceError):
+    """Raised when a voice-room invitation does not exist."""
+
+
+class VoiceRoomInvitationRecipientRequired(VoiceError):
+    """Raised when only the invitation recipient may perform an action."""
+
+
+class VoiceRoomInvitationAlreadyPending(VoiceError):
+    """Raised when a pending invitation already exists."""
+
+
+class VoiceRoomFriendshipRequired(VoiceError):
+    """Raised when a direct room invitation targets a non-friend."""
+
+
+class UserAlreadyVoiceRoomMember(VoiceError):
+    """Raised when the target user already belongs to the voice room."""
+
+
+class VoiceRoomInvitationLinkNotFound(VoiceError):
+    """Raised when an invitation link record does not exist."""
+
+
+class InvalidVoiceRoomInvitationLink(VoiceError):
+    """Raised when an invitation link is invalid, expired, or revoked."""

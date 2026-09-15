@@ -10,3 +10,4 @@ psycopg2-binary==2.9.12
 python-dotenv==1.2.3
 redis==7.4.0
 sqlparse==0.6.0
+uuid6==2025.0.1

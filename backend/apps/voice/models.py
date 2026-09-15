@@ -4,7 +4,176 @@ from django.conf import settings
 from django.db import models
 from django.db.models import F, Q
 
+from uuid6 import uuid7
+
 from apps.conversations.models import GroupConversation
+
+
+class VoiceRoom(models.Model):
+
+    id = models.UUIDField(
+        primary_key=True,
+        default=uuid7,
+        editable=False,
+    )
+
+    name = models.CharField(
+        max_length=50,
+    )
+
+    owner = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="owned_voice_rooms",
+    )
+
+    members = models.ManyToManyField(
+        settings.AUTH_USER_MODEL,
+        through="VoiceRoomMembership",
+        related_name="voice_rooms",
+    )
+
+    created_at = models.DateTimeField(
+        auto_now_add=True,
+    )
+
+    updated_at = models.DateTimeField(
+        auto_now=True,
+    )
+
+    def __str__(self):
+        return self.name
+
+
+class VoiceRoomMembership(models.Model):
+
+    id = models.UUIDField(
+        primary_key=True,
+        default=uuid7,
+        editable=False,
+    )
+
+    room = models.ForeignKey(
+        VoiceRoom,
+        on_delete=models.CASCADE,
+        related_name="memberships",
+    )
+
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="voice_room_memberships",
+    )
+
+    joined_at = models.DateTimeField(
+        auto_now_add=True,
+    )
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["room", "user"],
+                name="unique_voice_room_membership",
+            ),
+        ]
+
+    def __str__(self):
+        return f"{self.user_id} in voice room {self.room_id}"
+
+
+class VoiceRoomInvitation(models.Model):
+
+    id = models.UUIDField(
+        primary_key=True,
+        default=uuid7,
+        editable=False,
+    )
+
+    room = models.ForeignKey(
+        VoiceRoom,
+        on_delete=models.CASCADE,
+        related_name="invitations",
+    )
+
+    invited_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="sent_voice_room_invitations",
+    )
+
+    recipient = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="received_voice_room_invitations",
+    )
+
+    created_at = models.DateTimeField(
+        auto_now_add=True,
+    )
+
+    class Meta:
+        constraints = [
+            models.CheckConstraint(
+                condition=~Q(
+                    invited_by=F("recipient"),
+                ),
+                name="voice_room_invitation_users_different",
+            ),
+            models.UniqueConstraint(
+                fields=["room", "recipient"],
+                name="unique_pending_voice_room_invitation",
+            ),
+        ]
+
+    def __str__(self):
+        return (
+            f"{self.invited_by_id} invited "
+            f"{self.recipient_id} to voice room "
+            f"{self.room_id}"
+        )
+
+
+class VoiceRoomInvitationLink(models.Model):
+
+    id = models.UUIDField(
+        primary_key=True,
+        default=uuid7,
+        editable=False,
+    )
+
+    room = models.ForeignKey(
+        VoiceRoom,
+        on_delete=models.CASCADE,
+        related_name="invitation_links",
+    )
+
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="created_voice_room_invitation_links",
+    )
+
+    token_hash = models.CharField(
+        max_length=64,
+        unique=True,
+        editable=False,
+    )
+
+    created_at = models.DateTimeField(
+        auto_now_add=True,
+    )
+
+    expires_at = models.DateTimeField(
+        db_index=True,
+    )
+
+    revoked_at = models.DateTimeField(
+        null=True,
+        blank=True,
+    )
+
+    def __str__(self):
+        return f"Invitation link for voice room {self.room_id}"
 
 
 class VoiceSession(models.Model):
