@@ -2,6 +2,8 @@ from rest_framework import status
 from rest_framework.response import Response
 
 from apps.voice.exceptions import (
+    VoiceRoomInvitationLinkNotFound,
+    InvalidVoiceRoomInvitationLink,
     SelfVoiceCallNotAllowed,
     VoiceCallPermissionDenied,
     VoiceError,
@@ -150,6 +152,16 @@ _EXCEPTION_MAP = {
         status.HTTP_409_CONFLICT,
         "USER_ALREADY_VOICE_ROOM_MEMBER",
         "The user is already a member of this voice room.",
+    ),
+    VoiceRoomInvitationLinkNotFound: (
+        status.HTTP_404_NOT_FOUND,
+        "VOICE_ROOM_INVITATION_LINK_NOT_FOUND",
+        "The requested voice-room invitation link was not found.",
+    ),
+    InvalidVoiceRoomInvitationLink: (
+        status.HTTP_400_BAD_REQUEST,
+        "INVALID_VOICE_ROOM_INVITATION_LINK",
+        "The voice-room invitation link is invalid, expired, or revoked.",
     ),
 }
 

@@ -13,6 +13,8 @@ from apps.voice.api.v1.serializers import (
     DirectCallStartSerializer,
     VoiceMediaCredentialsSerializer,
     VoiceRoomInvitationCreateSerializer,
+    VoiceRoomInvitationLinkJoinSerializer,
+    VoiceRoomInvitationLinkSerializer,
     VoiceRoomInvitationSerializer,
     VoiceRoomMembershipSerializer,
     VoiceRoomNameSerializer,
@@ -25,11 +27,17 @@ from apps.voice.selectors.voice_room import VoiceRoomSelector
 from apps.voice.selectors.voice_room_invitation import (
     VoiceRoomInvitationSelector,
 )
+from apps.voice.selectors.voice_room_invitation_link import (
+    VoiceRoomInvitationLinkSelector,
+)
 from apps.voice.selectors.voice_session import VoiceSessionSelector
 from apps.voice.services.media_access import VoiceMediaAccessService
 from apps.voice.services.voice_room import VoiceRoomService
 from apps.voice.services.voice_room_invitation import (
     VoiceRoomInvitationService,
+)
+from apps.voice.services.voice_room_invitation_link import (
+    VoiceRoomInvitationLinkService,
 )
 from apps.voice.services.voice_session import VoiceSessionService
 
@@ -802,6 +810,179 @@ class VoiceRoomInvitationRejectView(APIView):
 
             return Response(
                 status=status.HTTP_204_NO_CONTENT
+            )
+
+        return _handle_voice_operation(
+            operation
+        )
+
+
+class VoiceRoomInvitationLinkCollectionView(
+    generics.ListAPIView
+):
+    serializer_class = (
+        VoiceRoomInvitationLinkSerializer
+    )
+
+    def _get_room_for_owner(self):
+        room = (
+            _get_voice_room_for_member_or_404(
+                user=self.request.user,
+                room_id=self.kwargs["room_id"],
+            )
+        )
+
+        VoiceRoomService._require_owner(
+            room=room,
+            user=self.request.user,
+        )
+
+        return room
+
+    def get_queryset(self):
+        room = self._get_room_for_owner()
+
+        return (
+            VoiceRoomInvitationLinkSelector
+            .list_active_for_room(
+                room=room,
+            )
+        )
+
+    def get(
+        self,
+        request,
+        *args,
+        **kwargs,
+    ):
+        def operation():
+            return self.list(
+                request,
+                *args,
+                **kwargs,
+            )
+
+        return _handle_voice_operation(
+            operation
+        )
+
+    def post(
+        self,
+        request,
+        room_id,
+    ):
+        def operation():
+            self._get_room_for_owner()
+
+            link, _token = (
+                VoiceRoomInvitationLinkService
+                .create_link(
+                    current_user=request.user,
+                    room_id=room_id,
+                )
+            )
+
+            return Response(
+                VoiceRoomInvitationLinkSerializer(
+                    link
+                ).data,
+                status=status.HTTP_201_CREATED,
+            )
+
+        return _handle_voice_operation(
+            operation
+        )
+
+
+class VoiceRoomInvitationLinkRevokeView(
+    APIView
+):
+
+    def delete(
+        self,
+        request,
+        room_id,
+        link_id,
+    ):
+        def operation():
+            room = (
+                _get_voice_room_for_member_or_404(
+                    user=request.user,
+                    room_id=room_id,
+                )
+            )
+
+            VoiceRoomService._require_owner(
+                room=room,
+                user=request.user,
+            )
+
+            (
+                VoiceRoomInvitationLinkService
+                .revoke_link(
+                    current_user=request.user,
+                    room_id=room_id,
+                    link_id=link_id,
+                )
+            )
+
+            return Response(
+                status=status.HTTP_204_NO_CONTENT
+            )
+
+        return _handle_voice_operation(
+            operation
+        )
+
+
+class VoiceRoomInvitationLinkJoinView(
+    APIView
+):
+
+    def post(
+        self,
+        request,
+    ):
+        serializer = (
+            VoiceRoomInvitationLinkJoinSerializer(
+                data=request.data,
+            )
+        )
+        serializer.is_valid(
+            raise_exception=True
+        )
+
+        def operation():
+            membership, created = (
+                VoiceRoomInvitationLinkService
+                .join_with_token(
+                    current_user=request.user,
+                    token=(
+                        serializer
+                        .validated_data["token"]
+                    ),
+                )
+            )
+
+            return Response(
+                {
+                    "room": (
+                        VoiceRoomSerializer(
+                            membership.room
+                        ).data
+                    ),
+                    "membership": (
+                        VoiceRoomMembershipSerializer(
+                            membership
+                        ).data
+                    ),
+                    "created": created,
+                },
+                status=(
+                    status.HTTP_201_CREATED
+                    if created
+                    else status.HTTP_200_OK
+                ),
             )
 
         return _handle_voice_operation(

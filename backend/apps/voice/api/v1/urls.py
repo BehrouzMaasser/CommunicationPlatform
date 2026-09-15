@@ -14,6 +14,9 @@ from apps.voice.api.v1.views import (
     VoiceRoomInvitationAcceptView,
     VoiceRoomInvitationCancelView,
     VoiceRoomInvitationCollectionView,
+    VoiceRoomInvitationLinkCollectionView,
+    VoiceRoomInvitationLinkJoinView,
+    VoiceRoomInvitationLinkRevokeView,
     VoiceRoomInvitationRejectView,
     VoiceRoomLeaveView,
     VoiceRoomListCreateView,
@@ -28,6 +31,21 @@ urlpatterns = [
         "voice/rooms/",
         VoiceRoomListCreateView.as_view(),
         name="voice-room-list-create",
+    ),
+    path(
+        "voice/rooms/<uuid:room_id>/invite-links/",
+        VoiceRoomInvitationLinkCollectionView.as_view(),
+        name="voice-room-invite-link-collection",
+    ),
+    path(
+        "voice/rooms/<uuid:room_id>/invite-links/<uuid:link_id>/",
+        VoiceRoomInvitationLinkRevokeView.as_view(),
+        name="voice-room-invite-link-revoke",
+    ),
+    path(
+        "voice/room-invite-links/join/",
+        VoiceRoomInvitationLinkJoinView.as_view(),
+        name="voice-room-invite-link-join",
     ),
     path(
         "voice/rooms/<uuid:room_id>/invitations/",
