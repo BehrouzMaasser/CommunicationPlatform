@@ -185,3 +185,47 @@ class VoiceRealtimePublisher:
                 "ended_at": cls._timestamp(ended_at),
             },
         )
+
+    @classmethod
+    def room_participant_joined_after_commit(
+        cls,
+        *,
+        session_id,
+        participation_id,
+        room_id,
+        user_id: int,
+        audience_user_ids: Iterable[int],
+    ) -> None:
+        RealtimePublisher.publish_to_users_after_commit(
+            user_ids=audience_user_ids,
+            event_type=RealtimeEventType.VOICE_ROOM_PARTICIPANT_JOINED,
+            payload={
+                "session_id": cls._session_id(session_id),
+                "participation_id": cls._session_id(participation_id),
+                "room_id": str(room_id),
+                "user_id": user_id,
+            },
+        )
+
+    @classmethod
+    def room_participant_left_after_commit(
+        cls,
+        *,
+        session_id,
+        participation_id,
+        room_id,
+        user_id: int,
+        audience_user_ids: Iterable[int],
+        session_ended: bool,
+    ) -> None:
+        RealtimePublisher.publish_to_users_after_commit(
+            user_ids=audience_user_ids,
+            event_type=RealtimeEventType.VOICE_ROOM_PARTICIPANT_LEFT,
+            payload={
+                "session_id": cls._session_id(session_id),
+                "participation_id": cls._session_id(participation_id),
+                "room_id": str(room_id),
+                "user_id": user_id,
+                "session_ended": session_ended,
+            },
+        )

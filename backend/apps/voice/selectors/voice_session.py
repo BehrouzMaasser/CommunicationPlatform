@@ -21,6 +21,7 @@ class VoiceSessionSelector:
                 "session__caller",
                 "session__recipient",
                 "session__group",
+                "session__voice_room",
             )
             .filter(
                 user=user,
@@ -78,6 +79,44 @@ class VoiceSessionSelector:
             .filter(
                 kind=VoiceSession.Kind.GROUP,
                 group_id=group_id,
+                status=VoiceSession.Status.ACTIVE,
+            )
+            .first()
+        )
+
+    @staticmethod
+    def list_open_room_participations(
+        *,
+        room_id,
+    ) -> QuerySet[VoiceParticipation]:
+        return (
+            VoiceParticipation.objects
+            .select_related(
+                "user",
+                "session",
+            )
+            .filter(
+                session__voice_room_id=room_id,
+                session__kind=VoiceSession.Kind.ROOM,
+                session__status=VoiceSession.Status.ACTIVE,
+                left_at__isnull=True,
+            )
+            .order_by(
+                "created_at",
+                "pk",
+            )
+        )
+
+    @staticmethod
+    def get_active_room_session(
+        *,
+        room_id,
+    ) -> VoiceSession | None:
+        return (
+            VoiceSession.objects
+            .filter(
+                kind=VoiceSession.Kind.ROOM,
+                voice_room_id=room_id,
                 status=VoiceSession.Status.ACTIVE,
             )
             .first()

@@ -48,6 +48,11 @@ class RealtimeEventType(str, Enum):
     VOICE_GROUP_PARTICIPANT_REVOKED = "voice.group.participant_revoked"
     VOICE_GROUP_SESSION_ENDED = "voice.group.session_ended"
 
+    VOICE_ROOM_PARTICIPANT_JOINED = "voice.room.participant_joined"
+    VOICE_ROOM_PARTICIPANT_LEFT = "voice.room.participant_left"
+    VOICE_ROOM_PARTICIPANT_REVOKED = "voice.room.participant_revoked"
+    VOICE_ROOM_SESSION_ENDED = "voice.room.session_ended"
+
 
 def build_realtime_event(
     *,

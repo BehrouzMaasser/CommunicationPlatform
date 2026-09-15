@@ -24,9 +24,14 @@ from apps.voice.exceptions import (
     VoiceTargetUserNotFound,
     VoiceUserBusy,
 )
-from apps.voice.models import VoiceParticipation, VoiceSession
+from apps.voice.models import (
+    VoiceParticipation,
+    VoiceRoomMembership,
+    VoiceSession,
+)
 from apps.voice.realtime import VoiceRealtimePublisher
 from apps.voice.services.media_cleanup import VoiceMediaCleanup
+from apps.voice.services.voice_room import VoiceRoomService
 
 
 User = get_user_model()
@@ -69,6 +74,17 @@ class VoiceSessionService:
         return list(
             GroupMembership.objects
             .filter(group_id=group_id)
+            .values_list("user_id", flat=True)
+        )
+
+    @staticmethod
+    def _voice_room_member_user_ids(
+        *,
+        room_id,
+    ) -> list[int]:
+        return list(
+            VoiceRoomMembership.objects
+            .filter(room_id=room_id)
             .values_list("user_id", flat=True)
         )
 
@@ -599,6 +615,7 @@ class VoiceSessionService:
                     "session__caller",
                     "session__recipient",
                     "session__group",
+                    "session__voice_room",
                     "user",
                 )
                 .filter(
@@ -817,6 +834,227 @@ class VoiceSessionService:
                     group_id=group.pk,
                 ),
                 session_ended=(session.status == VoiceSession.Status.ENDED),
+            )
+
+        return session
+
+    @classmethod
+    def join_voice_room(
+        cls,
+        *,
+        current_user: User,
+        room_id,
+        client_instance_id,
+    ) -> VoiceParticipation:
+        client_instance_id = cls.normalize_client_instance_id(
+            client_instance_id
+        )
+
+        with transaction.atomic():
+            room = VoiceRoomService._get_room_for_update(
+                room_id=room_id,
+            )
+
+            VoiceRoomService._get_membership_for_update(
+                room=room,
+                user=current_user,
+            )
+
+            locked_users = cls._lock_users(
+                user_ids=[current_user.pk],
+            )
+            locked_user = locked_users.get(
+                current_user.pk
+            )
+
+            if locked_user is None:
+                raise VoiceParticipationNotActive
+
+            cls._expire_due_direct_calls_for_users_locked(
+                user_ids=[current_user.pk],
+            )
+
+            existing = (
+                VoiceParticipation.objects
+                .select_for_update()
+                .select_related(
+                    "session",
+                )
+                .filter(
+                    user=locked_user,
+                    left_at__isnull=True,
+                )
+                .first()
+            )
+
+            if existing is not None:
+                if (
+                    existing.session.kind
+                    == VoiceSession.Kind.ROOM
+                    and existing.session.voice_room_id
+                    == room.pk
+                    and existing.session.status
+                    == VoiceSession.Status.ACTIVE
+                ):
+                    cls._require_client_owner(
+                        participation=existing,
+                        client_instance_id=client_instance_id,
+                    )
+                    return existing
+
+                raise VoiceUserBusy
+
+            session = (
+                VoiceSession.objects
+                .select_for_update()
+                .filter(
+                    kind=VoiceSession.Kind.ROOM,
+                    voice_room=room,
+                    status=VoiceSession.Status.ACTIVE,
+                )
+                .first()
+            )
+
+            if session is None:
+                session = VoiceSession.objects.create(
+                    kind=VoiceSession.Kind.ROOM,
+                    status=VoiceSession.Status.ACTIVE,
+                    voice_room=room,
+                    activated_at=timezone.now(),
+                )
+
+            now = timezone.now()
+
+            try:
+                with transaction.atomic():
+                    participation = (
+                        VoiceParticipation.objects.create(
+                            session=session,
+                            user=locked_user,
+                            role=VoiceParticipation.Role.MEMBER,
+                            client_instance_id=client_instance_id,
+                            claimed_at=now,
+                        )
+                    )
+            except IntegrityError as exc:
+                raise VoiceUserBusy from exc
+
+            (
+                VoiceRealtimePublisher
+                .room_participant_joined_after_commit(
+                    session_id=session.pk,
+                    participation_id=participation.pk,
+                    room_id=room.pk,
+                    user_id=current_user.pk,
+                    audience_user_ids=(
+                        cls._voice_room_member_user_ids(
+                            room_id=room.pk,
+                        )
+                    ),
+                )
+            )
+
+        return participation
+
+    @classmethod
+    def leave_voice_room(
+        cls,
+        *,
+        current_user: User,
+        room_id,
+        client_instance_id,
+    ) -> VoiceSession:
+        client_instance_id = cls.normalize_client_instance_id(
+            client_instance_id
+        )
+
+        with transaction.atomic():
+            room = VoiceRoomService._get_room_for_update(
+                room_id=room_id,
+            )
+
+            VoiceRoomService._get_membership_for_update(
+                room=room,
+                user=current_user,
+            )
+
+            cls._lock_users(
+                user_ids=[current_user.pk],
+            )
+
+            session = (
+                VoiceSession.objects
+                .select_for_update()
+                .filter(
+                    kind=VoiceSession.Kind.ROOM,
+                    voice_room=room,
+                    status=VoiceSession.Status.ACTIVE,
+                )
+                .first()
+            )
+
+            if session is None:
+                raise VoiceParticipationNotActive
+
+            participation = (
+                cls._require_open_participation_for_update(
+                    session=session,
+                    user_id=current_user.pk,
+                )
+            )
+
+            cls._require_client_owner(
+                participation=participation,
+                client_instance_id=client_instance_id,
+            )
+
+            participation.left_at = timezone.now()
+            participation.save(
+                update_fields=["left_at"],
+            )
+
+            session_ended = not (
+                VoiceParticipation.objects.filter(
+                    session=session,
+                    left_at__isnull=True,
+                ).exists()
+            )
+
+            if session_ended:
+                cls._finish_session_locked(
+                    session=session,
+                    end_reason=VoiceSession.EndReason.EMPTY,
+                )
+
+                VoiceMediaCleanup.delete_room_after_commit(
+                    room_name=session.media_room_name,
+                )
+            else:
+                (
+                    VoiceMediaCleanup
+                    .remove_participant_after_commit(
+                        room_name=session.media_room_name,
+                        participant_identity=(
+                            participation
+                            .media_participant_identity
+                        ),
+                    )
+                )
+
+            (
+                VoiceRealtimePublisher
+                .room_participant_left_after_commit(
+                    session_id=session.pk,
+                    participation_id=participation.pk,
+                    room_id=room.pk,
+                    user_id=current_user.pk,
+                    audience_user_ids=(
+                        cls._voice_room_member_user_ids(
+                            room_id=room.pk,
+                        )
+                    ),
+                    session_ended=session_ended,
+                )
             )
 
         return session
