@@ -180,7 +180,8 @@ class VoiceSession(models.Model):
 
     class Kind(models.TextChoices):
         DIRECT = "DIRECT", "Direct call"
-        GROUP = "GROUP", "Group voice"
+        GROUP = "GROUP", "Legacy group voice"
+        ROOM = "ROOM", "Voice room"
 
     class Status(models.TextChoices):
         RINGING = "RINGING", "Ringing"
@@ -235,6 +236,14 @@ class VoiceSession(models.Model):
         blank=True,
     )
 
+    voice_room = models.ForeignKey(
+        "VoiceRoom",
+        on_delete=models.CASCADE,
+        related_name="voice_sessions",
+        null=True,
+        blank=True,
+    )
+
     created_at = models.DateTimeField(auto_now_add=True)
 
     ring_expires_at = models.DateTimeField(
@@ -270,6 +279,10 @@ class VoiceSession(models.Model):
                 fields=["group", "status"],
                 name="voice_session_group_status_idx",
             ),
+            models.Index(
+                fields=["voice_room", "status"],
+                name="voice_session_room_status_idx",
+            ),
         ]
         constraints = [
             models.CheckConstraint(
@@ -279,6 +292,7 @@ class VoiceSession(models.Model):
                         caller__isnull=False,
                         recipient__isnull=False,
                         group__isnull=True,
+                        voice_room__isnull=True,
                         ring_expires_at__isnull=False,
                     )
                     | Q(
@@ -286,6 +300,15 @@ class VoiceSession(models.Model):
                         caller__isnull=True,
                         recipient__isnull=True,
                         group__isnull=False,
+                        voice_room__isnull=True,
+                        ring_expires_at__isnull=True,
+                    )
+                    | Q(
+                        kind="ROOM",
+                        caller__isnull=True,
+                        recipient__isnull=True,
+                        group__isnull=True,
+                        voice_room__isnull=False,
                         ring_expires_at__isnull=True,
                     )
                 ),
@@ -293,17 +316,17 @@ class VoiceSession(models.Model):
             ),
             models.CheckConstraint(
                 condition=(
-                    Q(kind="GROUP")
+                    Q(kind__in=["GROUP", "ROOM"])
                     | ~Q(caller=F("recipient"))
                 ),
                 name="voice_direct_users_are_different",
             ),
             models.CheckConstraint(
                 condition=~Q(
-                    kind="GROUP",
+                    kind__in=["GROUP", "ROOM"],
                     status="RINGING",
                 ),
-                name="voice_group_session_not_ringing",
+                name="voice_nondirect_session_not_ringing",
             ),
             models.CheckConstraint(
                 condition=(
@@ -334,6 +357,14 @@ class VoiceSession(models.Model):
                     status="ACTIVE",
                 ),
                 name="unique_active_voice_session_per_group",
+            ),
+            models.UniqueConstraint(
+                fields=["voice_room"],
+                condition=Q(
+                    kind="ROOM",
+                    status="ACTIVE",
+                ),
+                name="unique_active_voice_session_per_room",
             ),
         ]
 
