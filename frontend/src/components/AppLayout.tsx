@@ -22,6 +22,7 @@ import {
   RealtimeProvider,
   useRealtime,
 } from '../realtime/RealtimeContext'
+import { VoiceProvider } from '../voice/VoiceContext'
 
 import type {
   CurrentUser,
@@ -438,7 +439,11 @@ function AppLayout() {
         currentUser?.id
       }
     >
-      <ActivityProvider
+      <VoiceProvider
+        key={
+          currentUser?.id
+          ?? 'anonymous'
+        }
         enabled={
           authStatus ===
           'authenticated'
@@ -447,11 +452,21 @@ function AppLayout() {
           currentUser?.id
         }
       >
-        <AppLayoutContent
-          authStatus={authStatus}
-          currentUser={currentUser}
-        />
-      </ActivityProvider>
+        <ActivityProvider
+          enabled={
+            authStatus ===
+            'authenticated'
+          }
+          currentUserId={
+            currentUser?.id
+          }
+        >
+          <AppLayoutContent
+            authStatus={authStatus}
+            currentUser={currentUser}
+          />
+        </ActivityProvider>
+      </VoiceProvider>
     </RealtimeProvider>
   )
 }
