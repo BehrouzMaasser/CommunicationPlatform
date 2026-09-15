@@ -107,6 +107,7 @@ For additional design documentation, see:
 ├── .env.example
 ├── .env.production.example
 ├── docker-compose.yml
+├── LICENSE
 └── README.md
 ```
 
@@ -310,21 +311,16 @@ Reproducible production deployment instructions and example Nginx/systemd config
 
 The deployment examples intentionally keep hostnames generic. The actual production domain belongs in the private production environment and server configuration; it is not product branding.
 
-## V1 Release Process
+## Release Status
 
-Before the final V1 release:
+Communication Platform V1 is frozen as the `v1.0.0` release.
 
-1. Finish code and repository cleanup.
-2. Pass backend checks and tests.
-3. Pass frontend linting and production build.
-4. Verify deployment on `deployment-development`.
-5. Perform the planned one-time clean migration/database reset.
-6. Verify installation from a fresh checkout and empty database.
-7. Deploy and test the exact release candidate.
-8. Tag the final commit as `v1.0.0`.
-9. Make the repository public.
+The V1 source tree has clean initial application migrations and is intended to
+support installation from a fresh checkout and empty PostgreSQL database using
+the normal Django migration flow.
 
-The migration/database reset is intentionally deferred until the V1 codebase has been completely cleaned and verified.
+New feature development should happen after the V1 baseline rather than being
+folded back into the `v1.0.0` release.
 
 ## Post-V1 Roadmap
 
@@ -338,3 +334,7 @@ The expected media technology is WebRTC.
 The existing authenticated Django Channels/WebSocket layer is expected to handle signaling, while STUN/TURN requirements and the group-call media architecture will be decided before implementation.
 
 Voice functionality is not implemented in V1.
+
+## License
+
+This project is licensed under the MIT License. See `LICENSE` for details.

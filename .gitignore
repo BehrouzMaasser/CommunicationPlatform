@@ -37,6 +37,10 @@ credentials.json
 client_secret*.json
 service-account*.json
 .pgpass
+.npmrc
+.pypirc
+.netrc
+.docker/config.json
 .ssh/
 .aws/
 .postgresql/
