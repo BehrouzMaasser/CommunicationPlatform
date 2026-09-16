@@ -10,6 +10,7 @@ import type {
 } from 'react'
 
 import VoiceCallOverlay from '../components/voice/VoiceCallOverlay'
+import VoiceRoomOverlay from '../components/voice/VoiceRoomOverlay'
 
 import {
   ApiError,
@@ -745,6 +746,13 @@ export function VoiceProvider({
     >
       {children}
       <VoiceCallOverlay />
+      <VoiceRoomOverlay
+        key={
+          state.session?.kind === 'ROOM'
+            ? state.session.id
+            : 'voice-room-idle'
+        }
+      />
     </VoiceContext.Provider>
   )
 }
