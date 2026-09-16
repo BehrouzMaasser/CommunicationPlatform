@@ -55,10 +55,12 @@ function describeError(
 
 function VoiceRoomOverlay() {
   const {
+    currentUserId,
     state,
     mediaStatus,
     ownsCurrentParticipation,
     microphoneEnabled,
+    speakingUserIds,
     error,
     leaveVoiceRoom,
     setMicrophoneEnabled,
@@ -295,6 +297,19 @@ function VoiceRoomOverlay() {
   const connectedCount =
     state.participants.length
 
+  const speakingParticipants =
+    state.participants.filter(
+      (participation) =>
+        speakingUserIds.includes(
+          participation.user.id,
+        )
+        && (
+          participation.user.id !==
+            currentUserId
+          || microphoneEnabled
+        ),
+    )
+
 
   return (
     <div
@@ -330,6 +345,21 @@ function VoiceRoomOverlay() {
                   ? 'person connected'
                   : 'people connected'}
               </div>
+
+              {speakingParticipants.length > 0 && (
+                <div className="small text-success mt-1">
+                  Speaking:{' '}
+                  {speakingParticipants
+                    .map(
+                      (participation) =>
+                        participation.user.id ===
+                          currentUserId
+                          ? 'you'
+                          : `@${participation.user.username}`,
+                    )
+                    .join(', ')}
+                </div>
+              )}
             </div>
           </div>
 

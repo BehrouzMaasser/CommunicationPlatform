@@ -33,6 +33,7 @@ export type VoiceContextValue = {
 
   ownsCurrentParticipation: boolean
   microphoneEnabled: boolean
+  speakingUserIds: number[]
 
   error: string | null
 

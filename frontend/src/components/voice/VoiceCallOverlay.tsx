@@ -36,6 +36,7 @@ function VoiceCallOverlay() {
     mediaStatus,
     ownsCurrentParticipation,
     microphoneEnabled,
+    speakingUserIds,
     error,
     acceptDirectCall,
     rejectDirectCall,
@@ -100,6 +101,17 @@ function VoiceCallOverlay() {
 
   const busy =
     pendingAction !== null
+
+  const otherUserSpeaking =
+    speakingUserIds.includes(
+      otherUser.id,
+    )
+
+  const currentUserSpeaking =
+    microphoneEnabled
+    && speakingUserIds.includes(
+      currentUserId,
+    )
 
 
   async function runAction(
@@ -186,9 +198,23 @@ function VoiceCallOverlay() {
             )}
 
             {session.status === 'ACTIVE' && (
-              <span className="badge text-bg-success">
-                Active
-              </span>
+              <div className="d-flex flex-wrap justify-content-end gap-1">
+                <span className="badge text-bg-success">
+                  Active
+                </span>
+
+                {otherUserSpeaking && (
+                  <span className="badge text-bg-success">
+                    @{otherUser.username} speaking
+                  </span>
+                )}
+
+                {currentUserSpeaking && (
+                  <span className="badge text-bg-success">
+                    You&apos;re speaking
+                  </span>
+                )}
+              </div>
             )}
           </div>
 

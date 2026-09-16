@@ -46,6 +46,7 @@ import {
 
 import {
   voiceMediaClient,
+  voiceMediaParticipantIdentity,
 } from './client'
 
 import {
@@ -128,6 +129,11 @@ export function VoiceProvider({
     useState<string | null>(
       null,
     )
+
+  const [
+    speakingParticipantIdentities,
+    setSpeakingParticipantIdentities,
+  ] = useState<string[]>([])
 
   const [
     participantVolumes,
@@ -727,6 +733,36 @@ export function VoiceProvider({
             nextEnabled,
           )
 
+          if (
+            !nextEnabled
+            && currentUserId !== undefined
+          ) {
+            const participation =
+              desiredVoiceStateRef
+                .current
+                .participants
+                .find(
+                  (item) =>
+                    item.user.id ===
+                      currentUserId,
+                )
+
+            if (participation) {
+              const identity =
+                voiceMediaParticipantIdentity(
+                  participation.id,
+                )
+
+              setSpeakingParticipantIdentities(
+                (current) =>
+                  current.filter(
+                    (item) =>
+                      item !== identity,
+                  ),
+              )
+            }
+          }
+
           setError(null)
         } catch (
           microphoneError
@@ -740,7 +776,7 @@ export function VoiceProvider({
           throw microphoneError
         }
       },
-      [],
+      [currentUserId],
     )
 
 
@@ -879,6 +915,34 @@ export function VoiceProvider({
 
   useEffect(
     () => {
+      voiceMediaClient
+        .setActiveSpeakersListener(
+          (
+            participantIdentities,
+          ) => {
+            setSpeakingParticipantIdentities(
+              participantIdentities,
+            )
+          },
+        )
+
+      return () => {
+        voiceMediaClient
+          .setActiveSpeakersListener(
+            null,
+          )
+
+        setSpeakingParticipantIdentities(
+          [],
+        )
+      }
+    },
+    [],
+  )
+
+
+  useEffect(
+    () => {
       if (!enabled) {
         desiredVoiceStateRef
           .current =
@@ -954,6 +1018,26 @@ export function VoiceProvider({
       ?.client_instance_id
       === clientInstanceId
 
+  const speakingIdentitySet =
+    new Set(
+      speakingParticipantIdentities,
+    )
+
+  const speakingUserIds =
+    state.participants
+      .filter(
+        (participation) =>
+          speakingIdentitySet.has(
+            voiceMediaParticipantIdentity(
+              participation.id,
+            ),
+          ),
+      )
+      .map(
+        (participation) =>
+          participation.user.id,
+      )
+
   return (
     <VoiceContext.Provider
       value={{
@@ -965,6 +1049,7 @@ export function VoiceProvider({
         state,
         ownsCurrentParticipation,
         microphoneEnabled,
+        speakingUserIds,
         error,
         refresh,
         startDirectCall,

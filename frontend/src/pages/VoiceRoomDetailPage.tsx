@@ -78,6 +78,7 @@ function VoiceRoomDetailPage() {
     state: globalVoiceState,
     ownsCurrentParticipation,
     microphoneEnabled,
+    speakingUserIds,
     error: voiceError,
     refresh: refreshGlobalVoice,
     joinVoiceRoom,
@@ -847,16 +848,39 @@ function VoiceRoomDetailPage() {
                         ) * 100,
                       )
 
+                    const isSpeaking =
+                      speakingUserIds.includes(
+                        participation.user.id,
+                      )
+                      && (
+                        !isCurrentUser
+                        || microphoneEnabled
+                      )
+
                     return (
                       <div
-                        className="border rounded px-3 py-2 d-flex flex-column flex-sm-row align-items-sm-center justify-content-between gap-2"
+                        className={
+                          `border rounded px-3 py-2 d-flex flex-column flex-sm-row align-items-sm-center justify-content-between gap-2${
+                            isSpeaking
+                              ? ' border-success'
+                              : ''
+                          }`
+                        }
                         key={participation.id}
                       >
-                        <div className="fw-semibold">
-                          @{participation.user.username}
-                          {isCurrentUser
-                            ? ' · you'
-                            : ''}
+                        <div className="d-flex align-items-center flex-wrap gap-2">
+                          <div className="fw-semibold">
+                            @{participation.user.username}
+                            {isCurrentUser
+                              ? ' · you'
+                              : ''}
+                          </div>
+
+                          {isSpeaking && (
+                            <span className="badge text-bg-success">
+                              Speaking
+                            </span>
+                          )}
                         </div>
 
                         {!isCurrentUser

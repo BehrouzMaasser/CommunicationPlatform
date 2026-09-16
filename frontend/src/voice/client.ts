@@ -1,4 +1,5 @@
 import type {
+  Participant,
   RemoteParticipant,
   RemoteTrack,
   RemoteTrackPublication,
@@ -25,7 +26,7 @@ const MEDIA_PARTICIPANT_IDENTITY_PREFIX =
   'voice_participant_'
 
 
-function participantIdentity(
+export function voiceMediaParticipantIdentity(
   participationId: string,
 ): string {
   return (
@@ -35,6 +36,11 @@ function participantIdentity(
       .toLowerCase()
   )
 }
+
+
+type ActiveSpeakersListener = (
+  participantIdentities: string[],
+) => void
 
 
 function clampVolume(
@@ -69,6 +75,9 @@ export class VoiceMediaClient {
   private participantVolumes =
     new Map<string, number>()
 
+  private activeSpeakersListener:
+    ActiveSpeakersListener | null = null
+
 
   get currentRoom(): Room | null {
     return this.room
@@ -93,12 +102,23 @@ export class VoiceMediaClient {
   }
 
 
+  setActiveSpeakersListener(
+    listener:
+      ActiveSpeakersListener | null,
+  ): void {
+    this.activeSpeakersListener =
+      listener
+
+    listener?.([])
+  }
+
+
   setParticipantVolume(
     participationId: string,
     volume: number,
   ): void {
     const identity =
-      participantIdentity(
+      voiceMediaParticipantIdentity(
         participationId,
       )
 
@@ -151,6 +171,13 @@ export class VoiceMediaClient {
         })
 
       this.room = room
+
+      room.on(
+        liveKit
+          .RoomEvent
+          .ActiveSpeakersChanged,
+        this.handleActiveSpeakersChanged,
+      )
 
       room.on(
         liveKit
@@ -235,6 +262,7 @@ export class VoiceMediaClient {
     if (!room) {
       this.removeAudioElements()
       this.participantVolumes.clear()
+      this.emitActiveSpeakers([])
       return
     }
 
@@ -262,6 +290,7 @@ export class VoiceMediaClient {
 
     this.removeAudioElements()
     this.participantVolumes.clear()
+    this.emitActiveSpeakers([])
 
     await room.disconnect(true)
   }
@@ -327,6 +356,27 @@ export class VoiceMediaClient {
     } finally {
       this.liveKitPromise = null
     }
+  }
+
+
+  private readonly handleActiveSpeakersChanged = (
+    speakers: Participant[],
+  ): void => {
+    this.emitActiveSpeakers(
+      speakers.map(
+        (participant) =>
+          participant.identity,
+      ),
+    )
+  }
+
+
+  private emitActiveSpeakers(
+    participantIdentities: string[],
+  ): void {
+    this.activeSpeakersListener?.(
+      participantIdentities,
+    )
   }
 
 
@@ -402,6 +452,13 @@ export class VoiceMediaClient {
     if (!liveKit) {
       return
     }
+
+    room.off(
+      liveKit
+        .RoomEvent
+        .ActiveSpeakersChanged,
+      this.handleActiveSpeakersChanged,
+    )
 
     room.off(
       liveKit
