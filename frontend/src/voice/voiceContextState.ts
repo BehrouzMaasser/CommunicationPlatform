@@ -64,6 +64,18 @@ export type VoiceContextValue = {
 
   startAudioPlayback:
     () => Promise<void>
+
+  getParticipantVolume:
+    (userId: number) => number
+
+  setParticipantVolume:
+    (
+      userId: number,
+      volume: number,
+    ) => void
+
+  toggleParticipantMuted:
+    (userId: number) => void
 }
 
 

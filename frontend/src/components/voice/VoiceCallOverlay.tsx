@@ -43,6 +43,9 @@ function VoiceCallOverlay() {
     endDirectCall,
     setMicrophoneEnabled,
     startAudioPlayback,
+    getParticipantVolume,
+    setParticipantVolume,
+    toggleParticipantMuted,
     refresh,
   } = useVoice()
 
@@ -195,6 +198,71 @@ function VoiceCallOverlay() {
               role="alert"
             >
               {localError ?? error}
+            </div>
+          )}
+
+          {session.status === 'ACTIVE'
+            && ownsCurrentParticipation
+            && mediaStatus ===
+              'connected' && (
+            <div className="mt-3">
+              <div className="d-flex justify-content-between small mb-1">
+                <span>
+                  @{otherUser.username} volume
+                </span>
+
+                <span className="text-secondary">
+                  {Math.round(
+                    getParticipantVolume(
+                      otherUser.id,
+                    ) * 100,
+                  )}%
+                </span>
+              </div>
+
+              <div className="d-flex align-items-center gap-2">
+                <input
+                  className="form-range m-0"
+                  type="range"
+                  min="0"
+                  max="100"
+                  step="5"
+                  value={
+                    Math.round(
+                      getParticipantVolume(
+                        otherUser.id,
+                      ) * 100,
+                    )
+                  }
+                  aria-label={
+                    `Volume for @${otherUser.username}`
+                  }
+                  onChange={(event) =>
+                    setParticipantVolume(
+                      otherUser.id,
+                      Number(
+                        event.target.value,
+                      ) / 100,
+                    )
+                  }
+                />
+
+                <button
+                  className="btn btn-sm btn-outline-secondary flex-shrink-0"
+                  type="button"
+                  onClick={() =>
+                    toggleParticipantMuted(
+                      otherUser.id,
+                    )
+                  }
+                >
+                  {getParticipantVolume(
+                    otherUser.id,
+                  ) === 0
+                    ? 'Unmute'
+                    : 'Mute'}
+                </button>
+              </div>
             </div>
           )}
 

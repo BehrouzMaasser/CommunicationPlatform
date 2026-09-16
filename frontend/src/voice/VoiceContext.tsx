@@ -49,6 +49,14 @@ import {
 } from './client'
 
 import {
+  DEFAULT_VOICE_PARTICIPANT_VOLUME,
+  normalizeVoiceParticipantVolume,
+  readLastNonZeroVoiceParticipantVolume,
+  readVoiceParticipantVolume,
+  writeVoiceParticipantVolume,
+} from './volumePreferences'
+
+import {
   EMPTY_VOICE_STATE,
   VoiceContext,
 } from './voiceContextState'
@@ -121,6 +129,18 @@ export function VoiceProvider({
       null,
     )
 
+  const [
+    participantVolumes,
+    setParticipantVolumesState,
+  ] = useState<Record<number, number>>(
+    {},
+  )
+
+  const participantVolumesRef =
+    useRef<Record<number, number>>(
+      {},
+    )
+
   const desiredVoiceStateRef =
     useRef<VoiceState>(
       EMPTY_VOICE_STATE,
@@ -135,6 +155,95 @@ export function VoiceProvider({
   const refreshPromiseRef =
     useRef<Promise<void> | null>(
       null,
+    )
+
+
+  const hydrateParticipantVolumes =
+    useCallback(
+      (
+        nextState: VoiceState,
+      ): void => {
+        let next =
+          participantVolumesRef.current
+
+        let changed = false
+
+        for (
+          const participation
+          of nextState.participants
+        ) {
+          const userId =
+            participation.user.id
+
+          if (
+            userId === currentUserId
+            || next[userId] !== undefined
+          ) {
+            continue
+          }
+
+          if (!changed) {
+            next = {
+              ...next,
+            }
+            changed = true
+          }
+
+          next[userId] =
+            readVoiceParticipantVolume(
+              currentUserId ?? null,
+              userId,
+            )
+        }
+
+        if (!changed) {
+          return
+        }
+
+        participantVolumesRef.current =
+          next
+
+        setParticipantVolumesState(
+          next,
+        )
+      },
+      [currentUserId],
+    )
+
+
+  const syncParticipantVolumesToMedia =
+    useCallback(
+      (
+        nextState: VoiceState,
+      ): void => {
+        for (
+          const participation
+          of nextState.participants
+        ) {
+          const userId =
+            participation.user.id
+
+          if (userId === currentUserId) {
+            continue
+          }
+
+          const volume =
+            participantVolumesRef
+              .current[userId]
+            ??
+            readVoiceParticipantVolume(
+              currentUserId ?? null,
+              userId,
+            )
+
+          voiceMediaClient
+            .setParticipantVolume(
+              participation.id,
+              volume,
+            )
+        }
+      },
+      [currentUserId],
     )
 
 
@@ -201,6 +310,10 @@ export function VoiceProvider({
               voiceMediaClient
                 .isConnected
             ) {
+              syncParticipantVolumesToMedia(
+                desiredState,
+              )
+
               setMediaStatus(
                 'connected',
               )
@@ -225,6 +338,10 @@ export function VoiceProvider({
                 .connect(
                   credentials,
                 )
+
+              syncParticipantVolumesToMedia(
+                desiredState,
+              )
 
               await voiceMediaClient
                 .setMicrophoneEnabled(
@@ -283,6 +400,7 @@ export function VoiceProvider({
       [
         clientInstanceId,
         enabled,
+        syncParticipantVolumesToMedia,
       ],
     )
 
@@ -295,6 +413,10 @@ export function VoiceProvider({
         desiredVoiceStateRef
           .current = nextState
 
+        hydrateParticipantVolumes(
+          nextState,
+        )
+
         setState(nextState)
 
         setStatus('ready')
@@ -303,7 +425,10 @@ export function VoiceProvider({
 
         void reconcileMedia()
       },
-      [reconcileMedia],
+      [
+        hydrateParticipantVolumes,
+        reconcileMedia,
+      ],
     )
 
 
@@ -643,6 +768,115 @@ export function VoiceProvider({
     )
 
 
+  const getParticipantVolume =
+    useCallback(
+      (
+        userId: number,
+      ): number => {
+        return (
+          participantVolumes[userId]
+          ??
+          DEFAULT_VOICE_PARTICIPANT_VOLUME
+        )
+      },
+      [participantVolumes],
+    )
+
+
+  const setParticipantVolume =
+    useCallback(
+      (
+        userId: number,
+        value: number,
+      ): void => {
+        if (userId === currentUserId) {
+          return
+        }
+
+        const volume =
+          normalizeVoiceParticipantVolume(
+            value,
+          )
+
+        const next = {
+          ...participantVolumesRef.current,
+          [userId]: volume,
+        }
+
+        participantVolumesRef.current =
+          next
+
+        setParticipantVolumesState(
+          next,
+        )
+
+        writeVoiceParticipantVolume(
+          currentUserId ?? null,
+          userId,
+          volume,
+        )
+
+        const participation =
+          desiredVoiceStateRef
+            .current
+            .participants
+            .find(
+              (item) =>
+                item.user.id === userId,
+            )
+
+        if (!participation) {
+          return
+        }
+
+        voiceMediaClient
+          .setParticipantVolume(
+            participation.id,
+            volume,
+          )
+      },
+      [currentUserId],
+    )
+
+
+  const toggleParticipantMuted =
+    useCallback(
+      (
+        userId: number,
+      ): void => {
+        if (userId === currentUserId) {
+          return
+        }
+
+        const currentVolume =
+          participantVolumesRef
+            .current[userId]
+          ??
+          readVoiceParticipantVolume(
+            currentUserId ?? null,
+            userId,
+          )
+
+        const nextVolume =
+          currentVolume > 0
+            ? 0
+            : readLastNonZeroVoiceParticipantVolume(
+                currentUserId ?? null,
+                userId,
+              )
+
+        setParticipantVolume(
+          userId,
+          nextVolume,
+        )
+      },
+      [
+        currentUserId,
+        setParticipantVolume,
+      ],
+    )
+
+
   useEffect(
     () => {
       if (!enabled) {
@@ -742,6 +976,9 @@ export function VoiceProvider({
         leaveVoiceRoom,
         setMicrophoneEnabled,
         startAudioPlayback,
+        getParticipantVolume,
+        setParticipantVolume,
+        toggleParticipantMuted,
       }}
     >
       {children}

@@ -84,6 +84,9 @@ function VoiceRoomDetailPage() {
     leaveVoiceRoom,
     setMicrophoneEnabled,
     startAudioPlayback,
+    getParticipantVolume,
+    setParticipantVolume,
+    toggleParticipantMuted,
   } = useVoice()
 
   const [room, setRoom] =
@@ -830,20 +833,92 @@ function VoiceRoomDetailPage() {
                 Connected
               </div>
 
-              <div className="d-flex flex-wrap gap-2">
+              <div className="d-flex flex-column gap-2">
                 {roomParticipants.map(
-                  (participation) => (
-                    <span
-                      className="badge rounded-pill text-bg-light border"
-                      key={participation.id}
-                    >
-                      @{participation.user.username}
-                      {participation.user.id ===
+                  (participation) => {
+                    const isCurrentUser =
+                      participation.user.id ===
                         currentUserId
-                        ? ' · you'
-                        : ''}
-                    </span>
-                  ),
+
+                    const volumePercent =
+                      Math.round(
+                        getParticipantVolume(
+                          participation.user.id,
+                        ) * 100,
+                      )
+
+                    return (
+                      <div
+                        className="border rounded px-3 py-2 d-flex flex-column flex-sm-row align-items-sm-center justify-content-between gap-2"
+                        key={participation.id}
+                      >
+                        <div className="fw-semibold">
+                          @{participation.user.username}
+                          {isCurrentUser
+                            ? ' · you'
+                            : ''}
+                        </div>
+
+                        {!isCurrentUser
+                          && ownsThisRoomSession
+                          && mediaStatus ===
+                            'connected' && (
+                          <div
+                            className="d-flex align-items-center gap-2"
+                            style={{
+                              minWidth: '14rem',
+                            }}
+                          >
+                            <span
+                              className="small text-secondary"
+                              style={{
+                                minWidth: '3rem',
+                              }}
+                            >
+                              {volumePercent}%
+                            </span>
+
+                            <input
+                              className="form-range m-0"
+                              type="range"
+                              min="0"
+                              max="100"
+                              step="5"
+                              value={volumePercent}
+                              aria-label={
+                                `Volume for @${participation.user.username}`
+                              }
+                              onChange={(event) =>
+                                setParticipantVolume(
+                                  participation
+                                    .user.id,
+                                  Number(
+                                    event.target
+                                      .value,
+                                  ) / 100,
+                                )
+                              }
+                            />
+
+                            <button
+                              className="btn btn-sm btn-outline-secondary flex-shrink-0"
+                              type="button"
+                              onClick={() =>
+                                toggleParticipantMuted(
+                                  participation
+                                    .user.id,
+                                )
+                              }
+                            >
+                              {volumePercent === 0
+                                ? 'Unmute'
+                                : 'Mute'}
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    )
+                  },
                 )}
               </div>
             </div>

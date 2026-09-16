@@ -1,5 +1,7 @@
 import type {
+  RemoteParticipant,
   RemoteTrack,
+  RemoteTrackPublication,
   Room,
 } from 'livekit-client'
 
@@ -19,6 +21,36 @@ const MICROPHONE_OPTIONS = {
 }
 
 
+const MEDIA_PARTICIPANT_IDENTITY_PREFIX =
+  'voice_participant_'
+
+
+function participantIdentity(
+  participationId: string,
+): string {
+  return (
+    MEDIA_PARTICIPANT_IDENTITY_PREFIX
+    + participationId
+      .replace(/-/g, '')
+      .toLowerCase()
+  )
+}
+
+
+function clampVolume(
+  value: number,
+): number {
+  if (!Number.isFinite(value)) {
+    return 1
+  }
+
+  return Math.min(
+    1,
+    Math.max(0, value),
+  )
+}
+
+
 export class VoiceMediaClient {
   private room: Room | null = null
 
@@ -33,6 +65,9 @@ export class VoiceMediaClient {
 
   private audioElements =
     new Set<HTMLMediaElement>()
+
+  private participantVolumes =
+    new Map<string, number>()
 
 
   get currentRoom(): Room | null {
@@ -54,6 +89,34 @@ export class VoiceMediaClient {
       this.liveKit
         .ConnectionState
         .Connected
+    )
+  }
+
+
+  setParticipantVolume(
+    participationId: string,
+    volume: number,
+  ): void {
+    const identity =
+      participantIdentity(
+        participationId,
+      )
+
+    const normalized =
+      clampVolume(volume)
+
+    this.participantVolumes.set(
+      identity,
+      normalized,
+    )
+
+    const participant =
+      this.room
+        ?.remoteParticipants
+        .get(identity)
+
+    participant?.setVolume(
+      normalized,
     )
   }
 
@@ -171,6 +234,7 @@ export class VoiceMediaClient {
 
     if (!room) {
       this.removeAudioElements()
+      this.participantVolumes.clear()
       return
     }
 
@@ -197,6 +261,7 @@ export class VoiceMediaClient {
     this.unbindRoom(room)
 
     this.removeAudioElements()
+    this.participantVolumes.clear()
 
     await room.disconnect(true)
   }
@@ -267,6 +332,8 @@ export class VoiceMediaClient {
 
   private readonly handleTrackSubscribed = (
     track: RemoteTrack,
+    _publication: RemoteTrackPublication,
+    participant: RemoteParticipant,
   ): void => {
     const liveKit = this.liveKit
 
@@ -277,6 +344,15 @@ export class VoiceMediaClient {
       !== liveKit.Track.Kind.Audio
     ) {
       return
+    }
+
+    const volume =
+      this.participantVolumes.get(
+        participant.identity,
+      )
+
+    if (volume !== undefined) {
+      participant.setVolume(volume)
     }
 
     const element =
