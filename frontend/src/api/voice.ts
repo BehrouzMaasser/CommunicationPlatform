@@ -2,6 +2,7 @@ import {
   apiDelete,
   apiGet,
   apiPost,
+  apiPatch,
 } from './client'
 import { getAllPages } from './pagination'
 
@@ -140,6 +141,26 @@ export function getVoiceRoom(
   roomId: string,
 ): Promise<VoiceRoom> {
   return apiGet<VoiceRoom>(
+    `/api/v1/voice/rooms/${encodeURIComponent(roomId)}/`,
+  )
+}
+
+
+export function renameVoiceRoom(
+  roomId: string,
+  name: string,
+): Promise<VoiceRoom> {
+  return apiPatch<VoiceRoom>(
+    `/api/v1/voice/rooms/${encodeURIComponent(roomId)}/`,
+    { name },
+  )
+}
+
+
+export function deleteVoiceRoom(
+  roomId: string,
+): Promise<unknown> {
+  return apiDelete(
     `/api/v1/voice/rooms/${encodeURIComponent(roomId)}/`,
   )
 }

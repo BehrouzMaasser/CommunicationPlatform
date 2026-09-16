@@ -1,4 +1,5 @@
 import {
+  type FormEvent,
   useCallback,
   useEffect,
   useState,
@@ -12,11 +13,13 @@ import {
 import { ApiError } from '../api/client'
 import VoiceRoomManagement from '../components/voice/VoiceRoomManagement'
 import {
+  deleteVoiceRoom,
   getVoiceRoom,
   getVoiceRoomMembers,
   getVoiceRoomVoiceState,
   leaveVoiceRoomMembership,
   removeVoiceRoomMember,
+  renameVoiceRoom,
 } from '../api/voice'
 import {
   useRealtimeEvent,
@@ -107,6 +110,32 @@ function VoiceRoomDetailPage() {
   ] =
     useState<string | null>(null)
 
+  const [renameText, setRenameText] =
+    useState('')
+
+  const [
+    roomSettingsBusy,
+    setRoomSettingsBusy,
+  ] = useState<'rename' | 'delete' | null>(
+    null,
+  )
+
+  const [
+    roomSettingsError,
+    setRoomSettingsError,
+  ] = useState<string | null>(null)
+
+  const [
+    roomSettingsNotice,
+    setRoomSettingsNotice,
+  ] = useState<string | null>(null)
+
+  const [
+    showDeleteConfirm,
+    setShowDeleteConfirm,
+  ] = useState(false)
+
+
   const [
     pendingMembershipAction,
     setPendingMembershipAction,
@@ -173,6 +202,7 @@ function VoiceRoomDetailPage() {
           ])
 
           setRoom(roomData)
+          setRenameText(roomData.name)
           setMembers(memberData)
         } catch {
           /*
@@ -275,6 +305,32 @@ function VoiceRoomDetailPage() {
     )
 
 
+  const handleRoomRenamed =
+    useCallback(
+      ({
+        payload,
+      }: {
+        payload: RoomVoiceEventPayload
+      }) => {
+        if (
+          payload.room_id === roomId
+        ) {
+          /*
+           * The realtime event tells us that
+           * the authoritative room changed.
+           * Refetch instead of depending on
+           * optional event payload fields.
+           */
+          void refreshRoomMembershipState()
+        }
+      },
+      [
+        refreshRoomMembershipState,
+        roomId,
+      ],
+    )
+
+
   const handleRoomDeleted =
     useCallback(
       ({
@@ -318,6 +374,12 @@ function VoiceRoomDetailPage() {
   useRealtimeEvent<RoomVoiceEventPayload>(
     'voice_room.member_left',
     handleRoomMembershipEvent,
+  )
+
+
+  useRealtimeEvent<RoomVoiceEventPayload>(
+    'voice_room.renamed',
+    handleRoomRenamed,
   )
 
 
@@ -375,6 +437,7 @@ function VoiceRoomDetailPage() {
 
         if (!cancelled) {
           setRoom(roomData)
+          setRenameText(roomData.name)
           setMembers(memberData)
           setRoomVoiceState(
             roomVoiceData,
@@ -399,6 +462,96 @@ function VoiceRoomDetailPage() {
       cancelled = true
     }
   }, [roomId])
+
+
+  async function handleRenameRoom(
+    event: FormEvent<HTMLFormElement>,
+  ) {
+    event.preventDefault()
+
+    if (
+      !roomId
+      || !room
+      || roomSettingsBusy !== null
+    ) {
+      return
+    }
+
+    const name = renameText.trim()
+
+    if (
+      !name
+      || name === room.name
+    ) {
+      return
+    }
+
+    setRoomSettingsBusy('rename')
+    setRoomSettingsError(null)
+    setRoomSettingsNotice(null)
+
+    try {
+      const updated =
+        await renameVoiceRoom(
+          roomId,
+          name,
+        )
+
+      setRoom(updated)
+      setRenameText(updated.name)
+      setRoomSettingsNotice(
+        'Voice Room renamed.',
+      )
+    } catch (requestError) {
+      setRoomSettingsError(
+        errorText(requestError),
+      )
+    } finally {
+      setRoomSettingsBusy(null)
+    }
+  }
+
+
+  async function handleDeleteRoom() {
+    if (
+      !roomId
+      || roomSettingsBusy !== null
+    ) {
+      return
+    }
+
+    setRoomSettingsBusy('delete')
+    setRoomSettingsError(null)
+    setRoomSettingsNotice(null)
+
+    try {
+      await deleteVoiceRoom(roomId)
+
+      setShowDeleteConfirm(false)
+
+      /*
+       * The backend ends any active room
+       * session. Reconcile this client
+       * immediately rather than waiting
+       * solely for realtime delivery.
+       */
+      await refreshGlobalVoice()
+
+      navigate(
+        '/voice',
+        {
+          replace: true,
+        },
+      )
+    } catch (requestError) {
+      setRoomSettingsError(
+        errorText(requestError),
+      )
+      setShowDeleteConfirm(false)
+    } finally {
+      setRoomSettingsBusy(null)
+    }
+  }
 
 
   async function handleRemoveMember(
@@ -847,6 +1000,129 @@ function VoiceRoomDetailPage() {
           </div>
         </div>
       </div>
+
+      {currentUserId === room.owner.id && (
+        <div className="card shadow-sm mb-4">
+          <div className="card-body">
+            <h2 className="h5">
+              Room settings
+            </h2>
+
+            {roomSettingsError && (
+              <div className="alert alert-danger">
+                {roomSettingsError}
+              </div>
+            )}
+
+            {roomSettingsNotice && (
+              <div className="alert alert-success">
+                {roomSettingsNotice}
+              </div>
+            )}
+
+            <form
+              className="d-flex flex-column flex-sm-row gap-2 mb-4"
+              onSubmit={handleRenameRoom}
+            >
+              <input
+                className="form-control"
+                type="text"
+                maxLength={50}
+                value={renameText}
+                disabled={
+                  roomSettingsBusy !== null
+                }
+                onChange={(event) =>
+                  setRenameText(
+                    event.target.value,
+                  )
+                }
+                aria-label="Voice Room name"
+              />
+
+              <button
+                className="btn btn-primary"
+                type="submit"
+                disabled={
+                  roomSettingsBusy !== null
+                  || !renameText.trim()
+                  || renameText.trim() ===
+                    room.name
+                }
+              >
+                {roomSettingsBusy ===
+                'rename'
+                  ? 'Renaming…'
+                  : 'Rename'}
+              </button>
+            </form>
+
+            <hr />
+
+            <h3 className="h6 text-danger">
+              Delete Voice Room
+            </h3>
+
+            <p className="small text-secondary">
+              This removes the room for all members
+              and ends its active voice session.
+            </p>
+
+            {!showDeleteConfirm ? (
+              <button
+                className="btn btn-outline-danger"
+                type="button"
+                disabled={
+                  roomSettingsBusy !== null
+                }
+                onClick={() =>
+                  setShowDeleteConfirm(true)
+                }
+              >
+                Delete room
+              </button>
+            ) : (
+              <div className="border border-danger rounded p-3">
+                <p className="mb-3">
+                  Delete <strong>{room.name}</strong>?
+                  This cannot be undone.
+                </p>
+
+                <div className="d-flex flex-wrap gap-2">
+                  <button
+                    className="btn btn-secondary"
+                    type="button"
+                    disabled={
+                      roomSettingsBusy !== null
+                    }
+                    onClick={() =>
+                      setShowDeleteConfirm(false)
+                    }
+                  >
+                    Cancel
+                  </button>
+
+                  <button
+                    className="btn btn-danger"
+                    type="button"
+                    disabled={
+                      roomSettingsBusy !== null
+                    }
+                    onClick={() =>
+                      void handleDeleteRoom()
+                    }
+                  >
+                    {roomSettingsBusy ===
+                    'delete'
+                      ? 'Deleting…'
+                      : 'Delete permanently'}
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {currentUserId === room.owner.id && (
         <VoiceRoomManagement

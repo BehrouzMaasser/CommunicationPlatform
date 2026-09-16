@@ -152,6 +152,17 @@ function VoiceRoomsPage() {
   )
 
 
+  useRealtimeEvent(
+    'voice_room.renamed',
+    handleRealtimeChange,
+  )
+
+  useRealtimeEvent(
+    'voice_room.deleted',
+    handleRealtimeChange,
+  )
+
+
   useEffect(() => {
     let cancelled = false
 
