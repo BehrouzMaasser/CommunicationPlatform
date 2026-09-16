@@ -810,7 +810,7 @@ function VoiceRoomDetailPage() {
         </div>
       </div>
 
-      <div className="card shadow-sm mb-4">
+      <div className="card shadow-sm mb-4 voice-panel">
         <div className="card-body">
           <div className="d-flex justify-content-between align-items-center gap-3 mb-3">
             <h2 className="h5 mb-0">
@@ -818,7 +818,7 @@ function VoiceRoomDetailPage() {
             </h2>
 
             {roomParticipants.length > 0 && (
-              <span className="badge text-bg-success">
+              <span className="badge voice-active-badge">
                 {roomParticipants.length}{' '}
                 in voice
               </span>
@@ -861,9 +861,9 @@ function VoiceRoomDetailPage() {
                     return (
                       <div
                         className={
-                          `border rounded px-3 py-2 d-flex flex-column flex-sm-row align-items-sm-center justify-content-between gap-2${
+                          `voice-participant-row d-flex flex-column flex-sm-row align-items-sm-center justify-content-between gap-2${
                             isSpeaking
-                              ? ' border-success'
+                              ? ' voice-participant-row-speaking'
                               : ''
                           }`
                         }
@@ -878,7 +878,7 @@ function VoiceRoomDetailPage() {
                           </div>
 
                           {isSpeaking && (
-                            <span className="badge text-bg-success">
+                            <span className="badge voice-speaking-badge">
                               Speaking
                             </span>
                           )}
@@ -949,9 +949,9 @@ function VoiceRoomDetailPage() {
             </div>
           )}
 
-          <p className="small text-secondary mb-3">
-            {mediaDescription}
-          </p>
+          <div className="voice-media-copy mb-3">
+            <span>{mediaDescription}</span>
+          </div>
 
           {(actionError || voiceError) && (
             <div

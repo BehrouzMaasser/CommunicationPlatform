@@ -172,14 +172,10 @@ function VoiceCallOverlay() {
 
   return (
     <div
-      className="position-fixed bottom-0 start-50 translate-middle-x p-3 w-100"
-      style={{
-        maxWidth: '34rem',
-        zIndex: 1080,
-      }}
+      className="voice-overlay-shell"
       aria-live="polite"
     >
-      <div className="card shadow-lg border-primary">
+      <div className="card voice-overlay-card voice-overlay-call">
         <div className="card-body">
           <div className="d-flex align-items-start justify-content-between gap-3">
             <div className="min-w-0">
@@ -193,25 +189,25 @@ function VoiceCallOverlay() {
             </div>
 
             {session.status === 'RINGING' && (
-              <span className="badge text-bg-warning">
+              <span className="badge voice-ringing-badge">
                 Ringing
               </span>
             )}
 
             {session.status === 'ACTIVE' && (
               <div className="d-flex flex-wrap justify-content-end gap-1">
-                <span className="badge text-bg-success">
+                <span className="badge voice-active-badge">
                   Active
                 </span>
 
                 {otherUserSpeaking && (
-                  <span className="badge text-bg-success">
+                  <span className="badge voice-speaking-badge">
                     @{otherUser.username} speaking
                   </span>
                 )}
 
                 {currentUserSpeaking && (
-                  <span className="badge text-bg-success">
+                  <span className="badge voice-speaking-badge">
                     You&apos;re speaking
                   </span>
                 )}
@@ -293,7 +289,7 @@ function VoiceCallOverlay() {
             </div>
           )}
 
-          <div className="d-flex flex-wrap gap-2 mt-3">
+          <div className="voice-overlay-actions d-flex flex-wrap gap-2 mt-3">
             {session.status === 'RINGING'
               && isRecipient && (
               <>

@@ -314,14 +314,10 @@ function VoiceRoomOverlay() {
 
   return (
     <div
-      className="position-fixed bottom-0 start-50 translate-middle-x p-3 w-100"
-      style={{
-        maxWidth: '38rem',
-        zIndex: 1075,
-      }}
+      className="voice-overlay-shell"
       aria-live="polite"
     >
-      <div className="card shadow-lg border-success">
+      <div className="card voice-overlay-card voice-overlay-room">
         <div className="card-body">
           <div className="d-flex align-items-start justify-content-between gap-3">
             <div className="min-w-0">
@@ -333,7 +329,7 @@ function VoiceRoomOverlay() {
                   {roomName}
                 </Link>
 
-                <span className="badge text-bg-success">
+                <span className="badge voice-active-badge">
                   Active
                 </span>
               </div>
@@ -348,7 +344,7 @@ function VoiceRoomOverlay() {
               </div>
 
               {speakingParticipants.length > 0 && (
-                <div className="small text-success mt-1">
+                <div className="voice-speaking-summary">
                   Speaking:{' '}
                   {speakingParticipants
                     .map(
@@ -375,7 +371,7 @@ function VoiceRoomOverlay() {
             </div>
           )}
 
-          <div className="d-flex flex-wrap gap-2 mt-3">
+          <div className="voice-overlay-actions d-flex flex-wrap gap-2 mt-3">
             {ownsCurrentParticipation
               && mediaStatus ===
                 'connected' && (
