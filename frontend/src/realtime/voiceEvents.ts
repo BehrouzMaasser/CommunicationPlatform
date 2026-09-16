@@ -9,6 +9,10 @@ export const VOICE_REALTIME_EVENT_TYPES = [
   'voice.group.participant_left',
   'voice.group.participant_revoked',
   'voice.group.session_ended',
+  'voice.room.participant_joined',
+  'voice.room.participant_left',
+  'voice.room.participant_revoked',
+  'voice.room.session_ended',
 ] as const
 
 

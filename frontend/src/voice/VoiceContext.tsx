@@ -21,6 +21,8 @@ import {
   endDirectCall as endDirectCallRequest,
   getVoiceMediaCredentials,
   getVoiceState,
+  joinVoiceRoom as joinVoiceRoomRequest,
+  leaveVoiceRoom as leaveVoiceRoomRequest,
   rejectDirectCall as rejectDirectCallRequest,
   startDirectCall as startDirectCallRequest,
 } from '../api/voice'
@@ -535,6 +537,55 @@ export function VoiceProvider({
     )
 
 
+  const joinVoiceRoom =
+    useCallback(
+      async (
+        roomId: string,
+      ): Promise<void> => {
+        await runStateMutation(
+          () =>
+            joinVoiceRoomRequest(
+              roomId,
+              clientInstanceId,
+            ),
+        )
+      },
+      [
+        clientInstanceId,
+        runStateMutation,
+      ],
+    )
+
+
+  const leaveVoiceRoom =
+    useCallback(
+      async (
+        roomId: string,
+      ): Promise<void> => {
+        await runStateMutation(
+          async () => {
+            await leaveVoiceRoomRequest(
+              roomId,
+              clientInstanceId,
+            )
+
+            /*
+             * The leave endpoint is room-scoped.
+             * Re-read the account-scoped state so
+             * VoiceContext cannot retain somebody
+             * else's still-active room session.
+             */
+            return getVoiceState()
+          },
+        )
+      },
+      [
+        clientInstanceId,
+        runStateMutation,
+      ],
+    )
+
+
   const setMicrophoneEnabled =
     useCallback(
       async (
@@ -686,6 +737,8 @@ export function VoiceProvider({
         rejectDirectCall,
         cancelDirectCall,
         endDirectCall,
+        joinVoiceRoom,
+        leaveVoiceRoom,
         setMicrophoneEnabled,
         startAudioPlayback,
       }}

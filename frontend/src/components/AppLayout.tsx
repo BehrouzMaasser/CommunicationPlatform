@@ -286,6 +286,15 @@ function AppLayoutContent({
                 }
               />
             </NavLink>
+
+            <NavLink
+              className={
+                navLinkClass
+              }
+              to="/voice"
+            >
+              <span>Voice Rooms</span>
+            </NavLink>
           </div>
 
           <div className="app-account-nav ms-auto d-none d-sm-flex align-items-center gap-2">

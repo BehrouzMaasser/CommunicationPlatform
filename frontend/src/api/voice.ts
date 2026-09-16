@@ -2,9 +2,12 @@ import {
   apiGet,
   apiPost,
 } from './client'
+import { getAllPages } from './pagination'
 
 import type {
   VoiceMediaCredentials,
+  VoiceRoom,
+  VoiceRoomMembership,
   VoiceState,
 } from '../types/voice'
 
@@ -102,6 +105,81 @@ export function getVoiceMediaCredentials(
 ): Promise<VoiceMediaCredentials> {
   return apiPost<VoiceMediaCredentials>(
     `/api/v1/voice/sessions/${sessionPath(sessionId)}/media-credentials/`,
+    {
+      client_instance_id:
+        clientInstanceId,
+    },
+  )
+}
+
+
+
+export function getVoiceRooms():
+Promise<VoiceRoom[]> {
+  return getAllPages<VoiceRoom>(
+    '/api/v1/voice/rooms/',
+  )
+}
+
+
+export function createVoiceRoom(
+  name: string,
+): Promise<VoiceRoom> {
+  return apiPost<VoiceRoom>(
+    '/api/v1/voice/rooms/',
+    { name },
+  )
+}
+
+
+
+export function getVoiceRoom(
+  roomId: string,
+): Promise<VoiceRoom> {
+  return apiGet<VoiceRoom>(
+    `/api/v1/voice/rooms/${encodeURIComponent(roomId)}/`,
+  )
+}
+
+
+export function getVoiceRoomMembers(
+  roomId: string,
+): Promise<VoiceRoomMembership[]> {
+  return getAllPages<VoiceRoomMembership>(
+    `/api/v1/voice/rooms/${encodeURIComponent(roomId)}/members/`,
+  )
+}
+
+
+export function getVoiceRoomVoiceState(
+  roomId: string,
+): Promise<VoiceState> {
+  return apiGet<VoiceState>(
+    `/api/v1/voice/rooms/${encodeURIComponent(roomId)}/voice/`,
+  )
+}
+
+
+export function joinVoiceRoom(
+  roomId: string,
+  clientInstanceId: string,
+): Promise<VoiceState> {
+  return apiPost<VoiceState>(
+    `/api/v1/voice/rooms/${encodeURIComponent(roomId)}/voice/`,
+    {
+      client_instance_id:
+        clientInstanceId,
+    },
+  )
+}
+
+
+export function leaveVoiceRoom(
+  roomId: string,
+  clientInstanceId: string,
+): Promise<VoiceState> {
+  return apiPost<VoiceState>(
+    `/api/v1/voice/rooms/${encodeURIComponent(roomId)}/voice/leave/`,
     {
       client_instance_id:
         clientInstanceId,

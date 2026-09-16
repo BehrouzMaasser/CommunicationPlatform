@@ -10,6 +10,7 @@ export type VoiceSession = {
   caller: PublicUser | null
   recipient: PublicUser | null
   group_id: number | null
+  voice_room_id: string | null
   created_at: string
   ring_expires_at: string | null
   activated_at: string | null
@@ -46,4 +47,22 @@ export type VoiceState = {
 export type VoiceMediaCredentials = {
   server_url: string
   participant_token: string
+}
+
+
+
+export type VoiceRoom = {
+  id: string
+  name: string
+  owner: PublicUser
+  member_count: number
+  created_at: string
+  updated_at: string
+}
+
+
+export type VoiceRoomMembership = {
+  id: string
+  user: PublicUser
+  joined_at: string
 }
