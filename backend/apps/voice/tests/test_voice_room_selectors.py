@@ -1,8 +1,11 @@
 from django.contrib.auth import get_user_model
 from django.test import TestCase
+from django.utils import timezone
 
 from apps.voice.models import (
+    VoiceParticipation,
     VoiceRoomMembership,
+    VoiceSession,
 )
 from apps.voice.selectors.voice_room import (
     VoiceRoomSelector,
@@ -87,6 +90,44 @@ class VoiceRoomSelectorTests(TestCase):
             room.member_count,
             2,
         )
+
+    def test_connected_count_counts_only_open_active_room_participations(
+        self,
+    ):
+        session = VoiceSession.objects.create(
+            kind=VoiceSession.Kind.ROOM,
+            status=VoiceSession.Status.ACTIVE,
+            voice_room=self.room,
+            activated_at=timezone.now(),
+        )
+
+        VoiceParticipation.objects.create(
+            session=session,
+            user=self.owner,
+            role=VoiceParticipation.Role.MEMBER,
+        )
+
+        VoiceParticipation.objects.create(
+            session=session,
+            user=self.member,
+            role=VoiceParticipation.Role.MEMBER,
+            left_at=timezone.now(),
+        )
+
+        room = (
+            VoiceRoomSelector
+            .get_for_member(
+                user=self.member,
+                room_id=self.room.id,
+            )
+        )
+
+        self.assertIsNotNone(room)
+        self.assertEqual(
+            room.connected_count,
+            1,
+        )
+
 
     def test_get_for_member_returns_none_for_outsider(self):
         room = (

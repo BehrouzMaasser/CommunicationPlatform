@@ -153,12 +153,28 @@ function VoiceRoomsPage() {
 
 
   useRealtimeEvent(
-    'voice_room.renamed',
+    'voice.room.participant_joined',
     handleRealtimeChange,
   )
 
   useRealtimeEvent(
-    'voice_room.deleted',
+    'voice.room.participant_left',
+    handleRealtimeChange,
+  )
+
+  useRealtimeEvent(
+    'voice.room.participant_revoked',
+    handleRealtimeChange,
+  )
+
+  useRealtimeEvent(
+    'voice.room.session_ended',
+    handleRealtimeChange,
+  )
+
+
+  useRealtimeEvent(
+    'voice_room.renamed',
     handleRealtimeChange,
   )
 
@@ -495,12 +511,21 @@ function VoiceRoomsPage() {
                       </div>
                     </div>
 
-                    <span className="badge text-bg-secondary">
-                      {room.member_count}{' '}
-                      {room.member_count === 1
-                        ? 'member'
-                        : 'members'}
-                    </span>
+                    <div className="d-flex flex-wrap justify-content-end gap-2">
+                      {room.connected_count > 0 && (
+                        <span className="badge text-bg-success">
+                          {room.connected_count}{' '}
+                          connected
+                        </span>
+                      )}
+
+                      <span className="badge text-bg-secondary">
+                        {room.member_count}{' '}
+                        {room.member_count === 1
+                          ? 'member'
+                          : 'members'}
+                      </span>
+                    </div>
                   </div>
                 </Link>
               ))}

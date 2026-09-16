@@ -56,6 +56,7 @@ export type VoiceRoom = {
   name: string
   owner: PublicUser
   member_count: number
+  connected_count: number
   created_at: string
   updated_at: string
 }

@@ -16,6 +16,7 @@ export type GroupUnreadSummary = {
 export type ActivitySummary = {
   pending_friend_requests: number
   pending_group_invitations: number
+  pending_voice_room_invitations: number
   unread_direct_messages: number
   unread_group_messages: number
   direct_conversations:

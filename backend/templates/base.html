@@ -96,6 +96,16 @@
 
                     <a class="nav-link" href="{{ frontend_base_url }}/voice">
                         <span>Voice Rooms</span>
+                        <span
+                            class="nav-activity-badge{% if not activity_summary.pending_voice_room_invitations %} d-none{% endif %}"
+                            data-activity-badge="voice"
+                            {% if activity_summary.pending_voice_room_invitations %}
+                                aria-label="{{ activity_summary.pending_voice_room_invitations }} pending Voice Room invitations"
+                                title="{{ activity_summary.pending_voice_room_invitations }} pending Voice Room invitations"
+                            {% endif %}
+                        >
+                            {% if activity_summary.pending_voice_room_invitations > 99 %}99+{% elif activity_summary.pending_voice_room_invitations %}{{ activity_summary.pending_voice_room_invitations }}{% endif %}
+                        </span>
                     </a>
                 </div>
             {% endif %}

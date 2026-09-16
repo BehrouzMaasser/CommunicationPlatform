@@ -128,6 +128,16 @@ My account · Communication Platform
 
                                 <a class="btn btn-outline-primary" href="{{ frontend_base_url }}/voice">
                                     Voice Rooms
+                                    <span
+                                        class="badge rounded-pill text-bg-danger ms-1{% if not activity_summary.pending_voice_room_invitations %} d-none{% endif %}"
+                                        data-activity-badge="voice"
+                                        {% if activity_summary.pending_voice_room_invitations %}
+                                            aria-label="{{ activity_summary.pending_voice_room_invitations }} pending Voice Room invitations"
+                                            title="{{ activity_summary.pending_voice_room_invitations }} pending Voice Room invitations"
+                                        {% endif %}
+                                    >
+                                        {% if activity_summary.pending_voice_room_invitations > 99 %}99+{% elif activity_summary.pending_voice_room_invitations %}{{ activity_summary.pending_voice_room_invitations }}{% endif %}
+                                    </span>
                                 </a>
                             </div>
 

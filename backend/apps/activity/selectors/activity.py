@@ -4,6 +4,7 @@ from django.db.models import Count, Q
 from apps.conversations.models import GroupInvitation
 from apps.friendships.models import FriendRequest
 from apps.messaging.models import MessageReceipt
+from apps.voice.models import VoiceRoomInvitation
 
 
 User = get_user_model()
@@ -100,6 +101,11 @@ class ActivitySummarySelector:
             ),
             "pending_group_invitations": (
                 GroupInvitation.objects
+                .filter(recipient=user)
+                .count()
+            ),
+            "pending_voice_room_invitations": (
+                VoiceRoomInvitation.objects
                 .filter(recipient=user)
                 .count()
             ),

@@ -103,6 +103,10 @@ class VoiceRoomSerializer(
         serializers.SerializerMethodField()
     )
 
+    connected_count = (
+        serializers.SerializerMethodField()
+    )
+
     class Meta:
         model = VoiceRoom
         fields = (
@@ -110,6 +114,7 @@ class VoiceRoomSerializer(
             "name",
             "owner",
             "member_count",
+            "connected_count",
             "created_at",
             "updated_at",
         )
@@ -129,6 +134,34 @@ class VoiceRoomSerializer(
             return annotated_count
 
         return room.memberships.count()
+
+
+    def get_connected_count(
+        self,
+        room: VoiceRoom,
+    ) -> int:
+        annotated_count = getattr(
+            room,
+            "connected_count",
+            None,
+        )
+
+        if annotated_count is not None:
+            return annotated_count
+
+        return (
+            room.voice_sessions
+            .filter(
+                kind=VoiceSession.Kind.ROOM,
+                status=VoiceSession.Status.ACTIVE,
+                participations__left_at__isnull=True,
+            )
+            .values(
+                "participations__id",
+            )
+            .distinct()
+            .count()
+        )
 
 
 class VoiceRoomMembershipSerializer(

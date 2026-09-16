@@ -196,6 +196,7 @@ function AppLayoutContent({
   const {
     pendingFriendRequests,
     pendingGroupInvitations,
+    pendingVoiceRoomInvitations,
     unreadDirectMessages,
     unreadGroupMessages,
   } = useActivity()
@@ -294,6 +295,12 @@ function AppLayoutContent({
               to="/voice"
             >
               <span>Voice Rooms</span>
+              <ActivityBadge
+                count={
+                  pendingVoiceRoomInvitations
+                }
+                label="pending Voice Room invitations"
+              />
             </NavLink>
           </div>
 

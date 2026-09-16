@@ -1,7 +1,13 @@
 from uuid import UUID
 
 from django.contrib.auth import get_user_model
-from django.db.models import Count, Exists, OuterRef, QuerySet
+from django.db.models import (
+    Count,
+    Exists,
+    OuterRef,
+    Q,
+    QuerySet,
+)
 
 from apps.voice.models import (
     VoiceRoom,
@@ -36,6 +42,15 @@ class VoiceRoomSelector:
                 ),
                 member_count=Count(
                     "memberships",
+                    distinct=True,
+                ),
+                connected_count=Count(
+                    "voice_sessions__participations",
+                    filter=Q(
+                        voice_sessions__kind="ROOM",
+                        voice_sessions__status="ACTIVE",
+                        voice_sessions__participations__left_at__isnull=True,
+                    ),
                     distinct=True,
                 ),
             )

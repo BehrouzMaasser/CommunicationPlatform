@@ -11,6 +11,12 @@ from apps.conversations.models import (
 from apps.friendships.models import FriendRequest, Friendship
 from apps.messaging.models import MessageReceipt
 from apps.messaging.services import MessageService
+from apps.voice.models import (
+    VoiceRoomInvitation,
+)
+from apps.voice.services.voice_room import (
+    VoiceRoomService,
+)
 
 
 User = get_user_model()
@@ -58,6 +64,7 @@ class ActivitySummaryApiTests(APITestCase):
             {
                 "pending_friend_requests": 0,
                 "pending_group_invitations": 0,
+                "pending_voice_room_invitations": 0,
                 "unread_direct_messages": 0,
                 "unread_group_messages": 0,
                 "direct_conversations": [],
@@ -141,6 +148,18 @@ class ActivitySummaryApiTests(APITestCase):
             read_at=timezone.now(),
         )
 
+        voice_room = (
+            VoiceRoomService.create_room(
+                current_user=self.bob,
+                name="Gaming",
+            )
+        )
+        VoiceRoomInvitation.objects.create(
+            room=voice_room,
+            invited_by=self.bob,
+            recipient=self.alice,
+        )
+
         self.login(self.alice)
         response = self.client.get(
             "/api/v1/activity/summary/"
@@ -153,6 +172,12 @@ class ActivitySummaryApiTests(APITestCase):
         )
         self.assertEqual(
             response.data["pending_group_invitations"],
+            1,
+        )
+        self.assertEqual(
+            response.data[
+                "pending_voice_room_invitations"
+            ],
             1,
         )
         self.assertEqual(
