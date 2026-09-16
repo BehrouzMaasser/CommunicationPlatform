@@ -18,6 +18,9 @@ from apps.voice.models import (
     VoiceRoomInvitationLink,
     VoiceRoomMembership,
 )
+from apps.voice.room_realtime import (
+    VoiceRoomRealtimePublisher,
+)
 from apps.voice.services.voice_room import VoiceRoomService
 
 
@@ -166,6 +169,16 @@ class VoiceRoomInvitationLinkService:
                 ],
             )
 
+            (
+                VoiceRoomRealtimePublisher
+                .invite_link_created_after_commit(
+                    link_id=link.pk,
+                    room_id=room.pk,
+                    owner_id=current_user.pk,
+                    expires_at=link.expires_at,
+                )
+            )
+
         return link, token
 
     @classmethod
@@ -239,6 +252,20 @@ class VoiceRoomInvitationLinkService:
                 recipient=current_user,
             ).delete()
 
+            (
+                VoiceRoomRealtimePublisher
+                .member_added_after_commit(
+                    room_id=room.pk,
+                    member_user_id=current_user.pk,
+                    audience_user_ids=(
+                        VoiceRoomService
+                        ._member_user_ids(
+                            room=room,
+                        )
+                    ),
+                )
+            )
+
         return membership, True
 
     @classmethod
@@ -282,6 +309,15 @@ class VoiceRoomInvitationLinkService:
                     update_fields=[
                         "revoked_at",
                     ],
+                )
+
+                (
+                    VoiceRoomRealtimePublisher
+                    .invite_link_revoked_after_commit(
+                        link_id=link.pk,
+                        room_id=room.pk,
+                        owner_id=current_user.pk,
+                    )
                 )
 
         return link

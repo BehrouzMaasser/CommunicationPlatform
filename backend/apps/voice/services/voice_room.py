@@ -15,6 +15,9 @@ from apps.voice.models import (
     VoiceRoom,
     VoiceRoomMembership,
 )
+from apps.voice.room_realtime import (
+    VoiceRoomRealtimePublisher,
+)
 
 
 User = get_user_model()
@@ -74,6 +77,21 @@ class VoiceRoomService:
         except VoiceRoomMembership.DoesNotExist as exc:
             raise VoiceRoomMembershipRequired from exc
 
+    @staticmethod
+    def _member_user_ids(
+        *,
+        room: VoiceRoom,
+    ) -> list[int]:
+        return list(
+            VoiceRoomMembership.objects
+            .filter(room=room)
+            .order_by("user_id")
+            .values_list(
+                "user_id",
+                flat=True,
+            )
+        )
+
     @classmethod
     def create_room(
         cls,
@@ -94,6 +112,15 @@ class VoiceRoomService:
             VoiceRoomMembership.objects.create(
                 room=room,
                 user=current_user,
+            )
+
+            (
+                VoiceRoomRealtimePublisher
+                .room_created_after_commit(
+                    room_id=room.pk,
+                    room_name=room.name,
+                    owner_id=current_user.pk,
+                )
             )
 
         return room
@@ -128,6 +155,19 @@ class VoiceRoomService:
                 ],
             )
 
+            (
+                VoiceRoomRealtimePublisher
+                .room_renamed_after_commit(
+                    room_id=room.pk,
+                    room_name=room.name,
+                    audience_user_ids=(
+                        cls._member_user_ids(
+                            room=room,
+                        )
+                    ),
+                )
+            )
+
         return room
 
     @classmethod
@@ -152,6 +192,12 @@ class VoiceRoomService:
                 )
             )
 
+            audience_user_ids = (
+                cls._member_user_ids(
+                    room=room,
+                )
+            )
+
             from apps.voice.services.voice_session import (
                 VoiceSessionService,
             )
@@ -165,6 +211,15 @@ class VoiceRoomService:
             )
 
             membership.delete()
+
+            (
+                VoiceRoomRealtimePublisher
+                .member_left_after_commit(
+                    room_id=room.pk,
+                    member_user_id=current_user.pk,
+                    audience_user_ids=audience_user_ids,
+                )
+            )
 
     @classmethod
     def remove_member(
@@ -194,6 +249,12 @@ class VoiceRoomService:
                 )
             )
 
+            audience_user_ids = (
+                cls._member_user_ids(
+                    room=room,
+                )
+            )
+
             from apps.voice.services.voice_session import (
                 VoiceSessionService,
             )
@@ -207,6 +268,15 @@ class VoiceRoomService:
             )
 
             membership.delete()
+
+            (
+                VoiceRoomRealtimePublisher
+                .member_removed_after_commit(
+                    room_id=room.pk,
+                    member_user_id=target_user.pk,
+                    audience_user_ids=audience_user_ids,
+                )
+            )
 
     @classmethod
     def delete_room(
@@ -225,6 +295,14 @@ class VoiceRoomService:
                 user=current_user,
             )
 
+            room_id = room.pk
+
+            audience_user_ids = (
+                cls._member_user_ids(
+                    room=room,
+                )
+            )
+
             from apps.voice.services.voice_session import (
                 VoiceSessionService,
             )
@@ -232,8 +310,16 @@ class VoiceRoomService:
             (
                 VoiceSessionService
                 .revoke_voice_room_session(
-                    room_id=room.pk,
+                    room_id=room_id,
                 )
             )
 
             room.delete()
+
+            (
+                VoiceRoomRealtimePublisher
+                .room_deleted_after_commit(
+                    room_id=room_id,
+                    audience_user_ids=audience_user_ids,
+                )
+            )

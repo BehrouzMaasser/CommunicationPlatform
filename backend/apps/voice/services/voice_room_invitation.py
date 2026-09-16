@@ -17,6 +17,9 @@ from apps.voice.models import (
     VoiceRoomInvitation,
     VoiceRoomMembership,
 )
+from apps.voice.room_realtime import (
+    VoiceRoomRealtimePublisher,
+)
 from apps.voice.services.voice_room import VoiceRoomService
 
 
@@ -122,6 +125,17 @@ class VoiceRoomInvitationService:
                     ) from exc
                 raise
 
+            (
+                VoiceRoomRealtimePublisher
+                .invitation_created_after_commit(
+                    invitation_id=invitation.pk,
+                    room_id=room.pk,
+                    room_name=room.name,
+                    invited_by_id=current_user.pk,
+                    recipient_id=target_user.pk,
+                )
+            )
+
         return invitation
 
     @classmethod
@@ -166,6 +180,11 @@ class VoiceRoomInvitationService:
             ).exists():
                 raise UserAlreadyVoiceRoomMember
 
+            accepted_invitation_id = invitation.pk
+            invited_by_id = invitation.invited_by_id
+            recipient_id = invitation.recipient_id
+            room_name = room.name
+
             membership = (
                 VoiceRoomMembership.objects.create(
                     room=room,
@@ -174,6 +193,32 @@ class VoiceRoomInvitationService:
             )
 
             invitation.delete()
+
+            audience_user_ids = (
+                VoiceRoomService._member_user_ids(
+                    room=room,
+                )
+            )
+
+            (
+                VoiceRoomRealtimePublisher
+                .invitation_accepted_after_commit(
+                    invitation_id=accepted_invitation_id,
+                    room_id=room.pk,
+                    room_name=room_name,
+                    invited_by_id=invited_by_id,
+                    recipient_id=recipient_id,
+                )
+            )
+
+            (
+                VoiceRoomRealtimePublisher
+                .member_added_after_commit(
+                    room_id=room.pk,
+                    member_user_id=current_user.pk,
+                    audience_user_ids=audience_user_ids,
+                )
+            )
 
         return membership
 
@@ -219,7 +264,21 @@ class VoiceRoomInvitationService:
             if invitation.room_id != room.id:
                 raise VoiceRoomInvitationNotFound
 
+            cancelled_invitation_id = invitation.pk
+            invited_by_id = invitation.invited_by_id
+            recipient_id = invitation.recipient_id
+
             invitation.delete()
+
+            (
+                VoiceRoomRealtimePublisher
+                .invitation_cancelled_after_commit(
+                    invitation_id=cancelled_invitation_id,
+                    room_id=room.pk,
+                    invited_by_id=invited_by_id,
+                    recipient_id=recipient_id,
+                )
+            )
 
     @classmethod
     def reject_invitation(
@@ -254,4 +313,18 @@ class VoiceRoomInvitationService:
                     VoiceRoomInvitationRecipientRequired
                 )
 
+            rejected_invitation_id = invitation.pk
+            invited_by_id = invitation.invited_by_id
+            recipient_id = invitation.recipient_id
+
             invitation.delete()
+
+            (
+                VoiceRoomRealtimePublisher
+                .invitation_rejected_after_commit(
+                    invitation_id=rejected_invitation_id,
+                    room_id=room_id,
+                    invited_by_id=invited_by_id,
+                    recipient_id=recipient_id,
+                )
+            )
