@@ -75,6 +75,7 @@ function VoiceRoomDetailPage() {
     currentUserId,
     status: voiceStatus,
     mediaStatus,
+    audioPlaybackRequired,
     state: globalVoiceState,
     ownsCurrentParticipation,
     microphoneEnabled,
@@ -1018,25 +1019,27 @@ function VoiceRoomDetailPage() {
                           : 'Unmute'}
                     </button>
 
-                    <button
-                      className="btn btn-outline-secondary"
-                      type="button"
-                      disabled={
-                        pendingVoiceAction !==
-                          null
-                      }
-                      onClick={() => {
-                        void runVoiceAction(
-                          'audio',
-                          startAudioPlayback,
-                        )
-                      }}
-                    >
-                      {pendingVoiceAction ===
-                      'audio'
-                        ? 'Starting audio…'
-                        : 'Enable audio'}
-                    </button>
+                    {audioPlaybackRequired && (
+                      <button
+                        className="btn btn-outline-secondary"
+                        type="button"
+                        disabled={
+                          pendingVoiceAction !==
+                            null
+                        }
+                        onClick={() => {
+                          void runVoiceAction(
+                            'audio',
+                            startAudioPlayback,
+                          )
+                        }}
+                      >
+                        {pendingVoiceAction ===
+                        'audio'
+                          ? 'Starting audio…'
+                          : 'Enable audio'}
+                      </button>
+                    )}
                   </>
                 )}
 

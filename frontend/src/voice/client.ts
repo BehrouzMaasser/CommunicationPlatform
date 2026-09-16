@@ -43,6 +43,11 @@ type ActiveSpeakersListener = (
 ) => void
 
 
+type AudioPlaybackRequiredListener = (
+  required: boolean,
+) => void
+
+
 function clampVolume(
   value: number,
 ): number {
@@ -78,6 +83,10 @@ export class VoiceMediaClient {
   private activeSpeakersListener:
     ActiveSpeakersListener | null = null
 
+  private audioPlaybackRequiredListener:
+    AudioPlaybackRequiredListener | null =
+      null
+
 
   get currentRoom(): Room | null {
     return this.room
@@ -110,6 +119,20 @@ export class VoiceMediaClient {
       listener
 
     listener?.([])
+  }
+
+
+  setAudioPlaybackRequiredListener(
+    listener:
+      AudioPlaybackRequiredListener | null,
+  ): void {
+    this.audioPlaybackRequiredListener =
+      listener
+
+    listener?.(
+      this.room !== null
+      && !this.room.canPlaybackAudio,
+    )
   }
 
 
@@ -182,6 +205,13 @@ export class VoiceMediaClient {
       room.on(
         liveKit
           .RoomEvent
+          .AudioPlaybackStatusChanged,
+        this.handleAudioPlaybackStatusChanged,
+      )
+
+      room.on(
+        liveKit
+          .RoomEvent
           .TrackSubscribed,
         this.handleTrackSubscribed,
       )
@@ -202,6 +232,8 @@ export class VoiceMediaClient {
             autoSubscribe: true,
           },
         )
+
+        this.emitAudioPlaybackRequired()
       } catch (error) {
         if (
           this.room === room
@@ -230,6 +262,8 @@ export class VoiceMediaClient {
     }
 
     await this.room.startAudio()
+
+    this.emitAudioPlaybackRequired()
   }
 
 
@@ -263,6 +297,7 @@ export class VoiceMediaClient {
       this.removeAudioElements()
       this.participantVolumes.clear()
       this.emitActiveSpeakers([])
+      this.emitAudioPlaybackRequired()
       return
     }
 
@@ -291,6 +326,7 @@ export class VoiceMediaClient {
     this.removeAudioElements()
     this.participantVolumes.clear()
     this.emitActiveSpeakers([])
+    this.emitAudioPlaybackRequired()
 
     await room.disconnect(true)
   }
@@ -356,6 +392,21 @@ export class VoiceMediaClient {
     } finally {
       this.liveKitPromise = null
     }
+  }
+
+
+  private readonly handleAudioPlaybackStatusChanged =
+    (): void => {
+      this.emitAudioPlaybackRequired()
+    }
+
+
+  private emitAudioPlaybackRequired():
+  void {
+    this.audioPlaybackRequiredListener?.(
+      this.room !== null
+      && !this.room.canPlaybackAudio,
+    )
   }
 
 
@@ -458,6 +509,13 @@ export class VoiceMediaClient {
         .RoomEvent
         .ActiveSpeakersChanged,
       this.handleActiveSpeakersChanged,
+    )
+
+    room.off(
+      liveKit
+        .RoomEvent
+        .AudioPlaybackStatusChanged,
+      this.handleAudioPlaybackStatusChanged,
     )
 
     room.off(

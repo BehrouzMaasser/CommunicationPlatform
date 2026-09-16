@@ -34,6 +34,7 @@ function VoiceCallOverlay() {
     currentUserId,
     state,
     mediaStatus,
+    audioPlaybackRequired,
     ownsCurrentParticipation,
     microphoneEnabled,
     speakingUserIds,
@@ -386,21 +387,23 @@ function VoiceCallOverlay() {
                           : 'Unmute'}
                     </button>
 
-                    <button
-                      type="button"
-                      className="btn btn-outline-secondary"
-                      disabled={busy}
-                      onClick={() => {
-                        void runAction(
-                          'audio',
-                          startAudioPlayback,
-                        )
-                      }}
-                    >
-                      {pendingAction === 'audio'
-                        ? 'Starting audio…'
-                        : 'Enable audio'}
-                    </button>
+                    {audioPlaybackRequired && (
+                      <button
+                        type="button"
+                        className="btn btn-outline-secondary"
+                        disabled={busy}
+                        onClick={() => {
+                          void runAction(
+                            'audio',
+                            startAudioPlayback,
+                          )
+                        }}
+                      >
+                        {pendingAction === 'audio'
+                          ? 'Starting audio…'
+                          : 'Enable audio'}
+                      </button>
+                    )}
                   </>
                 )}
 

@@ -136,6 +136,11 @@ export function VoiceProvider({
   ] = useState<string[]>([])
 
   const [
+    audioPlaybackRequired,
+    setAudioPlaybackRequired,
+  ] = useState(false)
+
+  const [
     participantVolumes,
     setParticipantVolumesState,
   ] = useState<Record<number, number>>(
@@ -916,6 +921,28 @@ export function VoiceProvider({
   useEffect(
     () => {
       voiceMediaClient
+        .setAudioPlaybackRequiredListener(
+          setAudioPlaybackRequired,
+        )
+
+      return () => {
+        voiceMediaClient
+          .setAudioPlaybackRequiredListener(
+            null,
+          )
+
+        setAudioPlaybackRequired(
+          false,
+        )
+      }
+    },
+    [],
+  )
+
+
+  useEffect(
+    () => {
+      voiceMediaClient
         .setActiveSpeakersListener(
           (
             participantIdentities,
@@ -1046,6 +1073,7 @@ export function VoiceProvider({
           currentUserId ?? null,
         status,
         mediaStatus,
+        audioPlaybackRequired,
         state,
         ownsCurrentParticipation,
         microphoneEnabled,

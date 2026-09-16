@@ -28,6 +28,7 @@ export type VoiceContextValue = {
 
   status: VoiceControllerStatus
   mediaStatus: VoiceMediaStatus
+  audioPlaybackRequired: boolean
 
   state: VoiceState
 
