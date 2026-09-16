@@ -13,6 +13,8 @@ export const VOICE_REALTIME_EVENT_TYPES = [
   'voice.room.participant_left',
   'voice.room.participant_revoked',
   'voice.room.session_ended',
+  'voice_room.member_removed',
+  'voice_room.deleted',
 ] as const
 
 

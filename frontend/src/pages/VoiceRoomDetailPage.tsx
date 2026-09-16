@@ -37,6 +37,13 @@ type RoomVoiceEventPayload = {
 }
 
 
+type RoomMemberEventPayload = {
+  room_id: string
+  user_id?: number
+  member_user_id?: number
+}
+
+
 type PendingVoiceAction =
   | 'join'
   | 'leave'
@@ -218,19 +225,105 @@ function VoiceRoomDetailPage() {
     )
 
 
+  const handleRoomMemberRemoved =
+    useCallback(
+      ({
+        payload,
+      }: {
+        payload: RoomMemberEventPayload
+      }) => {
+        if (
+          payload.room_id !== roomId
+        ) {
+          return
+        }
+
+        const removedUserId =
+          payload.user_id
+          ?? payload.member_user_id
+
+        if (
+          removedUserId ===
+            currentUserId
+        ) {
+          /*
+           * Membership is authoritative.
+           * Once this account is removed,
+           * it must immediately leave every
+           * UI/media surface for this room.
+           */
+          void refreshGlobalVoice()
+
+          navigate(
+            '/voice',
+            {
+              replace: true,
+            },
+          )
+          return
+        }
+
+        void refreshRoomMembershipState()
+      },
+      [
+        currentUserId,
+        navigate,
+        refreshGlobalVoice,
+        refreshRoomMembershipState,
+        roomId,
+      ],
+    )
+
+
+  const handleRoomDeleted =
+    useCallback(
+      ({
+        payload,
+      }: {
+        payload: RoomVoiceEventPayload
+      }) => {
+        if (
+          payload.room_id !== roomId
+        ) {
+          return
+        }
+
+        void refreshGlobalVoice()
+
+        navigate(
+          '/voice',
+          {
+            replace: true,
+          },
+        )
+      },
+      [
+        navigate,
+        refreshGlobalVoice,
+        roomId,
+      ],
+    )
+
+
   useRealtimeEvent<RoomVoiceEventPayload>(
     'voice_room.member_added',
     handleRoomMembershipEvent,
   )
 
-  useRealtimeEvent<RoomVoiceEventPayload>(
+  useRealtimeEvent<RoomMemberEventPayload>(
     'voice_room.member_removed',
-    handleRoomMembershipEvent,
+    handleRoomMemberRemoved,
   )
 
   useRealtimeEvent<RoomVoiceEventPayload>(
     'voice_room.member_left',
     handleRoomMembershipEvent,
+  )
+
+
+  useRealtimeEvent<RoomVoiceEventPayload>(
+    'voice_room.deleted',
+    handleRoomDeleted,
   )
 
 
