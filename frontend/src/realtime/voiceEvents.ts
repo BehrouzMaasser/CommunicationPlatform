@@ -71,3 +71,25 @@ export type GroupVoiceSessionEndedPayload = {
   end_reason: string
   ended_at: string
 }
+
+
+export type RoomVoiceParticipantPayload = {
+  session_id: string
+  participation_id: string
+  room_id: string
+  user_id: number
+}
+
+
+export type RoomVoiceParticipantLeftPayload =
+  RoomVoiceParticipantPayload & {
+    session_ended: boolean
+  }
+
+
+export type RoomVoiceSessionEndedPayload = {
+  session_id: string
+  room_id: string
+  end_reason: string
+  ended_at: string
+}

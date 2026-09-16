@@ -37,6 +37,10 @@ import {
 } from '../realtime/voiceEvents'
 
 import type {
+  RoomVoiceParticipantPayload,
+} from '../realtime/voiceEvents'
+
+import type {
   VoiceState,
 } from '../types/voice'
 
@@ -56,6 +60,12 @@ import {
   readVoiceParticipantVolume,
   writeVoiceParticipantVolume,
 } from './volumePreferences'
+
+import {
+  playVoiceRoomJoinSound,
+  playVoiceRoomLeaveSound,
+  primeVoiceRoomSounds,
+} from './roomSounds'
 
 import {
   EMPTY_VOICE_STATE,
@@ -679,6 +689,31 @@ export function VoiceProvider({
       async (
         roomId: string,
       ): Promise<void> => {
+        const currentState =
+          desiredVoiceStateRef.current
+
+        const alreadyJoinedHere =
+          currentState.session?.kind ===
+            'ROOM'
+          &&
+          currentState.session
+            .status === 'ACTIVE'
+          &&
+          currentState.session
+            .voice_room_id === roomId
+          &&
+          currentState
+            .current_participation
+            ?.client_instance_id ===
+              clientInstanceId
+
+        /*
+         * Create/resume the Web Audio context
+         * while we are still inside the user's
+         * Join button gesture.
+         */
+        primeVoiceRoomSounds()
+
         await runStateMutation(
           () =>
             joinVoiceRoomRequest(
@@ -686,6 +721,10 @@ export function VoiceProvider({
               clientInstanceId,
             ),
         )
+
+        if (!alreadyJoinedHere) {
+          playVoiceRoomJoinSound()
+        }
       },
       [
         clientInstanceId,
@@ -996,13 +1035,134 @@ export function VoiceProvider({
         return
       }
 
+      /*
+       * Protect against a duplicated realtime
+       * delivery producing the same cue twice.
+       */
+      const soundedEventIds =
+        new Set<string>()
+
+      function rememberSoundEvent(
+        eventId: string,
+      ): boolean {
+        if (
+          soundedEventIds.has(
+            eventId,
+          )
+        ) {
+          return false
+        }
+
+        soundedEventIds.add(
+          eventId,
+        )
+
+        if (
+          soundedEventIds.size > 100
+        ) {
+          const oldest =
+            soundedEventIds
+              .values()
+              .next()
+              .value
+
+          if (oldest) {
+            soundedEventIds.delete(
+              oldest,
+            )
+          }
+        }
+
+        return true
+      }
+
       const unsubscribe =
         VOICE_REALTIME_EVENT_TYPES
           .map(
             (eventType) =>
               realtimeClient.onEvent(
                 eventType,
-                () => {
+                (event) => {
+                  const isRoomJoin =
+                    eventType ===
+                      'voice.room.participant_joined'
+
+                  const isRoomLeave =
+                    eventType ===
+                      'voice.room.participant_left'
+                    ||
+                    eventType ===
+                      'voice.room.participant_revoked'
+
+                  if (
+                    isRoomJoin
+                    || isRoomLeave
+                  ) {
+                    const payload =
+                      event.payload as RoomVoiceParticipantPayload
+
+                    const currentState =
+                      desiredVoiceStateRef
+                        .current
+
+                    /*
+                     * Realtime events go to room
+                     * members, not only people who
+                     * are currently in voice.
+                     *
+                     * Only the tab/device that
+                     * actually owns an active media
+                     * participation should make a
+                     * sound.
+                     */
+                    const ownsActiveRoomMedia =
+                      currentState
+                        .session
+                        ?.kind === 'ROOM'
+                      &&
+                      currentState
+                        .session
+                        ?.status === 'ACTIVE'
+                      &&
+                      currentState
+                        .session
+                        ?.voice_room_id ===
+                          payload.room_id
+                      &&
+                      currentState
+                        .current_participation
+                        ?.client_instance_id ===
+                          clientInstanceId
+                      &&
+                      voiceMediaClient
+                        .isConnected
+
+                    /*
+                     * Own joins are played explicitly
+                     * after joinVoiceRoom succeeds.
+                     * Own leaves/revocations should
+                     * not play a goodbye sound on the
+                     * client that is disappearing.
+                     */
+                    const isOwnEvent =
+                      payload.user_id ===
+                        currentUserId
+
+                    if (
+                      ownsActiveRoomMedia
+                      && !isOwnEvent
+                      && rememberSoundEvent(
+                        event.event_id,
+                      )
+                    ) {
+                      if (isRoomJoin) {
+                        playVoiceRoomJoinSound()
+                      } else {
+                        playVoiceRoomLeaveSound()
+                      }
+                    }
+                  }
+
                   void refresh()
                 },
               ),
@@ -1018,6 +1178,8 @@ export function VoiceProvider({
       }
     },
     [
+      clientInstanceId,
+      currentUserId,
       enabled,
       realtimeClient,
       refresh,
