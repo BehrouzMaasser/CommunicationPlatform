@@ -66,3 +66,24 @@ export type VoiceRoomMembership = {
   user: PublicUser
   joined_at: string
 }
+
+
+
+export type VoiceRoomInvitation = {
+  id: string
+  room_id: string
+  room_name: string
+  invited_by: PublicUser
+  recipient: PublicUser
+  created_at: string
+}
+
+
+export type VoiceRoomInvitationLink = {
+  id: string
+  created_by: PublicUser
+  token: string | null
+  created_at: string
+  expires_at: string
+  revoked_at: string | null
+}

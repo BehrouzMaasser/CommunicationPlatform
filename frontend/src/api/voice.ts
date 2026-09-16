@@ -1,4 +1,5 @@
 import {
+  apiDelete,
   apiGet,
   apiPost,
 } from './client'
@@ -7,6 +8,8 @@ import { getAllPages } from './pagination'
 import type {
   VoiceMediaCredentials,
   VoiceRoom,
+  VoiceRoomInvitation,
+  VoiceRoomInvitationLink,
   VoiceRoomMembership,
   VoiceState,
 } from '../types/voice'
@@ -184,5 +187,123 @@ export function leaveVoiceRoom(
       client_instance_id:
         clientInstanceId,
     },
+  )
+}
+
+
+
+export function getIncomingVoiceRoomInvitations():
+Promise<VoiceRoomInvitation[]> {
+  return getAllPages<VoiceRoomInvitation>(
+    '/api/v1/voice/room-invitations/',
+  )
+}
+
+
+export function getVoiceRoomPendingInvitations(
+  roomId: string,
+): Promise<VoiceRoomInvitation[]> {
+  return getAllPages<VoiceRoomInvitation>(
+    `/api/v1/voice/rooms/${encodeURIComponent(roomId)}/invitations/`,
+  )
+}
+
+
+export function inviteUserToVoiceRoom(
+  roomId: string,
+  userId: number,
+): Promise<VoiceRoomInvitation> {
+  return apiPost<VoiceRoomInvitation>(
+    `/api/v1/voice/rooms/${encodeURIComponent(roomId)}/invitations/`,
+    {
+      user_id: userId,
+    },
+  )
+}
+
+
+export function cancelVoiceRoomInvitation(
+  roomId: string,
+  invitationId: string,
+): Promise<unknown> {
+  return apiDelete(
+    `/api/v1/voice/rooms/${encodeURIComponent(roomId)}/invitations/${encodeURIComponent(invitationId)}/`,
+  )
+}
+
+
+export function acceptVoiceRoomInvitation(
+  invitationId: string,
+): Promise<VoiceRoomMembership> {
+  return apiPost<VoiceRoomMembership>(
+    `/api/v1/voice/room-invitations/${encodeURIComponent(invitationId)}/accept/`,
+  )
+}
+
+
+export function rejectVoiceRoomInvitation(
+  invitationId: string,
+): Promise<unknown> {
+  return apiPost(
+    `/api/v1/voice/room-invitations/${encodeURIComponent(invitationId)}/reject/`,
+  )
+}
+
+
+export function getVoiceRoomInvitationLinks(
+  roomId: string,
+): Promise<VoiceRoomInvitationLink[]> {
+  return getAllPages<VoiceRoomInvitationLink>(
+    `/api/v1/voice/rooms/${encodeURIComponent(roomId)}/invite-links/`,
+  )
+}
+
+
+export function createVoiceRoomInvitationLink(
+  roomId: string,
+): Promise<VoiceRoomInvitationLink> {
+  return apiPost<VoiceRoomInvitationLink>(
+    `/api/v1/voice/rooms/${encodeURIComponent(roomId)}/invite-links/`,
+  )
+}
+
+
+export function revokeVoiceRoomInvitationLink(
+  roomId: string,
+  linkId: string,
+): Promise<unknown> {
+  return apiDelete(
+    `/api/v1/voice/rooms/${encodeURIComponent(roomId)}/invite-links/${encodeURIComponent(linkId)}/`,
+  )
+}
+
+
+export function joinVoiceRoomWithToken(
+  token: string,
+): Promise<VoiceRoomMembership> {
+  return apiPost<VoiceRoomMembership>(
+    '/api/v1/voice/room-invite-links/join/',
+    {
+      token,
+    },
+  )
+}
+
+
+export function leaveVoiceRoomMembership(
+  roomId: string,
+): Promise<unknown> {
+  return apiDelete(
+    `/api/v1/voice/rooms/${encodeURIComponent(roomId)}/members/me/`,
+  )
+}
+
+
+export function removeVoiceRoomMember(
+  roomId: string,
+  userId: number,
+): Promise<unknown> {
+  return apiDelete(
+    `/api/v1/voice/rooms/${encodeURIComponent(roomId)}/members/${userId}/`,
   )
 }

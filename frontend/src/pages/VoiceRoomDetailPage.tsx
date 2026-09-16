@@ -5,14 +5,18 @@ import {
 } from 'react'
 import {
   Link,
+  useNavigate,
   useParams,
 } from 'react-router-dom'
 
 import { ApiError } from '../api/client'
+import VoiceRoomManagement from '../components/voice/VoiceRoomManagement'
 import {
   getVoiceRoom,
   getVoiceRoomMembers,
   getVoiceRoomVoiceState,
+  leaveVoiceRoomMembership,
+  removeVoiceRoomMember,
 } from '../api/voice'
 import {
   useRealtimeEvent,
@@ -55,6 +59,7 @@ function errorText(error: unknown): string {
 
 function VoiceRoomDetailPage() {
   const { roomId } = useParams()
+  const navigate = useNavigate()
 
   const {
     currentUserId,
@@ -96,6 +101,17 @@ function VoiceRoomDetailPage() {
     useState<string | null>(null)
 
   const [
+    pendingMembershipAction,
+    setPendingMembershipAction,
+  ] = useState<string | null>(null)
+
+  const [
+    membershipError,
+    setMembershipError,
+  ] = useState<string | null>(null)
+
+
+  const [
     pendingVoiceAction,
     setPendingVoiceAction,
   ] =
@@ -133,6 +149,55 @@ function VoiceRoomDetailPage() {
     )
 
 
+  const refreshRoomMembershipState =
+    useCallback(
+      async () => {
+        if (!roomId) {
+          return
+        }
+
+        try {
+          const [
+            roomData,
+            memberData,
+          ] = await Promise.all([
+            getVoiceRoom(roomId),
+            getVoiceRoomMembers(roomId),
+          ])
+
+          setRoom(roomData)
+          setMembers(memberData)
+        } catch {
+          /*
+           * A transient realtime refresh should
+           * not replace the current page state.
+           */
+        }
+      },
+      [roomId],
+    )
+
+
+  const handleRoomMembershipEvent =
+    useCallback(
+      ({
+        payload,
+      }: {
+        payload: RoomVoiceEventPayload
+      }) => {
+        if (
+          payload.room_id === roomId
+        ) {
+          void refreshRoomMembershipState()
+        }
+      },
+      [
+        refreshRoomMembershipState,
+        roomId,
+      ],
+    )
+
+
   const handleRoomVoiceEvent =
     useCallback(
       ({
@@ -151,6 +216,22 @@ function VoiceRoomDetailPage() {
         roomId,
       ],
     )
+
+
+  useRealtimeEvent<RoomVoiceEventPayload>(
+    'voice_room.member_added',
+    handleRoomMembershipEvent,
+  )
+
+  useRealtimeEvent<RoomVoiceEventPayload>(
+    'voice_room.member_removed',
+    handleRoomMembershipEvent,
+  )
+
+  useRealtimeEvent<RoomVoiceEventPayload>(
+    'voice_room.member_left',
+    handleRoomMembershipEvent,
+  )
 
 
   useRealtimeEvent<RoomVoiceEventPayload>(
@@ -225,6 +306,58 @@ function VoiceRoomDetailPage() {
       cancelled = true
     }
   }, [roomId])
+
+
+  async function handleRemoveMember(
+    userId: number,
+  ) {
+    if (!roomId || pendingMembershipAction !== null) {
+      return
+    }
+
+    const key = `remove-${userId}`
+
+    setPendingMembershipAction(key)
+    setMembershipError(null)
+
+    try {
+      await removeVoiceRoomMember(
+        roomId,
+        userId,
+      )
+
+      await refreshRoomMembershipState()
+    } catch (requestError) {
+      setMembershipError(
+        errorText(requestError),
+      )
+    } finally {
+      setPendingMembershipAction(null)
+    }
+  }
+
+
+  async function handleLeaveRoom() {
+    if (!roomId || pendingMembershipAction !== null) {
+      return
+    }
+
+    setPendingMembershipAction('leave-room')
+    setMembershipError(null)
+
+    try {
+      await leaveVoiceRoomMembership(
+        roomId,
+      )
+
+      navigate('/voice')
+    } catch (requestError) {
+      setMembershipError(
+        errorText(requestError),
+      )
+      setPendingMembershipAction(null)
+    }
+  }
 
 
   async function runVoiceAction(
@@ -397,13 +530,31 @@ function VoiceRoomDetailPage() {
             </p>
           </div>
 
-          <div className="align-self-md-start">
+          <div className="align-self-md-start d-flex align-items-center gap-2">
             <span className="badge text-bg-secondary">
               {room.member_count}{' '}
               {room.member_count === 1
                 ? 'member'
                 : 'members'}
             </span>
+
+            {currentUserId !== room.owner.id && (
+              <button
+                className="btn btn-sm btn-outline-danger"
+                type="button"
+                disabled={
+                  pendingMembershipAction !== null
+                }
+                onClick={() =>
+                  void handleLeaveRoom()
+                }
+              >
+                {pendingMembershipAction ===
+                'leave-room'
+                  ? 'Leaving…'
+                  : 'Leave room'}
+              </button>
+            )}
           </div>
         </div>
       </div>
@@ -604,6 +755,19 @@ function VoiceRoomDetailPage() {
         </div>
       </div>
 
+      {currentUserId === room.owner.id && (
+        <VoiceRoomManagement
+          room={room}
+          members={members}
+        />
+      )}
+
+      {membershipError && (
+        <div className="alert alert-danger">
+          {membershipError}
+        </div>
+      )}
+
       <div className="card shadow-sm">
         <div className="card-body">
           <div className="d-flex justify-content-between align-items-center mb-3">
@@ -641,6 +805,31 @@ function VoiceRoomDetailPage() {
                           </div>
                         )}
                       </div>
+
+                      {currentUserId ===
+                        room.owner.id
+                        &&
+                        membership.user.id !==
+                          room.owner.id && (
+                        <button
+                          className="btn btn-sm btn-outline-danger"
+                          type="button"
+                          disabled={
+                            pendingMembershipAction !==
+                              null
+                          }
+                          onClick={() =>
+                            void handleRemoveMember(
+                              membership.user.id,
+                            )
+                          }
+                        >
+                          {pendingMembershipAction ===
+                          `remove-${membership.user.id}`
+                            ? 'Removing…'
+                            : 'Remove'}
+                        </button>
+                      )}
                     </div>
                   </div>
                 ),
