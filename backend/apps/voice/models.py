@@ -436,10 +436,6 @@ class VoiceParticipation(models.Model):
         ]
         constraints = [
             models.UniqueConstraint(
-                fields=["session", "user"],
-                name="unique_voice_participation_per_session_user",
-            ),
-            models.UniqueConstraint(
                 fields=["user"],
                 condition=Q(left_at__isnull=True),
                 name="unique_open_voice_participation_per_user",

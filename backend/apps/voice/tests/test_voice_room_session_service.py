@@ -256,6 +256,79 @@ class VoiceRoomSessionServiceTests(TestCase):
             bob.left_at
         )
 
+    def test_member_can_rejoin_same_active_session_after_leaving(
+        self,
+    ):
+        alice = (
+            VoiceSessionService.join_voice_room(
+                current_user=self.alice,
+                room_id=self.room.id,
+                client_instance_id=self.alice_client,
+            )
+        )
+
+        first_bob = (
+            VoiceSessionService.join_voice_room(
+                current_user=self.bob,
+                room_id=self.room.id,
+                client_instance_id=self.bob_client,
+            )
+        )
+
+        VoiceSessionService.leave_voice_room(
+            current_user=self.bob,
+            room_id=self.room.id,
+            client_instance_id=self.bob_client,
+        )
+
+        first_bob.refresh_from_db()
+        alice.session.refresh_from_db()
+
+        self.assertIsNotNone(
+            first_bob.left_at
+        )
+        self.assertEqual(
+            alice.session.status,
+            VoiceSession.Status.ACTIVE,
+        )
+
+        second_bob = (
+            VoiceSessionService.join_voice_room(
+                current_user=self.bob,
+                room_id=self.room.id,
+                client_instance_id=self.bob_client,
+            )
+        )
+
+        self.assertEqual(
+            second_bob.session_id,
+            first_bob.session_id,
+        )
+        self.assertNotEqual(
+            second_bob.pk,
+            first_bob.pk,
+        )
+        self.assertIsNone(
+            second_bob.left_at
+        )
+
+        self.assertEqual(
+            VoiceParticipation.objects.filter(
+                session_id=first_bob.session_id,
+                user=self.bob,
+            ).count(),
+            2,
+        )
+
+        self.assertEqual(
+            VoiceParticipation.objects.filter(
+                user=self.bob,
+                left_at__isnull=True,
+            ).count(),
+            1,
+        )
+
+
     def test_wrong_client_cannot_leave_room_voice(self):
         VoiceSessionService.join_voice_room(
             current_user=self.alice,

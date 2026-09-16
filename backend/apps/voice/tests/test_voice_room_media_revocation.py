@@ -140,6 +140,76 @@ class VoiceRoomMediaRevocationTests(TestCase):
             ).exists()
         )
 
+    def test_removed_member_can_rejoin_media_after_being_added_back(
+        self,
+    ):
+        owner_participation = (
+            VoiceSessionService.join_voice_room(
+                current_user=self.owner,
+                room_id=self.room.id,
+                client_instance_id=self.owner_client,
+            )
+        )
+
+        first_member_participation = (
+            VoiceSessionService.join_voice_room(
+                current_user=self.member,
+                room_id=self.room.id,
+                client_instance_id=self.member_client,
+            )
+        )
+
+        VoiceRoomService.remove_member(
+            current_user=self.owner,
+            room_id=self.room.id,
+            target_user=self.member,
+        )
+
+        first_member_participation.refresh_from_db()
+        owner_participation.session.refresh_from_db()
+
+        self.assertIsNotNone(
+            first_member_participation.left_at
+        )
+        self.assertEqual(
+            owner_participation.session.status,
+            VoiceSession.Status.ACTIVE,
+        )
+
+        VoiceRoomMembership.objects.create(
+            room=self.room,
+            user=self.member,
+        )
+
+        second_member_participation = (
+            VoiceSessionService.join_voice_room(
+                current_user=self.member,
+                room_id=self.room.id,
+                client_instance_id=self.member_client,
+            )
+        )
+
+        self.assertEqual(
+            second_member_participation.session_id,
+            owner_participation.session_id,
+        )
+        self.assertNotEqual(
+            second_member_participation.pk,
+            first_member_participation.pk,
+        )
+        self.assertIsNone(
+            second_member_participation.left_at
+        )
+
+        self.assertEqual(
+            VoiceParticipation.objects.filter(
+                user=self.member,
+                left_at__isnull=True,
+            ).count(),
+            1,
+        )
+
+
     @patch(
         "apps.voice.services.voice_session."
         "VoiceRealtimePublisher."
