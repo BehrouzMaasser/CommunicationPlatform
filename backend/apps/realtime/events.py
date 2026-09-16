@@ -36,6 +36,39 @@ class RealtimeEventType(str, Enum):
     TYPING_STOPPED = "typing.stopped"
     PRESENCE_UPDATED = "presence.updated"
 
+    VOICE_DIRECT_CALL_RINGING = "voice.direct_call.ringing"
+    VOICE_DIRECT_CALL_ACCEPTED = "voice.direct_call.accepted"
+    VOICE_DIRECT_CALL_REJECTED = "voice.direct_call.rejected"
+    VOICE_DIRECT_CALL_CANCELLED = "voice.direct_call.cancelled"
+    VOICE_DIRECT_CALL_MISSED = "voice.direct_call.missed"
+    VOICE_DIRECT_CALL_ENDED = "voice.direct_call.ended"
+
+    VOICE_GROUP_PARTICIPANT_JOINED = "voice.group.participant_joined"
+    VOICE_GROUP_PARTICIPANT_LEFT = "voice.group.participant_left"
+    VOICE_GROUP_PARTICIPANT_REVOKED = "voice.group.participant_revoked"
+    VOICE_GROUP_SESSION_ENDED = "voice.group.session_ended"
+
+    VOICE_ROOM_PARTICIPANT_JOINED = "voice.room.participant_joined"
+    VOICE_ROOM_PARTICIPANT_LEFT = "voice.room.participant_left"
+    VOICE_ROOM_PARTICIPANT_REVOKED = "voice.room.participant_revoked"
+    VOICE_ROOM_SESSION_ENDED = "voice.room.session_ended"
+
+    VOICE_ROOM_CREATED = "voice_room.created"
+    VOICE_ROOM_RENAMED = "voice_room.renamed"
+    VOICE_ROOM_DELETED = "voice_room.deleted"
+
+    VOICE_ROOM_MEMBER_ADDED = "voice_room.member_added"
+    VOICE_ROOM_MEMBER_LEFT = "voice_room.member_left"
+    VOICE_ROOM_MEMBER_REMOVED = "voice_room.member_removed"
+
+    VOICE_ROOM_INVITATION_CREATED = "voice_room_invitation.created"
+    VOICE_ROOM_INVITATION_ACCEPTED = "voice_room_invitation.accepted"
+    VOICE_ROOM_INVITATION_REJECTED = "voice_room_invitation.rejected"
+    VOICE_ROOM_INVITATION_CANCELLED = "voice_room_invitation.cancelled"
+
+    VOICE_ROOM_INVITE_LINK_CREATED = "voice_room.invite_link_created"
+    VOICE_ROOM_INVITE_LINK_REVOKED = "voice_room.invite_link_revoked"
+
 
 def build_realtime_event(
     *,

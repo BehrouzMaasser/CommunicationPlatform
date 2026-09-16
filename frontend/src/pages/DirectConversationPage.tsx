@@ -21,6 +21,7 @@ import {
 
 import MessageComposer from '../components/messages/MessageComposer'
 import MessageThread from '../components/messages/MessageThread'
+import DirectCallButton from '../components/voice/DirectCallButton'
 import {
   applyDeliveredReceipt,
   applyReadThroughReceipt,
@@ -709,23 +710,32 @@ function DirectConversationPage() {
                 .username}
             </h1>
 
-            <span
-              className={
-                isUserOnline(
-                  conversation.other_user.id,
-                )
-                  ? 'badge text-bg-success'
-                  : 'badge text-bg-secondary'
-              }
-            >
-              {
-                isUserOnline(
-                  conversation.other_user.id,
-                )
-                  ? 'Online'
-                  : 'Offline'
-              }
-            </span>
+            <div className="d-flex align-items-center gap-2">
+              <span
+                className={
+                  isUserOnline(
+                    conversation.other_user.id,
+                  )
+                    ? 'badge text-bg-success'
+                    : 'badge text-bg-secondary'
+                }
+              >
+                {
+                  isUserOnline(
+                    conversation.other_user.id,
+                  )
+                    ? 'Online'
+                    : 'Offline'
+                }
+              </span>
+
+              <DirectCallButton
+                otherUser={
+                  conversation.other_user
+                }
+                canCall={canMessage}
+              />
+            </div>
           </div>
         </div>
 

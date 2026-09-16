@@ -64,6 +64,7 @@ INSTALLED_APPS = [
     'apps.attachments',
     'apps.realtime',
     'apps.activity',
+    'apps.voice',
 ]
 
 REST_FRAMEWORK = {
@@ -188,6 +189,51 @@ MESSAGE_ATTACHMENT_MAX_SIZE_BYTES = int(
 )
 MESSAGE_MAX_ATTACHMENTS = int(
     os.getenv('MESSAGE_MAX_ATTACHMENTS', '5')
+)
+
+
+# Voice / LiveKit
+#
+# Voice media is transported by LiveKit. Django remains authoritative for
+# application authorization and only issues short-lived, scoped join tokens.
+VOICE_ENABLED = os.getenv(
+    "VOICE_ENABLED",
+    "False",
+).strip().lower() in {"1", "true", "yes", "on"}
+
+LIVEKIT_URL = os.getenv(
+    "LIVEKIT_URL",
+    "",
+).strip()
+LIVEKIT_INTERNAL_URL = os.getenv(
+    "LIVEKIT_INTERNAL_URL",
+    "http://127.0.0.1:7880",
+).strip()
+LIVEKIT_API_KEY = os.getenv(
+    "LIVEKIT_API_KEY",
+    "",
+).strip()
+LIVEKIT_API_SECRET = os.getenv(
+    "LIVEKIT_API_SECRET",
+    "",
+).strip()
+VOICE_LIVEKIT_TOKEN_TTL_SECONDS = int(
+    os.getenv(
+        "VOICE_LIVEKIT_TOKEN_TTL_SECONDS",
+        "60",
+    )
+)
+VOICE_LIVEKIT_ADMIN_TIMEOUT_SECONDS = int(
+    os.getenv(
+        "VOICE_LIVEKIT_ADMIN_TIMEOUT_SECONDS",
+        "2",
+    )
+)
+VOICE_DIRECT_CALL_RING_TIMEOUT_SECONDS = int(
+    os.getenv(
+        "VOICE_DIRECT_CALL_RING_TIMEOUT_SECONDS",
+        "45",
+    )
 )
 
 

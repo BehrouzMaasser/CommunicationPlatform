@@ -27,6 +27,11 @@
         "group.member_removed",
         "group.member_left",
         "group.deleted",
+        "voice_room_invitation.created",
+        "voice_room_invitation.accepted",
+        "voice_room_invitation.rejected",
+        "voice_room_invitation.cancelled",
+        "voice_room.member_added",
     ]);
 
     let socket = null;
@@ -112,6 +117,10 @@
             safeCount(
                 summary.pending_group_invitations,
             );
+        const pendingVoiceRoomInvitations =
+            safeCount(
+                summary.pending_voice_room_invitations,
+            );
         const groupAttention =
             unreadGroupMessages
             + pendingGroupInvitations;
@@ -133,6 +142,12 @@
             groupAttention,
             `${groupAttention} group items needing attention`,
             `${unreadGroupMessages} unread group messages · ${pendingGroupInvitations} pending group invitations`,
+        );
+
+        updateBadges(
+            "voice",
+            pendingVoiceRoomInvitations,
+            `${pendingVoiceRoomInvitations} pending Voice Room invitations`,
         );
     }
 

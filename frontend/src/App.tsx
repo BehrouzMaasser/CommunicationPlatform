@@ -13,6 +13,9 @@ import GroupJoinPage from './pages/GroupJoinPage'
 import GroupsPage from './pages/GroupsPage'
 import HomePage from './pages/HomePage'
 import NotFoundPage from './pages/NotFoundPage'
+import VoiceRoomDetailPage from './pages/VoiceRoomDetailPage'
+import VoiceRoomJoinPage from './pages/VoiceRoomJoinPage'
+import VoiceRoomsPage from './pages/VoiceRoomsPage'
 
 function App() {
   return (
@@ -56,6 +59,21 @@ function App() {
         <Route
           path="groups/:groupId"
           element={<GroupDetailPage />}
+        />
+
+        <Route
+          path="voice"
+          element={<VoiceRoomsPage />}
+        />
+
+        <Route
+          path="voice/join/:token"
+          element={<VoiceRoomJoinPage />}
+        />
+
+        <Route
+          path="voice/rooms/:roomId"
+          element={<VoiceRoomDetailPage />}
         />
 
         <Route

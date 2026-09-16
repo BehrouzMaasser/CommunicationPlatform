@@ -365,7 +365,98 @@ systemctl reload nginx
 
 ---
 
-## 11. Restart Daphne
+## 11. LiveKit Voice Infrastructure (v1.1+)
+
+Voice is optional and must remain disabled until the media server is installed,
+its network ports are open, and the authenticated Django-to-LiveKit probe
+passes.
+
+### DNS and TLS
+
+Create a dedicated media hostname such as:
+
+```text
+voice.example.com -> VPS public IP
+```
+
+Use the tracked Nginx example:
+
+```text
+deploy/nginx/communication-platform-voice.conf.example
+```
+
+Nginx terminates HTTPS/WSS signaling and proxies it to LiveKit on
+`127.0.0.1:7880`. WebRTC media itself bypasses Nginx.
+
+### Media server
+
+The tracked deployment pins LiveKit Server `v1.13.6` and uses host networking:
+
+```text
+deploy/livekit/docker-compose.yml.example
+deploy/livekit/livekit.yaml.example
+```
+
+Copy the real LiveKit config outside Git, for example:
+
+```text
+/etc/communication-platform-livekit.yaml
+```
+
+Generate a strong API key/secret pair and place the same values in that private
+LiveKit config and `/etc/communication-platform.env`. Never commit the real
+secret.
+
+LiveKit reuses the existing local Redis server on logical database 1. Django
+Channels keeps its existing Redis configuration.
+
+### Firewall
+
+The initial single-IP voice topology requires inbound:
+
+```text
+TCP 443             Nginx HTTPS/WSS signaling
+TCP 7881            WebRTC ICE/TCP fallback
+UDP 3478            embedded TURN/UDP
+UDP 50000-50199     WebRTC ICE/UDP media
+```
+
+Do **not** expose LiveKit TCP 7880 publicly; Nginx and Django reach it locally.
+Keep PostgreSQL and Redis private as before.
+
+TURN/TLS on TCP/443 is intentionally not part of this topology because Nginx
+already owns that port on the single public IP. If restrictive-network testing
+later proves TURN/TLS necessary, design that change explicitly rather than
+replacing the existing HTTPS listener during an ordinary deploy.
+
+### Django environment
+
+Before enabling voice, configure:
+
+```text
+VOICE_ENABLED=False
+LIVEKIT_URL=wss://voice.example.com
+LIVEKIT_INTERNAL_URL=http://127.0.0.1:7880
+LIVEKIT_API_KEY=...
+LIVEKIT_API_SECRET=...
+VOICE_LIVEKIT_TOKEN_TTL_SECONDS=60
+```
+
+Start LiveKit, validate Nginx, then load the Django production environment and
+run:
+
+```bash
+runuser -u communication --preserve-environment -- \
+  /srv/communication-platform/.venv/bin/python \
+  /srv/communication-platform/app/backend/manage.py check_voice_media
+```
+
+This probe can be run while `VOICE_ENABLED=False`; it validates the private
+RoomService endpoint and API credentials without exposing the public voice API.
+Only after it passes should `VOICE_ENABLED=True` be deployed and Daphne
+restarted.
+
+## 12. Restart Daphne
 
 After code/dependencies/migrations/static files are ready:
 
@@ -388,7 +479,7 @@ journalctl -u communication-platform -f
 
 ---
 
-## 12. Deployment Order
+## 13. Deployment Order
 
 A normal V1 deployment should use this order:
 
@@ -411,7 +502,7 @@ A normal V1 deployment should use this order:
 
 ---
 
-## 13. V1 Production Smoke Test
+## 14. V1 Production Smoke Test
 
 Verify at minimum:
 
@@ -436,7 +527,7 @@ Verify at minimum:
 
 ---
 
-## 14. HSTS
+## 15. HSTS
 
 Keep:
 
@@ -451,7 +542,7 @@ deliberately. Do not enable preload casually.
 
 ---
 
-## 15. One-Time V1 Reset
+## 16. One-Time V1 Reset
 
 The planned clean migration/database reset is not part of the routine
 deployment process.

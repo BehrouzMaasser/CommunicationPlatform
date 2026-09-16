@@ -4,6 +4,7 @@ import { createContext } from 'react'
 export type ActivityState = {
   pendingFriendRequests: number
   pendingGroupInvitations: number
+  pendingVoiceRoomInvitations: number
   unreadDirectMessages: number
   unreadGroupMessages: number
   directUnreadById: Record<number, number>
@@ -23,6 +24,7 @@ export type ActivityContextValue = ActivityState & {
 export const emptyActivityState: ActivityState = {
   pendingFriendRequests: 0,
   pendingGroupInvitations: 0,
+  pendingVoiceRoomInvitations: 0,
   unreadDirectMessages: 0,
   unreadGroupMessages: 0,
   directUnreadById: {},

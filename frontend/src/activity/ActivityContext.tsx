@@ -57,6 +57,8 @@ function fromSummary(
       summary.pending_friend_requests,
     pendingGroupInvitations:
       summary.pending_group_invitations,
+    pendingVoiceRoomInvitations:
+      summary.pending_voice_room_invitations,
     unreadDirectMessages:
       summary.unread_direct_messages,
     unreadGroupMessages:
@@ -705,6 +707,15 @@ export function ActivityProvider({
       [clearGroupUnread],
     )
 
+  const handleVoiceRoomActivityChange =
+    useCallback(
+      () => {
+        scheduleReconcile()
+      },
+      [scheduleReconcile],
+    )
+
+
   useRealtimeEvent(
     'message.created',
     handleMessageCreated,
@@ -756,6 +767,28 @@ export function ActivityProvider({
   useRealtimeEvent(
     'group.deleted',
     handleGroupDeleted,
+  )
+
+
+  useRealtimeEvent(
+    'voice_room_invitation.created',
+    handleVoiceRoomActivityChange,
+  )
+  useRealtimeEvent(
+    'voice_room_invitation.accepted',
+    handleVoiceRoomActivityChange,
+  )
+  useRealtimeEvent(
+    'voice_room_invitation.rejected',
+    handleVoiceRoomActivityChange,
+  )
+  useRealtimeEvent(
+    'voice_room_invitation.cancelled',
+    handleVoiceRoomActivityChange,
+  )
+  useRealtimeEvent(
+    'voice_room.member_added',
+    handleVoiceRoomActivityChange,
   )
 
   const visibleState =

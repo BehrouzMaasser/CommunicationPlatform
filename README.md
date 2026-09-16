@@ -4,7 +4,7 @@ Communication Platform is a realtime web application for private direct and grou
 
 V1 focuses on text messaging, friendships, group conversations, message attachments, presence, typing indicators, delivery/read receipts, activity state, and realtime lifecycle updates.
 
-Voice communication is **not part of V1**. Direct and group voice are planned for a later milestone.
+Voice communication is **not part of V1.0.0**. Direct calls and group voice are under development for **v1.1.0**; see `docs/voice.md`.
 
 ## V1 Features
 

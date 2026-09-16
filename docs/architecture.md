@@ -20,7 +20,7 @@ V1 includes:
 - durable unread/activity summaries
 - reconnect/reconciliation behavior in the client
 
-Voice calls, group voice, video, screen sharing, reactions, message editing, ordinary message deletion, and end-to-end encryption are outside V1.
+Voice calls and group voice are outside V1.0.0 and are being added in v1.1.0. Video, screen sharing, reactions, message editing, ordinary message deletion, and end-to-end encryption remain outside the current released scope. See `docs/voice.md` for the v1.1 voice boundary.
 
 The application name is **Communication Platform**. A deployment domain is not product branding.
 

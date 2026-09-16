@@ -288,6 +288,7 @@ class AccountViewTests(TestCase):
         get_activity_summary.return_value = {
             "pending_friend_requests": 3,
             "pending_group_invitations": 2,
+            "pending_voice_room_invitations": 6,
             "unread_direct_messages": 4,
             "unread_group_messages": 5,
             "direct_conversations": [],
@@ -323,6 +324,10 @@ class AccountViewTests(TestCase):
             response,
             'aria-label="7 group items needing attention"',
         )
+        self.assertContains(
+            response,
+            'aria-label="6 pending Voice Room invitations"',
+        )
 
         self.assertContains(
             response,
@@ -337,6 +342,11 @@ class AccountViewTests(TestCase):
         self.assertContains(
             response,
             'data-activity-badge="groups"',
+            count=2,
+        )
+        self.assertContains(
+            response,
+            'data-activity-badge="voice"',
             count=2,
         )
         self.assertContains(
