@@ -23,6 +23,9 @@ class VoiceSessionSerializer(serializers.ModelSerializer):
     caller = PublicUserSerializer(read_only=True)
     recipient = PublicUserSerializer(read_only=True)
     group_id = serializers.SerializerMethodField()
+    voice_room_id = serializers.UUIDField(
+        read_only=True,
+    )
 
     class Meta:
         model = VoiceSession
@@ -33,6 +36,7 @@ class VoiceSessionSerializer(serializers.ModelSerializer):
             "caller",
             "recipient",
             "group_id",
+            "voice_room_id",
             "created_at",
             "ring_expires_at",
             "activated_at",

@@ -10,9 +10,15 @@ from apps.voice.exceptions import (
     VoiceInvalidState,
     VoiceParticipationClaimed,
     VoiceParticipationNotActive,
+    VoiceRoomMembershipRequired,
     VoiceSessionNotFound,
 )
-from apps.voice.models import VoiceParticipation, VoiceSession
+from apps.voice.models import (
+    VoiceParticipation,
+    VoiceRoom,
+    VoiceRoomMembership,
+    VoiceSession,
+)
 from apps.voice.services.media import (
     LiveKitMediaService,
     VoiceMediaCredentials,
@@ -73,6 +79,7 @@ class VoiceMediaAccessService:
             .values(
                 "kind",
                 "group_id",
+                "voice_room_id",
             )
             .first()
         )
@@ -115,7 +122,45 @@ class VoiceMediaAccessService:
                     )
                     .first()
                 )
-            else:
+
+            elif snapshot["kind"] == VoiceSession.Kind.ROOM:
+                room = (
+                    VoiceRoom.objects
+                    .select_for_update()
+                    .filter(
+                        pk=snapshot["voice_room_id"]
+                    )
+                    .first()
+                )
+
+                if room is None:
+                    raise VoiceSessionNotFound
+
+                membership = (
+                    VoiceRoomMembership.objects
+                    .select_for_update()
+                    .filter(
+                        room=room,
+                        user=current_user,
+                    )
+                    .first()
+                )
+
+                if membership is None:
+                    raise VoiceRoomMembershipRequired
+
+                session = (
+                    VoiceSession.objects
+                    .select_for_update()
+                    .filter(
+                        pk=session_id,
+                        kind=VoiceSession.Kind.ROOM,
+                        voice_room=room,
+                    )
+                    .first()
+                )
+
+            elif snapshot["kind"] == VoiceSession.Kind.DIRECT:
                 session = (
                     VoiceSession.objects
                     .select_for_update()
@@ -125,6 +170,9 @@ class VoiceMediaAccessService:
                     )
                     .first()
                 )
+
+            else:
+                session = None
 
             if session is None:
                 raise VoiceSessionNotFound

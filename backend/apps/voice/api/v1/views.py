@@ -988,3 +988,130 @@ class VoiceRoomInvitationLinkJoinView(
         return _handle_voice_operation(
             operation
         )
+
+
+class VoiceRoomVoiceView(APIView):
+
+    def get(
+        self,
+        request,
+        room_id,
+    ):
+        def operation():
+            (
+                _get_voice_room_for_member_or_404(
+                    user=request.user,
+                    room_id=room_id,
+                )
+            )
+
+            session = (
+                VoiceSessionSelector
+                .get_active_room_session(
+                    room_id=room_id,
+                )
+            )
+
+            return Response(
+                _voice_state_data(
+                    session=session,
+                    current_user=request.user,
+                )
+            )
+
+        return _handle_voice_operation(
+            operation
+        )
+
+    def post(
+        self,
+        request,
+        room_id,
+    ):
+        serializer = ClientInstanceSerializer(
+            data=request.data,
+        )
+        serializer.is_valid(
+            raise_exception=True
+        )
+
+        def operation():
+            (
+                _get_voice_room_for_member_or_404(
+                    user=request.user,
+                    room_id=room_id,
+                )
+            )
+
+            participation = (
+                VoiceSessionService
+                .join_voice_room(
+                    current_user=request.user,
+                    room_id=room_id,
+                    client_instance_id=(
+                        serializer
+                        .validated_data[
+                            "client_instance_id"
+                        ]
+                    ),
+                )
+            )
+
+            return Response(
+                _voice_state_data(
+                    session=participation.session,
+                    current_user=request.user,
+                )
+            )
+
+        return _handle_voice_operation(
+            operation
+        )
+
+
+class VoiceRoomVoiceLeaveView(APIView):
+
+    def post(
+        self,
+        request,
+        room_id,
+    ):
+        serializer = ClientInstanceSerializer(
+            data=request.data,
+        )
+        serializer.is_valid(
+            raise_exception=True
+        )
+
+        def operation():
+            (
+                _get_voice_room_for_member_or_404(
+                    user=request.user,
+                    room_id=room_id,
+                )
+            )
+
+            session = (
+                VoiceSessionService
+                .leave_voice_room(
+                    current_user=request.user,
+                    room_id=room_id,
+                    client_instance_id=(
+                        serializer
+                        .validated_data[
+                            "client_instance_id"
+                        ]
+                    ),
+                )
+            )
+
+            return Response(
+                _voice_state_data(
+                    session=session,
+                    current_user=request.user,
+                )
+            )
+
+        return _handle_voice_operation(
+            operation
+        )

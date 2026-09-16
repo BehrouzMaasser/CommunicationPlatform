@@ -22,6 +22,8 @@ from apps.voice.api.v1.views import (
     VoiceRoomListCreateView,
     VoiceRoomMemberDeleteView,
     VoiceRoomMemberListView,
+    VoiceRoomVoiceLeaveView,
+    VoiceRoomVoiceView,
     VoiceStateView,
 )
 
@@ -71,6 +73,16 @@ urlpatterns = [
         "voice/room-invitations/<uuid:invitation_id>/reject/",
         VoiceRoomInvitationRejectView.as_view(),
         name="voice-room-invitation-reject",
+    ),
+    path(
+        "voice/rooms/<uuid:room_id>/voice/",
+        VoiceRoomVoiceView.as_view(),
+        name="voice-room-voice",
+    ),
+    path(
+        "voice/rooms/<uuid:room_id>/voice/leave/",
+        VoiceRoomVoiceLeaveView.as_view(),
+        name="voice-room-voice-leave",
     ),
     path(
         "voice/rooms/<uuid:room_id>/",
