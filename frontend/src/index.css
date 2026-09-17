@@ -3361,3 +3361,309 @@ a {
     padding-left: 0.35rem;
   }
 }
+
+/* Signed-in Home and Account surfaces */
+.home-dashboard {
+  display: grid;
+  gap: 1rem;
+}
+
+.home-dashboard-welcome {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1.25rem;
+  padding: clamp(1.15rem, 2.5vw, 1.7rem);
+  color: #fff;
+  background:
+    radial-gradient(circle at 92% 12%, rgba(255, 255, 255, 0.18), transparent 28%),
+    linear-gradient(135deg, #5147d8, #7567ee 62%, #8b7df0);
+  border-radius: calc(var(--app-radius) + 0.15rem);
+  box-shadow: 0 16px 38px rgba(74, 63, 177, 0.18);
+}
+
+.home-dashboard-welcome-copy {
+  min-width: 0;
+}
+
+.home-dashboard-eyebrow {
+  color: rgba(255, 255, 255, 0.72);
+  font-size: 0.7rem;
+  font-weight: 800;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+}
+
+.home-dashboard-title {
+  font-size: clamp(1.55rem, 3vw, 2.2rem);
+  font-weight: 820;
+  letter-spacing: -0.035em;
+}
+
+.home-dashboard-subtitle {
+  max-width: 38rem;
+  color: rgba(255, 255, 255, 0.82);
+}
+
+.home-dashboard-avatar {
+  flex: 0 0 auto;
+  border: 3px solid rgba(255, 255, 255, 0.8);
+  box-shadow: 0 8px 24px rgba(31, 24, 92, 0.22);
+}
+
+.home-dashboard-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.85rem 1rem;
+  background: #fff;
+  border: 1px solid var(--app-border);
+  border-radius: var(--app-radius);
+}
+
+.home-dashboard-summary-label {
+  color: var(--app-muted);
+  font-size: 0.7rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.home-dashboard-summary-value {
+  margin-top: 0.1rem;
+  font-size: 0.9rem;
+  font-weight: 720;
+}
+
+.home-dashboard-quick-actions {
+  display: flex;
+  flex: 0 0 auto;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 0.45rem;
+}
+
+.home-dashboard-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
+.home-dashboard-card {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.95rem 1rem;
+  color: inherit;
+  background: #fff;
+  border: 1px solid var(--app-border);
+  border-radius: var(--app-radius);
+  box-shadow: var(--app-shadow-sm);
+  text-decoration: none;
+  transition:
+    border-color 140ms ease,
+    box-shadow 140ms ease,
+    transform 140ms ease;
+}
+
+.home-dashboard-card:hover,
+.home-dashboard-card:focus-visible {
+  color: inherit;
+  border-color: rgba(102, 87, 232, 0.3);
+  box-shadow: 0 10px 24px rgba(28, 31, 45, 0.08);
+  outline: none;
+  transform: translateY(-1px);
+}
+
+.home-dashboard-card-icon {
+  display: grid;
+  width: 2.5rem;
+  height: 2.5rem;
+  place-items: center;
+  color: var(--app-primary);
+  background: var(--app-primary-soft);
+  border-radius: 0.8rem;
+  font-size: 1.05rem;
+  font-weight: 800;
+}
+
+.home-dashboard-card-copy {
+  display: grid;
+  min-width: 0;
+  gap: 0.12rem;
+}
+
+.home-dashboard-card-title {
+  font-size: 0.92rem;
+  font-weight: 780;
+}
+
+.home-dashboard-card-description {
+  overflow: hidden;
+  color: var(--app-muted);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.74rem;
+}
+
+.home-dashboard-card-count {
+  display: inline-grid;
+  min-width: 1.55rem;
+  height: 1.55rem;
+  place-items: center;
+  padding: 0 0.4rem;
+  color: #fff;
+  background: var(--app-primary);
+  border-radius: 999px;
+  font-size: 0.7rem;
+  font-weight: 800;
+}
+
+.home-dashboard-card-chevron {
+  color: #a1a7b4;
+  font-size: 1.3rem;
+}
+
+.home-dashboard-help {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.account-page-header {
+  align-items: center;
+}
+
+.account-page-identity {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 0.9rem;
+}
+
+.account-page-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.1fr) minmax(18rem, 0.9fr);
+  gap: 1rem;
+}
+
+.account-detail-list {
+  display: grid;
+  gap: 0;
+}
+
+.account-detail-row {
+  display: grid;
+  grid-template-columns: minmax(7rem, 0.35fr) minmax(0, 1fr);
+  gap: 1rem;
+  padding: 0.8rem 0;
+  border-bottom: 1px solid #eef0f4;
+}
+
+.account-detail-row:last-child {
+  border-bottom: 0;
+}
+
+.account-detail-row dt {
+  color: var(--app-muted);
+  font-size: 0.78rem;
+  font-weight: 650;
+}
+
+.account-detail-row dd {
+  min-width: 0;
+  margin: 0;
+  overflow-wrap: anywhere;
+  font-size: 0.88rem;
+  font-weight: 720;
+}
+
+.account-avatar-form {
+  display: grid;
+  gap: 0.8rem;
+}
+
+.account-selected-file {
+  overflow: hidden;
+  color: var(--app-muted);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.72rem;
+}
+
+@media (max-width: 767.98px) {
+  .home-dashboard-grid,
+  .account-page-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .home-dashboard-welcome {
+    border-radius: var(--app-radius);
+  }
+
+  .account-page {
+    margin-right: -1rem;
+    margin-left: -1rem;
+  }
+
+  .account-page > .directory-page-header,
+  .account-page > .alert {
+    margin-right: 1rem;
+    margin-left: 1rem;
+  }
+}
+
+@media (max-width: 499.98px) {
+  .home-dashboard-welcome {
+    align-items: flex-start;
+  }
+
+  .home-dashboard-avatar {
+    width: 3.25rem;
+    height: 3.25rem;
+  }
+
+  .home-dashboard-summary,
+  .home-dashboard-help {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .home-dashboard-quick-actions {
+    justify-content: flex-start;
+  }
+
+  .home-dashboard-grid {
+    gap: 0.55rem;
+  }
+
+  .home-dashboard-card {
+    grid-template-columns: auto minmax(0, 1fr) auto auto;
+    padding: 0.8rem;
+  }
+
+  .home-dashboard-card-description {
+    white-space: normal;
+  }
+
+  .account-detail-row {
+    grid-template-columns: 1fr;
+    gap: 0.2rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+  }
+}
