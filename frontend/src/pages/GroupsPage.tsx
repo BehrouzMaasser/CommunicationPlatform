@@ -278,10 +278,10 @@ function GroupsPage() {
     <section>
       <div className="mb-4">
         <h1 className="h2 mb-1">
-          Groups
+          Group Chats
         </h1>
         <p className="text-secondary mb-0">
-          Create groups and manage invitations.
+          Create group chats and manage invitations.
         </p>
       </div>
 

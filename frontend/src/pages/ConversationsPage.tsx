@@ -202,7 +202,7 @@ function ConversationsPage() {
     return (
       <section>
         <h1 className="h2 mb-3">
-          Messages
+          Direct Messages
         </h1>
 
         <div className="alert alert-danger">
@@ -229,7 +229,7 @@ function ConversationsPage() {
     <section>
       <div className="mb-4">
         <h1 className="h2 mb-1">
-          Messages
+          Direct Messages
         </h1>
         <p className="text-secondary mb-0">
           Open an existing direct conversation

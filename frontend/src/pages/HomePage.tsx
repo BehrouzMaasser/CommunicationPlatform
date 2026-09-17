@@ -70,7 +70,7 @@ function HomePage() {
             <h2 className="h2 fw-bold mb-0">Pick up where you left off</h2>
           </div>
           <p className="text-secondary mb-0 home-section-copy">
-            Friends, direct chats, and groups stay just one click away.
+            Friends, direct messages, and group chats stay just one click away.
           </p>
         </div>
 
@@ -97,11 +97,11 @@ function HomePage() {
                   <path d="M4 3h16a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2H9l-5.5 3.5.9-3.5H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2Zm2 5h12V6H6v2Zm0 4h9v-2H6v2Z" />
                 </svg>
               </span>
-              <span className="feature-card-title">Messages</span>
+              <span className="feature-card-title">Direct Messages</span>
               <span className="feature-card-copy">
                 Continue direct conversations with replies, files, and live updates.
               </span>
-              <span className="feature-card-link">Open messages <span aria-hidden="true">→</span></span>
+              <span className="feature-card-link">Open direct messages <span aria-hidden="true">→</span></span>
             </Link>
           </div>
 
@@ -112,11 +112,11 @@ function HomePage() {
                   <path d="M12 2a4 4 0 1 1 0 8 4 4 0 0 1 0-8ZM5.5 6a3.5 3.5 0 0 1 2.24.81A5.95 5.95 0 0 0 8 9.5c0 .37.03.72.1 1.07A3.5 3.5 0 1 1 5.5 6Zm13 0a3.5 3.5 0 1 1-2.6 4.57c.07-.35.1-.7.1-1.07 0-.95-.22-1.86-.62-2.69A3.5 3.5 0 0 1 18.5 6ZM12 12c3.87 0 7 2.24 7 5v3H5v-3c0-2.76 3.13-5 7-5Zm-8.08.18A7.9 7.9 0 0 0 1 14.1V18h2v-1c0-1.7.76-3.24 2.03-4.48a5.5 5.5 0 0 1-1.11-.34Zm16.16 0c-.36.15-.73.27-1.11.34A6.2 6.2 0 0 1 21 17v1h2v-3.9a7.9 7.9 0 0 0-2.92-1.92Z" />
                 </svg>
               </span>
-              <span className="feature-card-title">Groups</span>
+              <span className="feature-card-title">Group Chats</span>
               <span className="feature-card-copy">
                 Create shared spaces, invite people, and keep group chats moving.
               </span>
-              <span className="feature-card-link">Browse groups <span aria-hidden="true">→</span></span>
+              <span className="feature-card-link">Browse group chats <span aria-hidden="true">→</span></span>
             </Link>
           </div>
         </div>
