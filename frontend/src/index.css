@@ -1237,6 +1237,34 @@ a {
   }
 }
 
+@media (max-width: 620px) {
+  .app-topbar-brand-region {
+    gap: 0;
+    padding-right: 0.5rem;
+    padding-left: 0.5rem;
+  }
+
+  .app-topbar-brand-region .app-brand {
+    display: none;
+  }
+
+  .app-mobile-section-title {
+    width: 100%;
+    flex: 1 1 auto;
+    max-width: none;
+  }
+
+  .app-topbar-account-region {
+    padding-right: 0.5rem;
+  }
+
+  .app-account-menu-trigger .user-avatar-sm {
+    width: 1.95rem;
+    height: 1.95rem;
+    font-size: 0.72rem;
+  }
+}
+
 @media (max-width: 400px) {
   .app-topbar {
     grid-template-columns: minmax(0, 1fr) auto;
