@@ -91,6 +91,7 @@ export function SessionProvider({
       value={{
         authStatus,
         currentUser,
+        updateCurrentUser: setCurrentUser,
       }}
     >
       {children}

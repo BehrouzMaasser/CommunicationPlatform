@@ -1,6 +1,7 @@
 from django.db import transaction
 from django.urls import reverse
 
+from apps.accounts.avatar_urls import build_avatar_url
 from apps.messaging.models import Message
 from apps.messaging.selectors import MessageSelector
 from apps.realtime.events import RealtimeEventType
@@ -53,6 +54,14 @@ class MessageRealtimePublisher:
         return {
             "id": user.pk,
             "username": user.username,
+            "avatar_url": build_avatar_url(
+                user_id=user.pk,
+                avatar_name=(
+                    user.avatar.name
+                    if user.avatar
+                    else None
+                ),
+            ),
         }
 
     @staticmethod

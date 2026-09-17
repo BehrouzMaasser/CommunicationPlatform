@@ -1,0 +1,2 @@
+class InvalidAvatar(Exception):
+    pass

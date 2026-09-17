@@ -17,6 +17,7 @@ export type AuthStatus =
 export type SessionContextValue = {
   authStatus: AuthStatus
   currentUser: CurrentUser | null
+  updateCurrentUser: (user: CurrentUser) => void
 }
 
 

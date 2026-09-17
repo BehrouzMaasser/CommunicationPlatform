@@ -294,17 +294,45 @@ a {
   white-space: nowrap;
 }
 
-.app-user-avatar {
+.user-avatar {
   display: inline-grid;
-  width: 1.7rem;
-  height: 1.7rem;
   flex: 0 0 auto;
   place-items: center;
+  overflow: hidden;
+  object-fit: cover;
+  border-radius: 50%;
+}
+
+.user-avatar-fallback {
   color: #fff;
   background: linear-gradient(145deg, #7c6df1, #5544d6);
-  border-radius: 50%;
-  font-size: 0.72rem;
   font-weight: 800;
+  line-height: 1;
+  user-select: none;
+}
+
+.user-avatar-sm {
+  width: 1.7rem;
+  height: 1.7rem;
+  font-size: 0.66rem;
+}
+
+.user-avatar-md {
+  width: 2.5rem;
+  height: 2.5rem;
+  font-size: 0.82rem;
+}
+
+.user-avatar-lg {
+  width: 3.5rem;
+  height: 3.5rem;
+  font-size: 1rem;
+}
+
+.user-avatar-xl {
+  width: 5.5rem;
+  height: 5.5rem;
+  font-size: 1.35rem;
 }
 
 .connection-status {

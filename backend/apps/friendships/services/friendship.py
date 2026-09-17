@@ -94,14 +94,26 @@ class FriendshipService:
 
             user_a_id = friendship.user_1_id
             user_a_username = friendship.user_1.username
+            user_a_avatar_name = (
+                friendship.user_1.avatar.name
+                if friendship.user_1.avatar
+                else None
+            )
             user_b_id = friendship.user_2_id
             user_b_username = friendship.user_2.username
+            user_b_avatar_name = (
+                friendship.user_2.avatar.name
+                if friendship.user_2.avatar
+                else None
+            )
 
             friendship.delete()
 
             FriendshipRealtimePublisher.friendship_removed_after_commit(
                 user_a_id=user_a_id,
                 user_a_username=user_a_username,
+                user_a_avatar_name=user_a_avatar_name,
                 user_b_id=user_b_id,
                 user_b_username=user_b_username,
+                user_b_avatar_name=user_b_avatar_name,
             )

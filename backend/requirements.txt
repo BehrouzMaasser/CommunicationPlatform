@@ -6,6 +6,7 @@ django-cors-headers==4.9.0
 djangorestframework==3.18.0
 livekit-api==1.2.1
 msgpack==1.2.2
+Pillow==12.3.0
 psycopg2-binary==2.9.12
 python-dotenv==1.2.3
 redis==7.4.0

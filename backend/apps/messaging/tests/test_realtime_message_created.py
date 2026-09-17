@@ -154,6 +154,7 @@ class MessageCreatedRealtimeTests(
             {
                 "id": self.alice.pk,
                 "username": "alice",
+                "avatar_url": None,
             },
         )
 

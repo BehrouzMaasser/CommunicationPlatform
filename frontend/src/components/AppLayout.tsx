@@ -16,6 +16,7 @@ import {
 import {
   useRealtime,
 } from '../realtime/RealtimeContext'
+import Avatar from './users/Avatar'
 import {
   useSession,
 } from '../session/useSession'
@@ -313,9 +314,11 @@ function AppLayoutContent({
               'authenticated' &&
               currentUser && (
                 <span className="app-user-chip d-none d-md-inline-flex">
-                  <span className="app-user-avatar" aria-hidden="true">
-                    {currentUser.username.charAt(0).toUpperCase()}
-                  </span>
+                  <Avatar
+                    user={currentUser}
+                    size="sm"
+                    alt=""
+                  />
                   <strong>{currentUser.username}</strong>
                 </span>
               )}
