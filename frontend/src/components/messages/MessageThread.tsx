@@ -7,6 +7,8 @@ import {
 
 import { useRealtime } from '../../realtime/RealtimeContext'
 
+import Avatar from '../users/Avatar'
+
 import AttachmentViewer from './AttachmentViewer'
 
 import type {
@@ -120,6 +122,7 @@ function AttachmentButton({
 
 
 type MessageThreadProps = {
+  variant?: 'default' | 'direct' | 'group'
   messages: Message[]
   hasOlderMessages?: boolean
   loadingOlderMessages?: boolean
@@ -136,6 +139,7 @@ type MessageThreadProps = {
 
 function MessageThread({
   messages,
+  variant = 'default',
   hasOlderMessages = false,
   loadingOlderMessages = false,
   olderMessagesError = null,
@@ -402,7 +406,7 @@ function MessageThread({
             </p>
           </div>
         ) : (
-          <div className="d-flex flex-column gap-3 pe-1">
+          <div className={`message-stack d-flex flex-column pe-1 ${variant !== 'default' ? 'message-stack-direct' : 'gap-3'}`}>
             {messages.map((message) => {
               const sentByCurrentUser =
                 message.sender.id ===
@@ -428,11 +432,20 @@ function MessageThread({
 
               return (
                 <div
-                  className={`message-row d-flex ${sentByCurrentUser ? 'justify-content-start' : 'justify-content-end'}`}
+                  className={`message-row d-flex align-items-end gap-2 ${variant !== 'default' ? `message-row-direct ${sentByCurrentUser ? 'is-own' : 'is-other'} ${sentByCurrentUser ? 'justify-content-end' : 'justify-content-start'}` : (sentByCurrentUser ? 'justify-content-start' : 'justify-content-end')}`}
                   key={message.id}
                 >
+                  {variant !== 'default' && !sentByCurrentUser && (
+                    <Avatar
+                      user={message.sender}
+                      size="sm"
+                      className="message-row-avatar"
+                      alt=""
+                    />
+                  )}
+
                   <article
-                    className={`message-bubble ${sentByCurrentUser ? 'message-bubble-own' : 'message-bubble-other'}`}
+                    className={`message-bubble ${sentByCurrentUser ? 'message-bubble-own' : 'message-bubble-other'}${variant !== 'default' ? ' message-bubble-direct' : ''}`}
                   >
                     {message.reply_to && (
                       <div className="message-reply-preview">
@@ -448,12 +461,18 @@ function MessageThread({
                       </div>
                     )}
 
-                    <div className="message-meta d-flex justify-content-between align-items-baseline gap-3 mb-2">
-                      <strong className="message-sender">
-                        {sentByCurrentUser
-                          ? 'You'
-                          : `@${message.sender.username}`}
-                      </strong>
+                    <div className={`message-meta d-flex align-items-baseline gap-3 mb-2 ${variant === 'direct' || (variant === 'group' && sentByCurrentUser) ? 'justify-content-end' : 'justify-content-between'}`}>
+                      {variant !== 'direct'
+                        && (
+                          variant === 'default'
+                          || !sentByCurrentUser
+                        ) && (
+                        <strong className="message-sender">
+                          {sentByCurrentUser
+                            ? 'You'
+                            : `@${message.sender.username}`}
+                        </strong>
+                      )}
 
                       <span className="small text-secondary text-nowrap">
                         {formatMessageTime(

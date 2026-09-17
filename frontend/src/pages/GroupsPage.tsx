@@ -1,19 +1,16 @@
 import {
-  type FormEvent,
-  type KeyboardEvent as ReactKeyboardEvent,
   useCallback,
   useEffect,
   useState,
 } from 'react'
 import {
-  Link,
+  Outlet,
+  useMatch,
   useNavigate,
 } from 'react-router-dom'
 
 import { ApiError } from '../api/client'
 import { useActivity } from '../activity/useActivity'
-import { useRealtimeEvent } from '../realtime/RealtimeContext'
-import type { MessageCreatedPayload } from '../realtime/messageEvents'
 import {
   acceptGroupInvitation,
   createGroup,
@@ -21,39 +18,14 @@ import {
   getIncomingGroupInvitations,
   rejectGroupInvitation,
 } from '../api/groups'
+import GroupConversationList from '../components/groups/GroupConversationList'
+import { useRealtimeEvent } from '../realtime/RealtimeContext'
+import type { MessageCreatedPayload } from '../realtime/messageEvents'
 
 import type {
   GroupConversation,
   GroupInvitation,
 } from '../types/groups'
-
-function submitOnEnter(
-  event: ReactKeyboardEvent<HTMLInputElement>,
-) {
-  if (
-    event.key !== 'Enter'
-    || event.nativeEvent.isComposing
-    || event.shiftKey
-    || event.altKey
-    || event.ctrlKey
-    || event.metaKey
-  ) {
-    return
-  }
-
-  const form = event.currentTarget.form
-  const submitButton =
-    form?.querySelector<HTMLButtonElement>(
-      'button[type="submit"]',
-    )
-
-  if (!form || submitButton?.disabled) {
-    return
-  }
-
-  event.preventDefault()
-  form.requestSubmit()
-}
 
 
 function errorText(error: unknown): string {
@@ -65,8 +37,14 @@ function errorText(error: unknown): string {
     : 'Something went wrong.'
 }
 
+
 function GroupsPage() {
   const navigate = useNavigate()
+  const activeGroupMatch =
+    useMatch(
+      '/groups/:groupId/messages',
+    )
+
   const {
     getGroupUnread,
     refreshActivity,
@@ -76,7 +54,6 @@ function GroupsPage() {
     useState<GroupConversation[]>([])
   const [invitations, setInvitations] =
     useState<GroupInvitation[]>([])
-  const [name, setName] = useState('')
   const [loading, setLoading] =
     useState(true)
   const [busy, setBusy] =
@@ -210,14 +187,8 @@ function GroupsPage() {
   }, [])
 
   async function handleCreate(
-    event: FormEvent<HTMLFormElement>,
+    name: string,
   ) {
-    event.preventDefault()
-
-    if (!name.trim()) {
-      return
-    }
-
     setBusy('create')
     setError(null)
 
@@ -225,10 +196,23 @@ function GroupsPage() {
       const group =
         await createGroup(name)
 
-      setName('')
-      navigate(`/groups/${group.id}`)
+      setGroups(
+        (current) => [
+          group,
+          ...current.filter(
+            (item) =>
+              item.id !== group.id,
+          ),
+        ],
+      )
+
+      navigate(
+        `/groups/${group.id}/messages`,
+      )
+      return true
     } catch (requestError) {
       setError(errorText(requestError))
+      return false
     } finally {
       setBusy(null)
     }
@@ -268,186 +252,46 @@ function GroupsPage() {
 
   if (loading) {
     return (
-      <div className="py-5 text-center">
-        <div className="spinner-border" />
+      <div className="dm-page-loading">
+        <div
+          className="spinner-border"
+          role="status"
+          aria-label="Loading group chats"
+        />
       </div>
     )
   }
 
   return (
-    <section>
-      <div className="mb-4">
-        <h1 className="h2 mb-1">
-          Group Chats
-        </h1>
-        <p className="text-secondary mb-0">
-          Create group chats and manage invitations.
-        </p>
-      </div>
+    <section
+      className={`group-chats-page${activeGroupMatch ? ' has-active-conversation' : ''}`}
+    >
+      <aside
+        className="group-chats-list-pane"
+        aria-label="Group chat conversations"
+      >
+        <GroupConversationList
+          groups={groups}
+          invitations={invitations}
+          getUnread={getGroupUnread}
+          creating={busy === 'create'}
+          invitationBusyKey={
+            busy === 'create'
+              ? null
+              : busy
+          }
+          actionError={error}
+          onCreate={handleCreate}
+          onInvitation={handleInvitation}
+        />
+      </aside>
 
-      {error && (
-        <div className="alert alert-danger">
-          {error}
-        </div>
-      )}
-
-      <div className="card shadow-sm mb-4">
-        <div className="card-body">
-          <h2 className="h5">
-            Create group
-          </h2>
-
-          <form
-            className="d-flex gap-2"
-            onSubmit={handleCreate}
-          >
-            <input
-              className="form-control"
-              value={name}
-              onChange={(event) =>
-                setName(event.target.value)
-              }
-              onKeyDown={submitOnEnter}
-              placeholder="Group name"
-            />
-
-            <button
-              className="btn btn-primary text-nowrap"
-              type="submit"
-              disabled={
-                busy === 'create' ||
-                !name.trim()
-              }
-            >
-              {busy === 'create'
-                ? 'Creating…'
-                : 'Create'}
-            </button>
-          </form>
-        </div>
-      </div>
-
-      {invitations.length > 0 && (
-        <div className="card shadow-sm mb-4">
-          <div className="card-body">
-            <h2 className="h5 mb-3">
-              Invitations
-            </h2>
-
-            <div className="list-group">
-              {invitations.map(
-                (invitation) => (
-                  <div
-                    className="list-group-item"
-                    key={invitation.id}
-                  >
-                    <div className="d-flex flex-column flex-md-row justify-content-between gap-3">
-                      <div>
-                        <div className="fw-semibold">
-                          {invitation.group.name}
-                        </div>
-                        <div className="small text-secondary">
-                          Invited by @{invitation.invited_by.username}
-                        </div>
-                      </div>
-
-                      <div className="d-flex gap-2">
-                        <button
-                          className="btn btn-sm btn-primary"
-                          disabled={busy !== null}
-                          onClick={() =>
-                            void handleInvitation(
-                              invitation.id,
-                              'accept',
-                            )
-                          }
-                        >
-                          {busy ===
-                          `accept-${invitation.id}`
-                            ? 'Accepting…'
-                            : 'Accept'}
-                        </button>
-
-                        <button
-                          className="btn btn-sm btn-outline-secondary"
-                          disabled={busy !== null}
-                          onClick={() =>
-                            void handleInvitation(
-                              invitation.id,
-                              'reject',
-                            )
-                          }
-                        >
-                          {busy ===
-                          `reject-${invitation.id}`
-                            ? 'Rejecting…'
-                            : 'Reject'}
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                ),
-              )}
-            </div>
-          </div>
-        </div>
-      )}
-
-      <div className="card shadow-sm">
-        <div className="card-body">
-          <div className="d-flex justify-content-between align-items-center mb-3">
-            <h2 className="h5 mb-0">
-              Your groups
-            </h2>
-            <span className="badge text-bg-secondary">
-              {groups.length}
-            </span>
-          </div>
-
-          {groups.length === 0 ? (
-            <p className="text-secondary mb-0">
-              You are not in any groups yet.
-            </p>
-          ) : (
-            <div className="list-group">
-              {groups.map((group) => (
-                <Link
-                  className="list-group-item list-group-item-action"
-                  key={group.id}
-                  to={`/groups/${group.id}`}
-                >
-                  <div className="d-flex justify-content-between align-items-center gap-3">
-                    <div>
-                      <div className="fw-semibold">
-                        {group.name}
-                      </div>
-                    </div>
-
-                    {getGroupUnread(
-                      group.id,
-                    ) > 0 && (
-                      <span
-                        className="unread-count-badge"
-                        title={`${getGroupUnread(group.id)} unread messages`}
-                      >
-                        {getGroupUnread(
-                          group.id,
-                        ) > 99
-                          ? '99+'
-                          : getGroupUnread(
-                              group.id,
-                            )}
-                      </span>
-                    )}
-                  </div>
-                </Link>
-              ))}
-            </div>
-          )}
-        </div>
-      </div>
+      <main className="group-chats-content-pane">
+        <Outlet />
+      </main>
     </section>
   )
 }
+
 
 export default GroupsPage
