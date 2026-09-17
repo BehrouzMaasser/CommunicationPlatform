@@ -9,9 +9,6 @@ import type {
   ReactNode,
 } from 'react'
 
-import VoiceCallOverlay from '../components/voice/VoiceCallOverlay'
-import VoiceRoomOverlay from '../components/voice/VoiceRoomOverlay'
-
 import {
   ApiError,
 } from '../api/client'
@@ -1257,14 +1254,6 @@ export function VoiceProvider({
       }}
     >
       {children}
-      <VoiceCallOverlay />
-      <VoiceRoomOverlay
-        key={
-          state.session?.kind === 'ROOM'
-            ? state.session.id
-            : 'voice-room-idle'
-        }
-      />
     </VoiceContext.Provider>
   )
 }

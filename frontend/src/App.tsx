@@ -4,6 +4,7 @@ import {
 } from 'react-router-dom'
 
 import AppLayout from './components/AppLayout'
+import AccountPage from './pages/AccountPage'
 import ConversationsPage from './pages/ConversationsPage'
 import DirectConversationPage from './pages/DirectConversationPage'
 import FriendsPage from './pages/FriendsPage'
@@ -24,6 +25,11 @@ function App() {
         <Route
           index
           element={<HomePage />}
+        />
+
+        <Route
+          path="account"
+          element={<AccountPage />}
         />
 
         <Route

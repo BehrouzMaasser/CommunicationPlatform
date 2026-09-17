@@ -1,39 +1,31 @@
 import {
-  useEffect,
   useState,
 } from 'react'
 import {
+  Link,
   NavLink,
   Outlet,
 } from 'react-router-dom'
 
-import { ApiError } from '../api/client'
-import {
-  ActivityProvider,
-} from '../activity/ActivityContext'
 import {
   useActivity,
 } from '../activity/useActivity'
 import {
-  getCurrentUser,
   logoutCurrentUser,
 } from '../api/session'
 import {
-  RealtimeProvider,
   useRealtime,
 } from '../realtime/RealtimeContext'
-import { VoiceProvider } from '../voice/VoiceContext'
+import {
+  useSession,
+} from '../session/useSession'
 
 import type {
   CurrentUser,
 } from '../types/users'
-
-
-type AuthStatus =
-  | 'loading'
-  | 'authenticated'
-  | 'anonymous'
-  | 'error'
+import type {
+  AuthStatus,
+} from '../session/sessionContextState'
 
 
 const navLinkClass = ({
@@ -130,9 +122,9 @@ function MobileAccountNav({
     <div className="app-mobile-account-nav d-flex d-sm-none">
       {authStatus === 'authenticated' && currentUser && (
         <>
-          <a
+          <Link
             className="app-mobile-user-link"
-            href="/accounts/me/"
+            to="/account"
             title={`${currentUser.username} · ${label}`}
           >
             <span
@@ -142,14 +134,14 @@ function MobileAccountNav({
               <span className="connection-status-dot" aria-hidden="true" />
             </span>
             <strong>{currentUser.username}</strong>
-          </a>
+          </Link>
 
           <details className="app-mobile-account-menu">
             <summary aria-label="Open account menu">
               <span aria-hidden="true">⋮</span>
             </summary>
             <div className="app-mobile-account-menu-panel">
-              <a href="/accounts/me/">Account</a>
+              <Link to="/account">Account</Link>
               <button
                 type="button"
                 disabled={isLoggingOut}
@@ -331,12 +323,12 @@ function AppLayoutContent({
             {authStatus ===
               'authenticated' && (
                 <>
-                  <a
+                  <Link
                     className="btn btn-sm btn-nav-secondary"
-                    href="/accounts/me/"
+                    to="/account"
                   >
                     Account
-                  </a>
+                  </Link>
 
                   <button
                     className="btn btn-sm btn-nav-primary"
@@ -384,106 +376,16 @@ function AppLayoutContent({
 
 
 function AppLayout() {
-  const [
-    currentUser,
-    setCurrentUser,
-  ] =
-    useState<CurrentUser | null>(
-      null,
-    )
-
-  const [
+  const {
     authStatus,
-    setAuthStatus,
-  ] =
-    useState<AuthStatus>(
-      'loading',
-    )
-
-  useEffect(() => {
-    let cancelled = false
-
-    async function loadCurrentUser() {
-      try {
-        const user =
-          await getCurrentUser()
-
-        if (cancelled) {
-          return
-        }
-
-        setCurrentUser(user)
-        setAuthStatus(
-          'authenticated',
-        )
-      } catch (error) {
-        if (cancelled) {
-          return
-        }
-
-        if (
-          error instanceof
-            ApiError &&
-          error.status === 401
-        ) {
-          setCurrentUser(null)
-          setAuthStatus(
-            'anonymous',
-          )
-          return
-        }
-
-        setCurrentUser(null)
-        setAuthStatus('error')
-      }
-    }
-
-    void loadCurrentUser()
-
-    return () => {
-      cancelled = true
-    }
-  }, [])
+    currentUser,
+  } = useSession()
 
   return (
-    <RealtimeProvider
-      enabled={
-        authStatus ===
-        'authenticated'
-      }
-      currentUserId={
-        currentUser?.id
-      }
-    >
-      <VoiceProvider
-        key={
-          currentUser?.id
-          ?? 'anonymous'
-        }
-        enabled={
-          authStatus ===
-          'authenticated'
-        }
-        currentUserId={
-          currentUser?.id
-        }
-      >
-        <ActivityProvider
-          enabled={
-            authStatus ===
-            'authenticated'
-          }
-          currentUserId={
-            currentUser?.id
-          }
-        >
-          <AppLayoutContent
-            authStatus={authStatus}
-            currentUser={currentUser}
-          />
-        </ActivityProvider>
-      </VoiceProvider>
-    </RealtimeProvider>
+    <AppLayoutContent
+      authStatus={authStatus}
+      currentUser={currentUser}
+    />
   )
 }
 

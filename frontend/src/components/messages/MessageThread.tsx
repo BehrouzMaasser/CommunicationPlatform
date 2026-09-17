@@ -7,6 +7,8 @@ import {
 
 import { useRealtime } from '../../realtime/RealtimeContext'
 
+import AttachmentViewer from './AttachmentViewer'
+
 import type {
   Message,
   MessageAttachment,
@@ -79,15 +81,22 @@ function getReplySummary(
 }
 
 
-function AttachmentLink({
+function AttachmentButton({
   attachment,
+  onOpen,
 }: {
   attachment: MessageAttachment
+  onOpen: (
+    attachment: MessageAttachment,
+  ) => void
 }) {
   return (
-    <a
-      className="border rounded p-2 text-decoration-none d-flex justify-content-between align-items-center gap-3"
-      href={attachment.download_url}
+    <button
+      className="message-attachment-open border rounded p-2 d-flex justify-content-between align-items-center gap-3 w-100 text-start"
+      type="button"
+      onClick={() => {
+        onOpen(attachment)
+      }}
     >
       <div className="text-break">
         <div className="fw-semibold">
@@ -104,9 +113,10 @@ function AttachmentLink({
           attachment.size_bytes,
         )}
       </span>
-    </a>
+    </button>
   )
 }
+
 
 
 type MessageThreadProps = {
@@ -136,6 +146,13 @@ function MessageThread({
   const {
     currentUserId,
   } = useRealtime()
+
+  const [
+    openAttachment,
+    setOpenAttachment,
+  ] = useState<MessageAttachment | null>(
+    null,
+  )
 
   const viewportRef =
     useRef<HTMLDivElement | null>(
@@ -455,9 +472,10 @@ function MessageThread({
                       <div className="mt-3 d-flex flex-column gap-2">
                         {message.attachments.map(
                           (attachment) => (
-                            <AttachmentLink
+                            <AttachmentButton
                               attachment={attachment}
                               key={attachment.id}
+                              onOpen={setOpenAttachment}
                             />
                           ),
                         )}
@@ -514,6 +532,15 @@ function MessageThread({
             ? 'new message'
             : 'new messages'}
         </button>
+      )}
+
+      {openAttachment && (
+        <AttachmentViewer
+          attachment={openAttachment}
+          onClose={() => {
+            setOpenAttachment(null)
+          }}
+        />
       )}
     </div>
   )
