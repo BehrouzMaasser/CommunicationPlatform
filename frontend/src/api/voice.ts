@@ -2,6 +2,7 @@ import {
   apiDelete,
   apiGet,
   apiPost,
+  apiRequest,
   apiPatch,
 } from './client'
 import { getAllPages } from './pagination'
@@ -326,5 +327,27 @@ export function removeVoiceRoomMember(
 ): Promise<unknown> {
   return apiDelete(
     `/api/v1/voice/rooms/${encodeURIComponent(roomId)}/members/${userId}/`,
+  )
+}
+
+
+export function updateVoiceRoomAvatar(
+  roomId: string,
+  avatar: File,
+): Promise<VoiceRoom> {
+  const body = new FormData()
+  body.append('avatar', avatar)
+  return apiRequest<VoiceRoom>(
+    `/api/v1/voice/rooms/${encodeURIComponent(roomId)}/avatar/`,
+    { method: 'PUT', body },
+  )
+}
+
+
+export function removeVoiceRoomAvatar(
+  roomId: string,
+): Promise<VoiceRoom> {
+  return apiDelete<VoiceRoom>(
+    `/api/v1/voice/rooms/${encodeURIComponent(roomId)}/avatar/`,
   )
 }

@@ -20,8 +20,6 @@ class MessageAttachmentSerializer(serializers.ModelSerializer):
         read_only_fields = fields
 
     def get_download_url(self, attachment):
-        request = self.context.get("request")
-
         path = reverse(
             "attachment-download",
             kwargs={
@@ -29,7 +27,4 @@ class MessageAttachmentSerializer(serializers.ModelSerializer):
             },
         )
 
-        if request is None:
-            return path
-
-        return request.build_absolute_uri(path)
+        return path

@@ -3,6 +3,8 @@ from django.db import models
 from django.db.models import F, Q
 from django.utils import timezone
 
+import uuid
+
 
 class DirectConversation(models.Model):
 
@@ -38,9 +40,24 @@ class DirectConversation(models.Model):
         return f"DM: {self.user_1.username} <-> {self.user_2.username}"
 
 
+def group_avatar_upload_to(instance, filename):
+    del filename
+
+    return (
+        f"group_avatars/"
+        f"{instance.pk}/"
+        f"{uuid.uuid4().hex}.webp"
+    )
+
+
 class GroupConversation(models.Model):
 
     name = models.CharField(max_length=25)
+
+    avatar = models.ImageField(
+        upload_to=group_avatar_upload_to,
+        blank=True,
+    )
 
     members = models.ManyToManyField(
         settings.AUTH_USER_MODEL,

@@ -20,6 +20,7 @@ import {
 } from '../api/messages'
 
 import MessageComposer from '../components/messages/MessageComposer'
+import Avatar from '../components/users/Avatar'
 import MessageThread from '../components/messages/MessageThread'
 import DirectCallButton from '../components/voice/DirectCallButton'
 import {
@@ -33,7 +34,7 @@ import {
   useConversationRealtimeSubscription,
   useRealtime,
   useRealtimeEvent,
-} from '../realtime/RealtimeContext'
+} from '../realtime/useRealtime'
 
 import type {
   FriendRequestAcceptedRealtimePayload,
@@ -699,49 +700,63 @@ function DirectConversationPage() {
     )
   }
 
+  const otherUserOnline =
+    isUserOnline(
+      conversation.other_user.id,
+    )
+
   return (
-    <section className="conversation-page">
-      <div className="card shadow-sm conversation-card">
-        <div className="card-header bg-white conversation-header">
-          <div className="d-flex align-items-center justify-content-between gap-2">
-            <h1 className="h5 mb-0 text-truncate">
-              @{conversation
-                .other_user
-                .username}
-            </h1>
+    <section className="conversation-page dm-conversation-page">
+      <div className="conversation-card dm-conversation-surface">
+        <header className="conversation-header dm-conversation-header">
+          <div className="dm-conversation-identity">
+            <Link
+              className="dm-conversation-back"
+              to="/messages"
+              aria-label="Back to direct messages"
+              title="Back to direct messages"
+            >
+              <span aria-hidden="true">←</span>
+            </Link>
 
-            <div className="d-flex align-items-center gap-2">
-              <span
-                className={
-                  isUserOnline(
-                    conversation.other_user.id,
-                  )
-                    ? 'badge text-bg-success'
-                    : 'badge text-bg-secondary'
-                }
-              >
-                {
-                  isUserOnline(
-                    conversation.other_user.id,
-                  )
-                    ? 'Online'
-                    : 'Offline'
-                }
-              </span>
-
-              <DirectCallButton
-                otherUser={
-                  conversation.other_user
-                }
-                canCall={canMessage}
+            <span className="dm-conversation-header-avatar">
+              <Avatar
+                user={conversation.other_user}
+                size="md"
+                alt=""
               />
+              <span
+                className={`dm-presence-dot${otherUserOnline ? ' is-online' : ''}`}
+                aria-hidden="true"
+              />
+            </span>
+
+            <div className="dm-conversation-header-copy">
+              <h1 className="dm-conversation-title mb-0">
+                @{conversation.other_user.username}
+              </h1>
+              <div className="dm-conversation-presence">
+                {otherUserOnline
+                  ? 'Online'
+                  : 'Offline'}
+              </div>
             </div>
           </div>
-        </div>
 
-        <div className="card-body conversation-card-body">
+          <div className="dm-conversation-actions">
+            <DirectCallButton
+              otherUser={
+                conversation.other_user
+              }
+              canCall={canMessage}
+            />
+          </div>
+        </header>
+
+        <div className="conversation-card-body dm-conversation-body">
           <MessageThread
             key={`dm-${conversation.id}`}
+            variant="direct"
             messages={messages}
             hasOlderMessages={
               olderMessagesUrl !== null
@@ -769,9 +784,9 @@ function DirectConversationPage() {
           />
         </div>
 
-        <div className="card-footer bg-white py-3">
+        <footer className="dm-conversation-composer">
           {typingUsernames.length > 0 && (
-            <div className="small text-secondary mb-2">
+            <div className="dm-typing-indicator">
               {typingUsernames.length === 1
                 ? `@${typingUsernames[0]} is typing…`
                 : `${typingUsernames.length} people are typing…`}
@@ -794,7 +809,7 @@ function DirectConversationPage() {
                 : undefined
             }
           />
-        </div>
+        </footer>
       </div>
     </section>
   )

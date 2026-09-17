@@ -54,6 +54,24 @@ class VoiceRoomRealtimePublisher:
         )
 
     @classmethod
+    def room_avatar_updated_after_commit(
+        cls,
+        *,
+        room_id,
+        audience_user_ids: Iterable[int],
+    ) -> None:
+        RealtimePublisher.publish_to_users_after_commit(
+            user_ids=audience_user_ids,
+            event_type=(
+                RealtimeEventType
+                .VOICE_ROOM_AVATAR_UPDATED
+            ),
+            payload={
+                "room_id": cls._id(room_id),
+            },
+        )
+
+    @classmethod
     def room_deleted_after_commit(
         cls,
         *,

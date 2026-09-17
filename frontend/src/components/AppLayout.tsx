@@ -1,49 +1,82 @@
 import {
   useEffect,
+  useRef,
   useState,
 } from 'react'
 import {
+  Link,
   NavLink,
   Outlet,
+  useLocation,
 } from 'react-router-dom'
 
-import { ApiError } from '../api/client'
-import {
-  ActivityProvider,
-} from '../activity/ActivityContext'
 import {
   useActivity,
 } from '../activity/useActivity'
 import {
-  getCurrentUser,
   logoutCurrentUser,
 } from '../api/session'
 import {
-  RealtimeProvider,
   useRealtime,
-} from '../realtime/RealtimeContext'
-import { VoiceProvider } from '../voice/VoiceContext'
+} from '../realtime/useRealtime'
+import {
+  useSession,
+} from '../session/useSession'
+import GlobalVoiceDock from './voice/GlobalVoiceDock'
+import Avatar from './users/Avatar'
 
 import type {
   CurrentUser,
 } from '../types/users'
+import type {
+  AuthStatus,
+} from '../session/sessionContextState'
 
 
-type AuthStatus =
-  | 'loading'
-  | 'authenticated'
-  | 'anonymous'
-  | 'error'
+type ShellIconName =
+  | 'home'
+  | 'messages'
+  | 'friends'
+  | 'groups'
+  | 'voice'
+  | 'account'
 
 
-const navLinkClass = ({
-  isActive,
+type NavigationItem = {
+  to: string
+  label: string
+  mobileLabel: string
+  icon: ShellIconName
+  count: number
+  countLabel: string
+}
+
+
+function ShellIcon({
+  name,
 }: {
-  isActive: boolean
-}) =>
-  `nav-link${
-    isActive ? ' active' : ''
-  }`
+  name: ShellIconName
+}) {
+  const paths: Record<ShellIconName, string> = {
+    home: 'M3 10.5 12 3l9 7.5V21a1 1 0 0 1-1 1h-5v-7H9v7H4a1 1 0 0 1-1-1V10.5Z',
+    messages: 'M4 4h16a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H9l-5 3v-3a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2Zm3 5h10V7H7v2Zm0 4h7v-2H7v2Z',
+    friends: 'M16 11a4 4 0 1 0-3.95-4.62A5 5 0 1 0 8 14c-3.31 0-6 1.79-6 4v2h10v-2c0-1.05.38-2.02 1.04-2.86A7.7 7.7 0 0 1 16 14c3.31 0 6 1.79 6 4v2h-8v-2c0-1.42-.72-2.72-1.92-3.74A4 4 0 0 0 16 11Z',
+    groups: 'M12 2a4 4 0 1 1 0 8 4 4 0 0 1 0-8ZM5.5 6a3.5 3.5 0 0 1 2.24.81A5.95 5.95 0 0 0 8 9.5c0 .37.03.72.1 1.07A3.5 3.5 0 1 1 5.5 6Zm13 0a3.5 3.5 0 1 1-2.6 4.57c.07-.35.1-.7.1-1.07 0-.95-.22-1.86-.62-2.69A3.5 3.5 0 0 1 18.5 6ZM12 12c3.87 0 7 2.24 7 5v3H5v-3c0-2.76 3.13-5 7-5Z',
+    voice: 'M12 3a4 4 0 0 0-4 4v5a4 4 0 1 0 8 0V7a4 4 0 0 0-4-4Zm-7 9a1 1 0 0 1 2 0 5 5 0 0 0 10 0 1 1 0 1 1 2 0 7 7 0 0 1-6 6.92V21h3a1 1 0 1 1 0 2H8a1 1 0 1 1 0-2h3v-2.08A7 7 0 0 1 5 12Z',
+    account: 'M12 12a5 5 0 1 0 0-10 5 5 0 0 0 0 10Zm0 2c-5.33 0-9 2.69-9 6v2h18v-2c0-3.31-3.67-6-9-6Z',
+  }
+
+  return (
+    <svg
+      className="app-shell-icon"
+      viewBox="0 0 24 24"
+      focusable="false"
+      aria-hidden="true"
+    >
+      <path d={paths[name]} />
+    </svg>
+  )
+}
 
 
 function ActivityBadge({
@@ -78,37 +111,62 @@ function getRealtimeStatusPresentation(
       connecting: 'Connecting',
       disconnected: 'Offline',
     }[status],
-    badgeClass: {
-      connected: 'text-bg-success',
-      connecting: 'text-bg-warning',
-      disconnected: 'text-bg-secondary',
+    statusClass: {
+      connected: 'is-connected',
+      connecting: 'is-connecting',
+      disconnected: 'is-disconnected',
     }[status],
   }
 }
 
 
-function RealtimeStatusBadge() {
-  const { status } =
-    useRealtime()
+function RealtimeStatusDot() {
+  const { status } = useRealtime()
   const {
     label,
-    badgeClass,
+    statusClass,
   } = getRealtimeStatusPresentation(status)
 
   return (
     <span
-      className={`connection-status ${badgeClass}`}
+      className={`app-realtime-dot ${statusClass}`}
       title={`Realtime status: ${label}`}
       aria-label={`Realtime status: ${label}`}
-    >
-      <span className="connection-status-dot" aria-hidden="true" />
-      <span className="d-none d-xl-inline">{label}</span>
-    </span>
+    />
   )
 }
 
 
-function MobileAccountNav({
+function getSectionTitle(pathname: string) {
+  if (pathname === '/') {
+    return 'Home'
+  }
+
+  if (pathname.startsWith('/messages')) {
+    return 'Direct Messages'
+  }
+
+  if (pathname.startsWith('/friends')) {
+    return 'Friends'
+  }
+
+  if (pathname.startsWith('/groups')) {
+    return 'Group Chats'
+  }
+
+  if (pathname.startsWith('/voice')) {
+    return 'Voice Rooms'
+  }
+
+  if (pathname.startsWith('/account')) {
+    return 'Account'
+  }
+
+  return 'Communication Platform'
+}
+
+
+function AccountMenu({
   authStatus,
   currentUser,
   isLoggingOut,
@@ -119,63 +177,230 @@ function MobileAccountNav({
   isLoggingOut: boolean
   onLogout: () => void
 }) {
-  const { status } =
-    useRealtime()
-  const {
-    label,
-    badgeClass,
-  } = getRealtimeStatusPresentation(status)
+  const detailsRef =
+    useRef<HTMLDetailsElement | null>(null)
+
+  function closeMenu() {
+    detailsRef.current?.removeAttribute('open')
+  }
+
+  useEffect(() => {
+    function handlePointerDown(
+      event: PointerEvent,
+    ) {
+      const details = detailsRef.current
+      const target = event.target
+
+      if (
+        !details?.open
+        || !(target instanceof Node)
+        || details.contains(target)
+      ) {
+        return
+      }
+
+      detailsRef.current?.removeAttribute('open')
+    }
+
+    function handleKeyDown(
+      event: KeyboardEvent,
+    ) {
+      if (event.key === 'Escape') {
+        detailsRef.current?.removeAttribute('open')
+      }
+    }
+
+    document.addEventListener(
+      'pointerdown',
+      handlePointerDown,
+    )
+    document.addEventListener(
+      'keydown',
+      handleKeyDown,
+    )
+
+    return () => {
+      document.removeEventListener(
+        'pointerdown',
+        handlePointerDown,
+      )
+      document.removeEventListener(
+        'keydown',
+        handleKeyDown,
+      )
+    }
+  }, [])
+
+  if (authStatus === 'loading') {
+    return (
+      <span className="app-session-label">
+        Loading…
+      </span>
+    )
+  }
+
+  if (authStatus === 'anonymous') {
+    return (
+      <a
+        className="btn btn-sm btn-nav-secondary"
+        href="/accounts/login/"
+      >
+        Sign in
+      </a>
+    )
+  }
+
+  if (authStatus === 'error') {
+    return (
+      <span className="app-session-error">
+        Session unavailable
+      </span>
+    )
+  }
+
+  if (!currentUser) {
+    return null
+  }
 
   return (
-    <div className="app-mobile-account-nav d-flex d-sm-none">
-      {authStatus === 'authenticated' && currentUser && (
-        <>
-          <a
-            className="app-mobile-user-link"
-            href="/accounts/me/"
-            title={`${currentUser.username} · ${label}`}
-          >
-            <span
-              className={`connection-status mobile-connection-status ${badgeClass}`}
-              aria-label={`Realtime status: ${label}`}
-            >
-              <span className="connection-status-dot" aria-hidden="true" />
-            </span>
-            <strong>{currentUser.username}</strong>
-          </a>
+    <details
+      ref={detailsRef}
+      className="app-account-menu"
+    >
+      <summary
+        className="app-account-menu-trigger"
+        aria-label="Open account menu"
+      >
+        <RealtimeStatusDot />
+        <Avatar
+          user={currentUser}
+          size="sm"
+          alt=""
+        />
+        <span className="app-account-menu-name">
+          {currentUser.username}
+        </span>
+        <span
+          className="app-account-menu-chevron"
+          aria-hidden="true"
+        >
+          ▾
+        </span>
+      </summary>
 
-          <details className="app-mobile-account-menu">
-            <summary aria-label="Open account menu">
-              <span aria-hidden="true">⋮</span>
-            </summary>
-            <div className="app-mobile-account-menu-panel">
-              <a href="/accounts/me/">Account</a>
-              <button
-                type="button"
-                disabled={isLoggingOut}
-                onClick={onLogout}
-              >
-                {isLoggingOut ? 'Signing out…' : 'Sign out'}
-              </button>
+      <div className="app-account-menu-panel">
+        <div className="app-account-menu-identity">
+          <Avatar
+            user={currentUser}
+            size="md"
+            alt=""
+          />
+          <div className="app-account-menu-copy">
+            <div className="fw-semibold text-truncate">
+              {currentUser.username}
             </div>
-          </details>
-        </>
-      )}
+            <div className="small text-secondary text-truncate">
+              {currentUser.email}
+            </div>
+          </div>
+        </div>
 
-      {authStatus === 'loading' && (
-        <span className="app-session-label ms-auto">Loading…</span>
-      )}
+        <Link
+          className="app-account-menu-action"
+          to="/account"
+          onClick={closeMenu}
+        >
+          <ShellIcon name="account" />
+          <span>Account</span>
+        </Link>
 
-      {authStatus === 'anonymous' && (
-        <a className="app-mobile-sign-in ms-auto" href="/accounts/login/">
-          Sign in
-        </a>
-      )}
+        <button
+          className="app-account-menu-action app-account-menu-signout"
+          type="button"
+          disabled={isLoggingOut}
+          onClick={() => {
+            closeMenu()
+            onLogout()
+          }}
+        >
+          <span className="app-account-menu-signout-icon" aria-hidden="true">↗</span>
+          <span>
+            {isLoggingOut
+              ? 'Signing out…'
+              : 'Sign out'}
+          </span>
+        </button>
+      </div>
+    </details>
+  )
+}
 
-      {authStatus === 'error' && (
-        <span className="app-session-error ms-auto">Session unavailable</span>
-      )}
-    </div>
+
+function DesktopSidebar({
+  navigationItems,
+}: {
+  navigationItems: NavigationItem[]
+}) {
+  return (
+    <aside className="app-sidebar" aria-label="Primary navigation">
+      <nav className="app-sidebar-nav">
+        {navigationItems.map((item) => (
+          <NavLink
+            key={item.to}
+            className={({ isActive }) =>
+              `app-sidebar-link${isActive ? ' active' : ''}`
+            }
+            to={item.to}
+            end={item.to === '/'}
+          >
+            <span className="app-sidebar-link-icon">
+              <ShellIcon name={item.icon} />
+            </span>
+            <span className="app-sidebar-link-label">
+              {item.label}
+            </span>
+            <ActivityBadge
+              count={item.count}
+              label={item.countLabel}
+            />
+          </NavLink>
+        ))}
+      </nav>
+    </aside>
+  )
+}
+
+
+function MobileBottomNavigation({
+  navigationItems,
+}: {
+  navigationItems: NavigationItem[]
+}) {
+  return (
+    <nav
+      className="app-mobile-bottom-nav"
+      aria-label="Primary navigation"
+    >
+      {navigationItems.map((item) => (
+        <NavLink
+          key={item.to}
+          className={({ isActive }) =>
+            `app-mobile-bottom-link${isActive ? ' active' : ''}`
+          }
+          to={item.to}
+          end={item.to === '/'}
+        >
+          <span className="app-mobile-bottom-icon-wrap">
+            <ShellIcon name={item.icon} />
+            <ActivityBadge
+              count={item.count}
+              label={item.countLabel}
+            />
+          </span>
+          <span>{item.mobileLabel}</span>
+        </NavLink>
+      ))}
+    </nav>
   )
 }
 
@@ -185,13 +410,13 @@ function AppLayoutContent({
   currentUser,
 }: {
   authStatus: AuthStatus
-  currentUser:
-    CurrentUser | null
+  currentUser: CurrentUser | null
 }) {
   const [
     isLoggingOut,
     setIsLoggingOut,
   ] = useState(false)
+  const location = useLocation()
 
   const {
     pendingFriendRequests,
@@ -204,6 +429,52 @@ function AppLayoutContent({
   const groupAttentionCount =
     pendingGroupInvitations
     + unreadGroupMessages
+
+  const navigationItems: NavigationItem[] = [
+    {
+      to: '/',
+      label: 'Home',
+      mobileLabel: 'Home',
+      icon: 'home',
+      count: 0,
+      countLabel: '',
+    },
+    {
+      to: '/messages',
+      label: 'Direct Messages',
+      mobileLabel: 'DMs',
+      icon: 'messages',
+      count: unreadDirectMessages,
+      countLabel: 'unread direct messages',
+    },
+    {
+      to: '/friends',
+      label: 'Friends',
+      mobileLabel: 'Friends',
+      icon: 'friends',
+      count: pendingFriendRequests,
+      countLabel: 'pending friend requests',
+    },
+    {
+      to: '/groups',
+      label: 'Group Chats',
+      mobileLabel: 'Groups',
+      icon: 'groups',
+      count: groupAttentionCount,
+      countLabel:
+        pendingGroupInvitations > 0
+          ? `${unreadGroupMessages} unread messages and ${pendingGroupInvitations} pending invitations`
+          : 'unread group messages',
+    },
+    {
+      to: '/voice',
+      label: 'Voice Rooms',
+      mobileLabel: 'Voice',
+      icon: 'voice',
+      count: pendingVoiceRoomInvitations,
+      countLabel: 'pending Voice Room invitations',
+    },
+  ]
 
   async function handleLogout() {
     if (isLoggingOut) {
@@ -224,10 +495,10 @@ function AppLayoutContent({
 
   return (
     <div className="app-shell">
-      <nav className="navbar app-navbar sticky-top">
-        <div className="container app-container app-navbar-inner">
+      <header className="app-topbar">
+        <div className="app-topbar-brand-region">
           <NavLink
-            className="navbar-brand app-brand"
+            className="app-brand"
             to="/"
             aria-label="Communication Platform home"
           >
@@ -235,7 +506,20 @@ function AppLayoutContent({
             <span className="app-brand-name">Communication Platform</span>
           </NavLink>
 
-          <MobileAccountNav
+          <span className="app-mobile-section-title">
+            {getSectionTitle(location.pathname)}
+          </span>
+        </div>
+
+        <div
+          className="app-topbar-center"
+          data-voice-dock-slot="true"
+        >
+          <GlobalVoiceDock />
+        </div>
+
+        <div className="app-topbar-account-region">
+          <AccountMenu
             authStatus={authStatus}
             currentUser={currentUser}
             isLoggingOut={isLoggingOut}
@@ -243,247 +527,40 @@ function AppLayoutContent({
               void handleLogout()
             }}
           />
-
-          <div className="navbar-nav app-main-nav flex-row">
-            <NavLink
-              className={
-                navLinkClass
-              }
-              to="/friends"
-            >
-              <span>Friends</span>
-              <ActivityBadge
-                count={pendingFriendRequests}
-                label="pending friend requests"
-              />
-            </NavLink>
-
-            <NavLink
-              className={
-                navLinkClass
-              }
-              to="/messages"
-            >
-              <span>Messages</span>
-              <ActivityBadge
-                count={unreadDirectMessages}
-                label="unread direct messages"
-              />
-            </NavLink>
-
-            <NavLink
-              className={
-                navLinkClass
-              }
-              to="/groups"
-            >
-              <span>Groups</span>
-              <ActivityBadge
-                count={groupAttentionCount}
-                label={
-                  pendingGroupInvitations > 0
-                    ? `${unreadGroupMessages} unread messages and ${pendingGroupInvitations} pending invitations`
-                    : 'unread group messages'
-                }
-              />
-            </NavLink>
-
-            <NavLink
-              className={
-                navLinkClass
-              }
-              to="/voice"
-            >
-              <span>Voice Rooms</span>
-              <ActivityBadge
-                count={
-                  pendingVoiceRoomInvitations
-                }
-                label="pending Voice Room invitations"
-              />
-            </NavLink>
-          </div>
-
-          <div className="app-account-nav ms-auto d-none d-sm-flex align-items-center gap-2">
-            {authStatus ===
-              'authenticated' && (
-              <RealtimeStatusBadge />
-            )}
-
-            {authStatus ===
-              'loading' && (
-              <span className="app-session-label">
-                Loading…
-              </span>
-            )}
-
-            {authStatus ===
-              'authenticated' &&
-              currentUser && (
-                <span className="app-user-chip d-none d-md-inline-flex">
-                  <span className="app-user-avatar" aria-hidden="true">
-                    {currentUser.username.charAt(0).toUpperCase()}
-                  </span>
-                  <strong>{currentUser.username}</strong>
-                </span>
-              )}
-
-            {authStatus ===
-              'authenticated' && (
-                <>
-                  <a
-                    className="btn btn-sm btn-nav-secondary"
-                    href="/accounts/me/"
-                  >
-                    Account
-                  </a>
-
-                  <button
-                    className="btn btn-sm btn-nav-primary"
-                    type="button"
-                    disabled={
-                      isLoggingOut
-                    }
-                    onClick={() => {
-                      void handleLogout()
-                    }}
-                  >
-                    {isLoggingOut
-                      ? 'Signing out…'
-                      : 'Sign out'}
-                  </button>
-                </>
-              )}
-
-            {authStatus ===
-              'anonymous' && (
-              <a
-                className="btn btn-sm btn-nav-secondary"
-                href="/accounts/login/"
-              >
-                Sign in
-              </a>
-            )}
-
-            {authStatus ===
-              'error' && (
-              <span className="app-session-error">
-                Session unavailable
-              </span>
-            )}
-          </div>
         </div>
-      </nav>
+      </header>
 
-      <main className="container app-container app-main py-4 py-md-5">
-        <Outlet />
-      </main>
+      <div className="app-shell-body">
+        <DesktopSidebar
+          navigationItems={navigationItems}
+        />
+
+        <main className="app-main">
+          <div className="container app-container app-content py-4 py-md-5">
+            <Outlet />
+          </div>
+        </main>
+      </div>
+
+      <MobileBottomNavigation
+        navigationItems={navigationItems}
+      />
     </div>
   )
 }
 
 
 function AppLayout() {
-  const [
-    currentUser,
-    setCurrentUser,
-  ] =
-    useState<CurrentUser | null>(
-      null,
-    )
-
-  const [
+  const {
     authStatus,
-    setAuthStatus,
-  ] =
-    useState<AuthStatus>(
-      'loading',
-    )
-
-  useEffect(() => {
-    let cancelled = false
-
-    async function loadCurrentUser() {
-      try {
-        const user =
-          await getCurrentUser()
-
-        if (cancelled) {
-          return
-        }
-
-        setCurrentUser(user)
-        setAuthStatus(
-          'authenticated',
-        )
-      } catch (error) {
-        if (cancelled) {
-          return
-        }
-
-        if (
-          error instanceof
-            ApiError &&
-          error.status === 401
-        ) {
-          setCurrentUser(null)
-          setAuthStatus(
-            'anonymous',
-          )
-          return
-        }
-
-        setCurrentUser(null)
-        setAuthStatus('error')
-      }
-    }
-
-    void loadCurrentUser()
-
-    return () => {
-      cancelled = true
-    }
-  }, [])
+    currentUser,
+  } = useSession()
 
   return (
-    <RealtimeProvider
-      enabled={
-        authStatus ===
-        'authenticated'
-      }
-      currentUserId={
-        currentUser?.id
-      }
-    >
-      <VoiceProvider
-        key={
-          currentUser?.id
-          ?? 'anonymous'
-        }
-        enabled={
-          authStatus ===
-          'authenticated'
-        }
-        currentUserId={
-          currentUser?.id
-        }
-      >
-        <ActivityProvider
-          enabled={
-            authStatus ===
-            'authenticated'
-          }
-          currentUserId={
-            currentUser?.id
-          }
-        >
-          <AppLayoutContent
-            authStatus={authStatus}
-            currentUser={currentUser}
-          />
-        </ActivityProvider>
-      </VoiceProvider>
-    </RealtimeProvider>
+    <AppLayoutContent
+      authStatus={authStatus}
+      currentUser={currentUser}
+    />
   )
 }
 

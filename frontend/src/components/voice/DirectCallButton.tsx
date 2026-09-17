@@ -10,11 +10,19 @@ import {
   useVoice,
 } from '../../voice/useVoice'
 
+import VoiceAudioSettings from './VoiceAudioSettings'
+
 
 type DirectCallButtonProps = {
   otherUser: PublicUser
   canCall: boolean
 }
+
+
+type PendingAction =
+  | 'start'
+  | 'end'
+  | null
 
 
 function DirectCallButton({
@@ -24,46 +32,50 @@ function DirectCallButton({
   const {
     status,
     state,
+    mediaStatus,
+    ownsCurrentParticipation,
+    mutedUserIds,
     startDirectCall,
+    endDirectCall,
+    getParticipantVolume,
+    setParticipantVolume,
+    toggleParticipantMuted,
   } = useVoice()
 
-  const [starting, setStarting] =
-    useState(false)
+  const [pendingAction, setPendingAction] =
+    useState<PendingAction>(null)
 
-  const [
-    localError,
-    setLocalError,
-  ] =
+  const [localError, setLocalError] =
     useState<string | null>(null)
 
   const session = state.session
 
   const hasOpenVoiceSession =
     session !== null
-    &&
-    (
+    && (
       session.status === 'RINGING'
-      ||
-      session.status === 'ACTIVE'
+      || session.status === 'ACTIVE'
     )
 
   const sameDirectCall =
     hasOpenVoiceSession
-    &&
-    session.group_id === null
-    &&
-    (
-      session.caller?.id ===
-        otherUser.id
-      ||
-      session.recipient?.id ===
-        otherUser.id
+    && session.group_id === null
+    && (
+      session.caller?.id === otherUser.id
+      || session.recipient?.id === otherUser.id
     )
 
+  const sameActiveDirectCall =
+    sameDirectCall
+    && session?.status === 'ACTIVE'
 
-  async function handleCall() {
+  const busy =
+    pendingAction !== null
+
+
+  async function handleStartCall() {
     if (
-      starting
+      busy
       || !canCall
       || hasOpenVoiceSession
       || status !== 'ready'
@@ -71,7 +83,7 @@ function DirectCallButton({
       return
     }
 
-    setStarting(true)
+    setPendingAction('start')
     setLocalError(null)
 
     try {
@@ -85,8 +97,146 @@ function DirectCallButton({
           : 'Could not start the voice call.',
       )
     } finally {
-      setStarting(false)
+      setPendingAction(null)
     }
+  }
+
+
+  async function handleEndCall() {
+    if (
+      busy
+      || !sameActiveDirectCall
+      || !session
+    ) {
+      return
+    }
+
+    setPendingAction('end')
+    setLocalError(null)
+
+    try {
+      await endDirectCall(
+        session.id,
+      )
+    } catch (error) {
+      setLocalError(
+        error instanceof Error
+          ? error.message
+          : 'Could not end the voice call.',
+      )
+    } finally {
+      setPendingAction(null)
+    }
+  }
+
+
+  if (
+    sameActiveDirectCall
+    && session
+  ) {
+    const volume =
+      getParticipantVolume(
+        otherUser.id,
+      )
+
+    const mediaControlsEnabled =
+      ownsCurrentParticipation
+      && mediaStatus === 'connected'
+
+    const otherUserMuted =
+      mutedUserIds.includes(
+        otherUser.id,
+      )
+
+    return (
+      <div className="direct-call-active-controls">
+        <span
+          className={`voice-remote-mute-indicator${otherUserMuted ? '' : ' invisible'}`}
+          aria-hidden={!otherUserMuted}
+          title={
+            `@${otherUser.username} muted their microphone`
+          }
+        >
+          Mic muted
+        </span>
+
+        <label
+          className="direct-call-volume-control"
+          title={`Volume for @${otherUser.username}`}
+        >
+          <span className="visually-hidden">
+            Volume for @{otherUser.username}
+          </span>
+          <input
+            className="form-range m-0"
+            type="range"
+            min="0"
+            max="100"
+            step="5"
+            value={
+              Math.round(
+                volume * 100,
+              )
+            }
+            disabled={
+              !mediaControlsEnabled
+            }
+            aria-label={
+              `Volume for @${otherUser.username}`
+            }
+            onChange={(event) => {
+              setParticipantVolume(
+                otherUser.id,
+                Number(
+                  event.target.value,
+                ) / 100,
+              )
+            }}
+          />
+        </label>
+
+        <button
+          className="btn btn-sm btn-outline-secondary text-nowrap"
+          type="button"
+          disabled={
+            !mediaControlsEnabled
+          }
+          onClick={() => {
+            toggleParticipantMuted(
+              otherUser.id,
+            )
+          }}
+        >
+          {volume === 0
+            ? 'Unmute'
+            : 'Mute'}
+        </button>
+
+        <VoiceAudioSettings />
+
+        <button
+          className="btn btn-sm btn-outline-danger text-nowrap"
+          type="button"
+          disabled={busy}
+          onClick={() => {
+            void handleEndCall()
+          }}
+        >
+          {pendingAction === 'end'
+            ? 'Ending…'
+            : 'End call'}
+        </button>
+
+        {localError && (
+          <span
+            className="small text-danger"
+            title={localError}
+          >
+            Call action failed
+          </span>
+        )}
+      </div>
+    )
   }
 
 
@@ -96,11 +246,10 @@ function DirectCallButton({
 
   let disabled = false
 
-  if (starting) {
+  if (pendingAction === 'start') {
     label = 'Calling…'
     disabled = true
   } else if (!canCall) {
-    label = 'Call'
     title =
       'You must be friends to start a voice call.'
     disabled = true
@@ -127,10 +276,7 @@ function DirectCallButton({
       'Voice state could not be loaded.'
     disabled = true
   } else if (sameDirectCall) {
-    label =
-      session?.status === 'RINGING'
-        ? 'Ringing…'
-        : 'In call'
+    label = 'Ringing…'
     disabled = true
   } else if (hasOpenVoiceSession) {
     label = 'Voice busy'
@@ -148,11 +294,13 @@ function DirectCallButton({
         title={title}
         disabled={disabled}
         onClick={() => {
-          void handleCall()
+          void handleStartCall()
         }}
       >
         {label}
       </button>
+
+      <VoiceAudioSettings />
 
       {localError && (
         <span

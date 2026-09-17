@@ -19,10 +19,11 @@ import {
   unfriend,
 } from '../api/friendships'
 import { searchUsers } from '../api/users'
+import Avatar from '../components/users/Avatar'
 import {
   useRealtime,
   useRealtimeEvent,
-} from '../realtime/RealtimeContext'
+} from '../realtime/useRealtime'
 
 import type { FriendRequest } from '../types/friendships'
 import type { PublicUser } from '../types/users'
@@ -317,101 +318,23 @@ function FriendsPage() {
   }
 
   return (
-    <section>
-      <div className="mb-4">
-        <h1 className="h2 mb-1">
-          Friends
-        </h1>
-        <p className="text-secondary mb-0">
-          Find people by username and manage friendships.
-        </p>
-      </div>
-
-      <div className="card shadow-sm mb-4">
-        <div className="card-body">
-          <h2 className="h5 mb-3">
-            Find people
-          </h2>
-
-          <form
-            className="d-flex gap-2"
-            onSubmit={handleSearch}
-          >
-            <input
-              className="form-control"
-              type="search"
-              value={searchText}
-              onChange={(event) =>
-                setSearchText(
-                  event.target.value,
-                )
-              }
-              onKeyDown={submitOnEnter}
-              placeholder="Search by username"
-              aria-label="Search by username"
-            />
-
-            <button
-              className="btn btn-primary"
-              type="submit"
-              disabled={
-                searching ||
-                !searchText.trim()
-              }
-            >
-              {searching
-                ? 'Searching…'
-                : 'Search'}
-            </button>
-          </form>
-
-          {hasSearched && (
-            <div className="mt-3">
-              {searchResults.length === 0 ? (
-                <p className="text-secondary mb-0">
-                  No users found.
-                </p>
-              ) : (
-                <div className="list-group">
-                  {searchResults.map(
-                    (user) => {
-                      const key =
-                        `send-${user.id}`
-
-                      return (
-                        <div
-                          className="list-group-item d-flex justify-content-between align-items-center gap-3"
-                          key={user.id}
-                        >
-                          <UserIdentity
-                            user={user}
-                          />
-
-                          <button
-                            className="btn btn-sm btn-primary"
-                            type="button"
-                            disabled={
-                              busyAction !== null
-                            }
-                            onClick={() =>
-                              void handleAddFriend(
-                                user,
-                              )
-                            }
-                          >
-                            {busyAction === key
-                              ? 'Sending…'
-                              : 'Add friend'}
-                          </button>
-                        </div>
-                      )
-                    },
-                  )}
-                </div>
-              )}
-            </div>
-          )}
+    <section className="friends-page">
+      <div className="directory-page-header">
+        <div>
+          <h1 className="directory-page-title mb-1">
+            Friends
+          </h1>
+          <p className="directory-page-subtitle mb-0">
+            Keep up with friends and manage connection requests.
+          </p>
         </div>
+
+        <span className="directory-count-pill">
+          {friends.length}{' '}
+          {friends.length === 1
+            ? 'friend'
+            : 'friends'}
+        </span>
       </div>
 
       {actionError && (
@@ -420,36 +343,46 @@ function FriendsPage() {
         </div>
       )}
 
-      <div className="row g-4">
-        <div className="col-lg-4">
-          <FriendCard
-            title="Friends"
-            count={friends.length}
-          >
+      <div className="friends-layout">
+        <div className="friends-primary-column">
+          <section className="directory-surface">
+            <div className="directory-section-header">
+              <div>
+                <h2 className="directory-section-title">
+                  Your friends
+                </h2>
+                <p className="directory-section-subtitle mb-0">
+                  People you can message and see online.
+                </p>
+              </div>
+            </div>
+
             {friends.length === 0 ? (
-              <EmptyState text="No friends yet." />
+              <DirectoryEmpty
+                title="No friends yet"
+                text="Search for someone by username to send your first request."
+              />
             ) : (
-              <div className="list-group list-group-flush">
+              <div className="directory-list">
                 {friends.map((friend) => {
                   const key =
                     `unfriend-${friend.id}`
 
                   return (
                     <div
-                      className="list-group-item px-0 d-flex justify-content-between align-items-center gap-3"
+                      className="directory-list-row"
                       key={friend.id}
                     >
                       <UserIdentity
                         user={friend}
                         showPresence
+                        size="md"
                       />
 
                       <button
-                        className="btn btn-sm btn-outline-danger"
+                        className="btn btn-sm btn-outline-danger directory-row-action"
                         type="button"
-                        disabled={
-                          busyAction !== null
-                        }
+                        disabled={busyAction !== null}
                         onClick={() =>
                           void runAction(
                             key,
@@ -469,18 +402,128 @@ function FriendsPage() {
                 })}
               </div>
             )}
-          </FriendCard>
+          </section>
         </div>
 
-        <div className="col-lg-4">
-          <FriendCard
-            title="Incoming"
-            count={incoming.length}
-          >
+        <div className="friends-secondary-column">
+          <section className="directory-surface">
+            <div className="directory-section-header">
+              <div>
+                <h2 className="directory-section-title">
+                  Find people
+                </h2>
+                <p className="directory-section-subtitle mb-0">
+                  Search by exact or partial username.
+                </p>
+              </div>
+            </div>
+
+            <form
+              className="directory-search-form"
+              onSubmit={handleSearch}
+            >
+              <input
+                className="form-control directory-search-input"
+                type="search"
+                value={searchText}
+                onChange={(event) =>
+                  setSearchText(
+                    event.target.value,
+                  )
+                }
+                onKeyDown={submitOnEnter}
+                placeholder="Search usernames"
+                aria-label="Search by username"
+              />
+
+              <button
+                className="btn btn-primary"
+                type="submit"
+                disabled={
+                  searching
+                  || !searchText.trim()
+                }
+              >
+                {searching
+                  ? 'Searching…'
+                  : 'Search'}
+              </button>
+            </form>
+
+            {hasSearched && (
+              <div className="directory-search-results">
+                {searchResults.length === 0 ? (
+                  <p className="small text-secondary mb-0 py-2">
+                    No users found.
+                  </p>
+                ) : (
+                  <div className="directory-list directory-list-compact">
+                    {searchResults.map(
+                      (user) => {
+                        const key =
+                          `send-${user.id}`
+
+                        return (
+                          <div
+                            className="directory-list-row"
+                            key={user.id}
+                          >
+                            <UserIdentity
+                              user={user}
+                              size="sm"
+                            />
+
+                            <button
+                              className="btn btn-sm btn-primary directory-row-action"
+                              type="button"
+                              disabled={busyAction !== null}
+                              onClick={() =>
+                                void handleAddFriend(
+                                  user,
+                                )
+                              }
+                            >
+                              {busyAction === key
+                                ? 'Sending…'
+                                : 'Add'}
+                            </button>
+                          </div>
+                        )
+                      },
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+          </section>
+
+          <section className="directory-surface">
+            <div className="directory-section-header">
+              <div>
+                <h2 className="directory-section-title">
+                  Incoming requests
+                </h2>
+                <p className="directory-section-subtitle mb-0">
+                  {incoming.length === 0
+                    ? 'Nothing waiting for you.'
+                    : `${incoming.length} waiting for your response.`}
+                </p>
+              </div>
+
+              {incoming.length > 0 && (
+                <span className="directory-section-count">
+                  {incoming.length}
+                </span>
+              )}
+            </div>
+
             {incoming.length === 0 ? (
-              <EmptyState text="No incoming requests." />
+              <DirectoryEmpty
+                compact
+                title="No incoming requests"
+              />
             ) : (
-              <div className="list-group list-group-flush">
+              <div className="directory-list directory-list-compact">
                 {incoming.map((request) => {
                   const acceptKey =
                     `accept-${request.id}`
@@ -489,20 +532,19 @@ function FriendsPage() {
 
                   return (
                     <div
-                      className="list-group-item px-0"
+                      className="directory-request-row"
                       key={request.id}
                     >
                       <UserIdentity
                         user={request.sender}
+                        size="sm"
                       />
 
-                      <div className="d-flex gap-2 mt-3">
+                      <div className="directory-request-actions">
                         <button
                           className="btn btn-sm btn-primary"
                           type="button"
-                          disabled={
-                            busyAction !== null
-                          }
+                          disabled={busyAction !== null}
                           onClick={() =>
                             void runAction(
                               acceptKey,
@@ -513,8 +555,7 @@ function FriendsPage() {
                             )
                           }
                         >
-                          {busyAction ===
-                          acceptKey
+                          {busyAction === acceptKey
                             ? 'Accepting…'
                             : 'Accept'}
                         </button>
@@ -522,9 +563,7 @@ function FriendsPage() {
                         <button
                           className="btn btn-sm btn-outline-secondary"
                           type="button"
-                          disabled={
-                            busyAction !== null
-                          }
+                          disabled={busyAction !== null}
                           onClick={() =>
                             void runAction(
                               rejectKey,
@@ -535,8 +574,7 @@ function FriendsPage() {
                             )
                           }
                         >
-                          {busyAction ===
-                          rejectKey
+                          {busyAction === rejectKey
                             ? 'Rejecting…'
                             : 'Reject'}
                         </button>
@@ -546,39 +584,51 @@ function FriendsPage() {
                 })}
               </div>
             )}
-          </FriendCard>
-        </div>
+          </section>
 
-        <div className="col-lg-4">
-          <FriendCard
-            title="Outgoing"
-            count={outgoing.length}
-          >
+          <section className="directory-surface">
+            <div className="directory-section-header">
+              <div>
+                <h2 className="directory-section-title">
+                  Sent requests
+                </h2>
+                <p className="directory-section-subtitle mb-0">
+                  Requests waiting for someone else.
+                </p>
+              </div>
+
+              {outgoing.length > 0 && (
+                <span className="directory-section-count">
+                  {outgoing.length}
+                </span>
+              )}
+            </div>
+
             {outgoing.length === 0 ? (
-              <EmptyState text="No outgoing requests." />
+              <DirectoryEmpty
+                compact
+                title="No sent requests"
+              />
             ) : (
-              <div className="list-group list-group-flush">
+              <div className="directory-list directory-list-compact">
                 {outgoing.map((request) => {
                   const key =
                     `cancel-${request.id}`
 
                   return (
                     <div
-                      className="list-group-item px-0 d-flex justify-content-between align-items-center gap-3"
+                      className="directory-list-row"
                       key={request.id}
                     >
                       <UserIdentity
-                        user={
-                          request.recipient
-                        }
+                        user={request.recipient}
+                        size="sm"
                       />
 
                       <button
-                        className="btn btn-sm btn-outline-secondary"
+                        className="btn btn-sm btn-outline-secondary directory-row-action"
                         type="button"
-                        disabled={
-                          busyAction !== null
-                        }
+                        disabled={busyAction !== null}
                         onClick={() =>
                           void runAction(
                             key,
@@ -598,90 +648,84 @@ function FriendsPage() {
                 })}
               </div>
             )}
-          </FriendCard>
+          </section>
         </div>
       </div>
     </section>
   )
 }
 
-type FriendCardProps = {
-  title: string
-  count: number
-  children: React.ReactNode
-}
-
-function FriendCard({
+function DirectoryEmpty({
   title,
-  count,
-  children,
-}: FriendCardProps) {
-  return (
-    <div className="card shadow-sm h-100">
-      <div className="card-body">
-        <div className="d-flex justify-content-between align-items-center mb-3">
-          <h2 className="h5 mb-0">
-            {title}
-          </h2>
-
-          <span className="badge text-bg-secondary">
-            {count}
-          </span>
-        </div>
-
-        {children}
-      </div>
-    </div>
-  )
-}
-
-function EmptyState({
   text,
+  compact = false,
 }: {
-  text: string
+  title: string
+  text?: string
+  compact?: boolean
 }) {
   return (
-    <p className="text-secondary mb-0 py-2">
-      {text}
-    </p>
+    <div
+      className={
+        `directory-empty${compact ? ' directory-empty-compact' : ''}`
+      }
+    >
+      <div className="fw-semibold">
+        {title}
+      </div>
+      {text && (
+        <p className="small text-secondary mb-0">
+          {text}
+        </p>
+      )}
+    </div>
   )
 }
 
 function UserIdentity({
   user,
   showPresence = false,
+  size = 'md',
 }: {
   user: PublicUser
   showPresence?: boolean
+  size?: 'sm' | 'md'
 }) {
   const {
     isUserOnline,
   } = useRealtime()
 
   const online =
-    showPresence &&
-    isUserOnline(user.id)
-  return (
-    <div>
-      <div className="fw-semibold d-flex align-items-center gap-2">
-        <span>
-          @{user.username}
-        </span>
+    showPresence
+    && isUserOnline(user.id)
 
+  return (
+    <div className="directory-user-identity">
+      <span className="directory-user-avatar-wrap">
+        <Avatar
+          user={user}
+          size={size}
+          alt=""
+        />
         {showPresence && (
           <span
-            className={
-              online
-                ? 'badge text-bg-success'
-                : 'badge text-bg-secondary'
-            }
-          >
-            {online
-              ? 'Online'
-              : 'Offline'}
+            className={`directory-presence-dot${online ? ' is-online' : ''}`}
+            title={online ? 'Online' : 'Offline'}
+            aria-hidden="true"
+          />
+        )}
+      </span>
+
+      <span className="directory-user-copy">
+        <span className="directory-user-name">
+          @{user.username}
+        </span>
+        {showPresence && online && (
+          <span className="directory-user-state">
+            Online
           </span>
         )}
-      </div>
+      </span>
     </div>
   )
 }

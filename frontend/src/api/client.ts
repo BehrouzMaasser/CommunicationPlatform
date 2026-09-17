@@ -345,3 +345,43 @@ export function apiDelete<T>(
     },
   )
 }
+
+
+export async function apiGetBlob(
+  url: string,
+  signal?: AbortSignal,
+): Promise<Blob> {
+  const response =
+    await fetch(
+      url,
+      {
+        method: 'GET',
+        headers: {
+          Accept: '*/*',
+        },
+        credentials:
+          'same-origin',
+        mode:
+          'same-origin',
+        signal,
+      },
+    )
+
+  if (!response.ok) {
+    const data =
+      await readResponseBody(
+        response,
+      )
+
+    throw new ApiError(
+      response.status,
+      getErrorMessage(
+        response,
+        data,
+      ),
+      data,
+    )
+  }
+
+  return response.blob()
+}

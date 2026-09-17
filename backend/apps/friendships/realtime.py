@@ -1,3 +1,4 @@
+from apps.accounts.avatar_urls import build_avatar_url
 from apps.realtime.events import RealtimeEventType
 from apps.realtime.publisher import RealtimePublisher
 
@@ -6,9 +7,9 @@ class FriendshipRealtimePublisher:
     """
     Realtime adapter for committed friendship-domain mutations.
 
-    Only primitive identifiers/public usernames are passed into this adapter.
-    That is deliberate: accept/reject/cancel/remove operations delete rows, so
-    event publication must not depend on lazy model access after deletion.
+    Only primitive user data is passed into this adapter. That is deliberate:
+    accept/reject/cancel/remove operations delete rows, so event publication
+    must not depend on lazy access to those deleted relationship rows.
     """
 
     @staticmethod
@@ -16,10 +17,15 @@ class FriendshipRealtimePublisher:
         *,
         user_id: int,
         username: str,
+        avatar_name: str | None = None,
     ) -> dict:
         return {
             "id": user_id,
             "username": username,
+            "avatar_url": build_avatar_url(
+                user_id=user_id,
+                avatar_name=avatar_name,
+            ),
         }
 
     @classmethod
@@ -31,6 +37,8 @@ class FriendshipRealtimePublisher:
         sender_username: str,
         recipient_id: int,
         recipient_username: str,
+        sender_avatar_name: str | None = None,
+        recipient_avatar_name: str | None = None,
     ) -> None:
         RealtimePublisher.publish_to_users_after_commit(
             user_ids=[
@@ -46,10 +54,12 @@ class FriendshipRealtimePublisher:
                 "sender": cls._user_payload(
                     user_id=sender_id,
                     username=sender_username,
+                    avatar_name=sender_avatar_name,
                 ),
                 "recipient": cls._user_payload(
                     user_id=recipient_id,
                     username=recipient_username,
+                    avatar_name=recipient_avatar_name,
                 ),
             },
         )
@@ -64,6 +74,8 @@ class FriendshipRealtimePublisher:
         recipient_id: int,
         recipient_username: str,
         friendship_id: int,
+        sender_avatar_name: str | None = None,
+        recipient_avatar_name: str | None = None,
     ) -> None:
         RealtimePublisher.publish_to_users_after_commit(
             user_ids=[
@@ -80,10 +92,12 @@ class FriendshipRealtimePublisher:
                 "sender": cls._user_payload(
                     user_id=sender_id,
                     username=sender_username,
+                    avatar_name=sender_avatar_name,
                 ),
                 "recipient": cls._user_payload(
                     user_id=recipient_id,
                     username=recipient_username,
+                    avatar_name=recipient_avatar_name,
                 ),
             },
         )
@@ -97,6 +111,8 @@ class FriendshipRealtimePublisher:
         sender_username: str,
         recipient_id: int,
         recipient_username: str,
+        sender_avatar_name: str | None = None,
+        recipient_avatar_name: str | None = None,
     ) -> None:
         RealtimePublisher.publish_to_users_after_commit(
             user_ids=[
@@ -112,10 +128,12 @@ class FriendshipRealtimePublisher:
                 "sender": cls._user_payload(
                     user_id=sender_id,
                     username=sender_username,
+                    avatar_name=sender_avatar_name,
                 ),
                 "recipient": cls._user_payload(
                     user_id=recipient_id,
                     username=recipient_username,
+                    avatar_name=recipient_avatar_name,
                 ),
             },
         )
@@ -129,6 +147,8 @@ class FriendshipRealtimePublisher:
         sender_username: str,
         recipient_id: int,
         recipient_username: str,
+        sender_avatar_name: str | None = None,
+        recipient_avatar_name: str | None = None,
     ) -> None:
         RealtimePublisher.publish_to_users_after_commit(
             user_ids=[
@@ -144,10 +164,12 @@ class FriendshipRealtimePublisher:
                 "sender": cls._user_payload(
                     user_id=sender_id,
                     username=sender_username,
+                    avatar_name=sender_avatar_name,
                 ),
                 "recipient": cls._user_payload(
                     user_id=recipient_id,
                     username=recipient_username,
+                    avatar_name=recipient_avatar_name,
                 ),
             },
         )
@@ -160,6 +182,8 @@ class FriendshipRealtimePublisher:
         user_a_username: str,
         user_b_id: int,
         user_b_username: str,
+        user_a_avatar_name: str | None = None,
+        user_b_avatar_name: str | None = None,
     ) -> None:
         RealtimePublisher.publish_to_users_after_commit(
             user_ids=[
@@ -174,10 +198,12 @@ class FriendshipRealtimePublisher:
                 "user_a": cls._user_payload(
                     user_id=user_a_id,
                     username=user_a_username,
+                    avatar_name=user_a_avatar_name,
                 ),
                 "user_b": cls._user_payload(
                     user_id=user_b_id,
                     username=user_b_username,
+                    avatar_name=user_b_avatar_name,
                 ),
             },
         )

@@ -1,14 +1,21 @@
 import type {
+  LocalAudioTrack,
   Participant,
   RemoteParticipant,
   RemoteTrack,
   RemoteTrackPublication,
   Room,
+  TrackPublication,
 } from 'livekit-client'
 
 import type {
   VoiceMediaCredentials,
 } from '../types/voice'
+
+import {
+  VoiceNoiseGateProcessor,
+  normalizeVoiceNoiseGateThresholdDb,
+} from './noiseGateProcessor'
 
 
 type LiveKitModule =
@@ -48,6 +55,22 @@ type AudioPlaybackRequiredListener = (
 ) => void
 
 
+type MutedMicrophonesListener = (
+  participantIdentities: string[],
+) => void
+
+
+export type VoiceMediaConnectionStatus =
+  | 'disconnected'
+  | 'connecting'
+  | 'connected'
+
+
+type ConnectionStatusListener = (
+  status: VoiceMediaConnectionStatus,
+) => void
+
+
 function clampVolume(
   value: number,
 ): number {
@@ -80,12 +103,28 @@ export class VoiceMediaClient {
   private participantVolumes =
     new Map<string, number>()
 
+  private outputMuted = false
+
+  private outputVolume = 1
+
+  private microphoneNoiseGateThresholdDb:
+    number | null = null
+
+  private noiseGateProcessor:
+    VoiceNoiseGateProcessor | null = null
+
   private activeSpeakersListener:
     ActiveSpeakersListener | null = null
 
   private audioPlaybackRequiredListener:
     AudioPlaybackRequiredListener | null =
       null
+
+  private mutedMicrophonesListener:
+    MutedMicrophonesListener | null = null
+
+  private connectionStatusListener:
+    ConnectionStatusListener | null = null
 
 
   get currentRoom(): Room | null {
@@ -136,6 +175,87 @@ export class VoiceMediaClient {
   }
 
 
+  setMutedMicrophonesListener(
+    listener:
+      MutedMicrophonesListener | null,
+  ): void {
+    this.mutedMicrophonesListener =
+      listener
+
+    this.emitMutedMicrophones()
+  }
+
+
+  setConnectionStatusListener(
+    listener:
+      ConnectionStatusListener | null,
+  ): void {
+    this.connectionStatusListener =
+      listener
+
+    listener?.(
+      this.isConnected
+        ? 'connected'
+        : this.connecting
+          ? 'connecting'
+          : 'disconnected',
+    )
+  }
+
+
+  setOutputMuted(
+    muted: boolean,
+  ): void {
+    this.outputMuted = muted
+
+    for (const element of this.audioElements) {
+      element.muted = muted
+    }
+  }
+
+
+  setOutputVolume(
+    volume: number,
+  ): void {
+    this.outputVolume =
+      clampVolume(volume)
+
+    for (
+      const participant
+      of this.room
+        ?.remoteParticipants
+        .values() ?? []
+    ) {
+      const participantVolume =
+        this.participantVolumes.get(
+          participant.identity,
+        ) ?? 1
+
+      participant.setVolume(
+        participantVolume
+        * this.outputVolume,
+      )
+    }
+  }
+
+
+  async switchAudioOutputDevice(
+    deviceId: string,
+  ): Promise<boolean> {
+    if (!this.room) {
+      throw new Error(
+        'Voice media is not connected.',
+      )
+    }
+
+    return this.room
+      .switchActiveDevice(
+        'audiooutput',
+        deviceId,
+      )
+  }
+
+
   setParticipantVolume(
     participationId: string,
     volume: number,
@@ -159,8 +279,21 @@ export class VoiceMediaClient {
         .get(identity)
 
     participant?.setVolume(
-      normalized,
+      normalized
+      * this.outputVolume,
     )
+  }
+
+
+  async setMicrophoneNoiseGateThresholdDb(
+    thresholdDb: number | null,
+  ): Promise<void> {
+    this.microphoneNoiseGateThresholdDb =
+      normalizeVoiceNoiseGateThresholdDb(
+        thresholdDb,
+      )
+
+    await this.applyMicrophoneNoiseGate()
   }
 
 
@@ -178,6 +311,9 @@ export class VoiceMediaClient {
     }
 
     this.connecting = true
+    this.emitConnectionStatus(
+      'connecting',
+    )
 
     try {
       const liveKit =
@@ -223,6 +359,48 @@ export class VoiceMediaClient {
         this.handleTrackUnsubscribed,
       )
 
+      room.on(
+        liveKit
+          .RoomEvent
+          .TrackMuted,
+        this.handleTrackMuteChanged,
+      )
+
+      room.on(
+        liveKit
+          .RoomEvent
+          .TrackUnmuted,
+        this.handleTrackMuteChanged,
+      )
+
+      room.on(
+        liveKit
+          .RoomEvent
+          .ParticipantDisconnected,
+        this.handleParticipantDisconnected,
+      )
+
+      room.on(
+        liveKit
+          .RoomEvent
+          .Reconnecting,
+        this.handleRoomReconnecting,
+      )
+
+      room.on(
+        liveKit
+          .RoomEvent
+          .Reconnected,
+        this.handleRoomReconnected,
+      )
+
+      room.on(
+        liveKit
+          .RoomEvent
+          .Disconnected,
+        this.handleRoomDisconnected,
+      )
+
       try {
         await room.connect(
           credentials.server_url,
@@ -234,6 +412,10 @@ export class VoiceMediaClient {
         )
 
         this.emitAudioPlaybackRequired()
+        this.emitMutedMicrophones()
+        this.emitConnectionStatus(
+          'connected',
+        )
       } catch (error) {
         if (
           this.room === room
@@ -244,6 +426,10 @@ export class VoiceMediaClient {
         this.unbindRoom(room)
 
         await room.disconnect()
+
+        this.emitConnectionStatus(
+          'disconnected',
+        )
 
         throw error
       }
@@ -284,6 +470,10 @@ export class VoiceMediaClient {
           MICROPHONE_OPTIONS,
         )
     )
+
+    if (enabled) {
+      await this.applyMicrophoneNoiseGate()
+    }
   }
 
 
@@ -296,8 +486,13 @@ export class VoiceMediaClient {
     if (!room) {
       this.removeAudioElements()
       this.participantVolumes.clear()
+      this.noiseGateProcessor = null
       this.emitActiveSpeakers([])
+      this.emitMutedMicrophones()
       this.emitAudioPlaybackRequired()
+      this.emitConnectionStatus(
+        'disconnected',
+      )
       return
     }
 
@@ -325,10 +520,16 @@ export class VoiceMediaClient {
 
     this.removeAudioElements()
     this.participantVolumes.clear()
+    this.noiseGateProcessor = null
     this.emitActiveSpeakers([])
+    this.emitMutedMicrophones()
     this.emitAudioPlaybackRequired()
 
     await room.disconnect(true)
+
+    this.emitConnectionStatus(
+      'disconnected',
+    )
   }
 
 
@@ -395,10 +596,183 @@ export class VoiceMediaClient {
   }
 
 
+  private readonly handleRoomReconnecting =
+    (): void => {
+      this.emitConnectionStatus(
+        'connecting',
+      )
+    }
+
+
+  private readonly handleRoomReconnected =
+    (): void => {
+      this.emitConnectionStatus(
+        'connected',
+      )
+    }
+
+
+  private readonly handleRoomDisconnected =
+    (): void => {
+      const room = this.room
+
+      if (!room) {
+        this.emitConnectionStatus(
+          'disconnected',
+        )
+        return
+      }
+
+      this.room = null
+      this.stopLocalMicrophone(room)
+      this.unbindRoom(room)
+      this.removeAudioElements()
+      this.noiseGateProcessor = null
+      this.emitActiveSpeakers([])
+      this.emitMutedMicrophones()
+      this.emitAudioPlaybackRequired()
+      this.emitConnectionStatus(
+        'disconnected',
+      )
+    }
+
+
+  private readonly handleTrackMuteChanged = (
+    publication: TrackPublication,
+  ): void => {
+    const liveKit = this.liveKit
+
+    if (
+      !liveKit
+      || publication.source
+        !== liveKit.Track.Source.Microphone
+    ) {
+      return
+    }
+
+    this.emitMutedMicrophones()
+  }
+
+
+  private readonly handleParticipantDisconnected =
+    (): void => {
+      this.emitMutedMicrophones()
+    }
+
+
+  private emitMutedMicrophones(): void {
+    const liveKit = this.liveKit
+    const room = this.room
+
+    if (!liveKit || !room) {
+      this.mutedMicrophonesListener?.([])
+      return
+    }
+
+    const identities: string[] = []
+
+    for (
+      const participant
+      of room.remoteParticipants.values()
+    ) {
+      const publication =
+        participant.getTrackPublication(
+          liveKit.Track.Source.Microphone,
+        )
+
+      if (publication?.isMuted) {
+        identities.push(
+          participant.identity,
+        )
+      }
+    }
+
+    this.mutedMicrophonesListener?.(
+      identities,
+    )
+  }
+
+
+  private async applyMicrophoneNoiseGate():
+  Promise<void> {
+    const liveKit = this.liveKit
+    const room = this.room
+
+    if (!liveKit || !room) {
+      return
+    }
+
+    const publication =
+      room.localParticipant
+        .getTrackPublication(
+          liveKit.Track.Source.Microphone,
+        )
+
+    const track = publication?.track
+
+    if (
+      !track
+      || track.kind
+        !== liveKit.Track.Kind.Audio
+    ) {
+      return
+    }
+
+    const audioTrack =
+      track as LocalAudioTrack
+
+    const threshold =
+      this.microphoneNoiseGateThresholdDb
+
+    const currentProcessor =
+      audioTrack.getProcessor()
+
+    if (threshold === null) {
+      if (
+        currentProcessor?.name
+        === 'communication-platform-noise-gate'
+      ) {
+        await audioTrack.stopProcessor()
+      }
+
+      this.noiseGateProcessor = null
+      return
+    }
+
+    if (
+      currentProcessor?.name
+      === 'communication-platform-noise-gate'
+      && this.noiseGateProcessor
+    ) {
+      this.noiseGateProcessor
+        .setThresholdDb(threshold)
+      return
+    }
+
+    const processor =
+      new VoiceNoiseGateProcessor(
+        threshold,
+      )
+
+    await audioTrack.setProcessor(processor)
+
+    this.noiseGateProcessor = processor
+  }
+
+
   private readonly handleAudioPlaybackStatusChanged =
     (): void => {
       this.emitAudioPlaybackRequired()
     }
+
+
+  private emitConnectionStatus(
+    status: VoiceMediaConnectionStatus,
+  ): void {
+    this.connectionStatusListener?.(
+      status,
+    )
+  }
 
 
   private emitAudioPlaybackRequired():
@@ -452,14 +826,16 @@ export class VoiceMediaClient {
         participant.identity,
       )
 
-    if (volume !== undefined) {
-      participant.setVolume(volume)
-    }
+    participant.setVolume(
+      (volume ?? 1)
+      * this.outputVolume,
+    )
 
     const element =
       track.attach()
 
     element.autoplay = true
+    element.muted = this.outputMuted
 
     element.setAttribute(
       'data-voice-audio',
@@ -530,6 +906,48 @@ export class VoiceMediaClient {
         .RoomEvent
         .TrackUnsubscribed,
       this.handleTrackUnsubscribed,
+    )
+
+    room.off(
+      liveKit
+        .RoomEvent
+        .TrackMuted,
+      this.handleTrackMuteChanged,
+    )
+
+    room.off(
+      liveKit
+        .RoomEvent
+        .TrackUnmuted,
+      this.handleTrackMuteChanged,
+    )
+
+    room.off(
+      liveKit
+        .RoomEvent
+        .ParticipantDisconnected,
+      this.handleParticipantDisconnected,
+    )
+
+    room.off(
+      liveKit
+        .RoomEvent
+        .Reconnecting,
+      this.handleRoomReconnecting,
+    )
+
+    room.off(
+      liveKit
+        .RoomEvent
+        .Reconnected,
+      this.handleRoomReconnected,
+    )
+
+    room.off(
+      liveKit
+        .RoomEvent
+        .Disconnected,
+      this.handleRoomDisconnected,
     )
   }
 

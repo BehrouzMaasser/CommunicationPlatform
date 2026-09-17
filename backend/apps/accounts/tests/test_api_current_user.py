@@ -39,6 +39,9 @@ class CurrentUserApiTests(APITestCase):
             response.data["email"],
             "alice@example.com",
         )
+        self.assertIsNone(
+            response.data["avatar_url"],
+        )
 
     def test_anonymous_user_gets_401(self):
         response = self.client.get(

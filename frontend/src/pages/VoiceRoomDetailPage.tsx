@@ -11,6 +11,9 @@ import {
 } from 'react-router-dom'
 
 import { ApiError } from '../api/client'
+import Avatar from '../components/users/Avatar'
+import VoiceAudioSettings from '../components/voice/VoiceAudioSettings'
+import VoiceRoomAvatar from '../components/voice/VoiceRoomAvatar'
 import VoiceRoomManagement from '../components/voice/VoiceRoomManagement'
 import {
   deleteVoiceRoom,
@@ -18,12 +21,14 @@ import {
   getVoiceRoomMembers,
   getVoiceRoomVoiceState,
   leaveVoiceRoomMembership,
+  removeVoiceRoomAvatar,
   removeVoiceRoomMember,
   renameVoiceRoom,
+  updateVoiceRoomAvatar,
 } from '../api/voice'
 import {
   useRealtimeEvent,
-} from '../realtime/RealtimeContext'
+} from '../realtime/useRealtime'
 import {
   useVoice,
 } from '../voice/useVoice'
@@ -80,6 +85,7 @@ function VoiceRoomDetailPage() {
     ownsCurrentParticipation,
     microphoneEnabled,
     speakingUserIds,
+    mutedUserIds,
     error: voiceError,
     refresh: refreshGlobalVoice,
     joinVoiceRoom,
@@ -117,11 +123,13 @@ function VoiceRoomDetailPage() {
 
   const [renameText, setRenameText] =
     useState('')
+  const [avatarFile, setAvatarFile] =
+    useState<File | null>(null)
 
   const [
     roomSettingsBusy,
     setRoomSettingsBusy,
-  ] = useState<'rename' | 'delete' | null>(
+  ] = useState<'rename' | 'delete' | 'avatar' | null>(
     null,
   )
 
@@ -389,6 +397,12 @@ function VoiceRoomDetailPage() {
 
 
   useRealtimeEvent<RoomVoiceEventPayload>(
+    'voice_room.avatar_updated',
+    handleRoomRenamed,
+  )
+
+
+  useRealtimeEvent<RoomVoiceEventPayload>(
     'voice_room.deleted',
     handleRoomDeleted,
   )
@@ -468,6 +482,56 @@ function VoiceRoomDetailPage() {
     }
   }, [roomId])
 
+
+  async function handleAvatarUpload(
+    event: FormEvent<HTMLFormElement>,
+  ) {
+    event.preventDefault()
+
+    if (!roomId || !avatarFile || roomSettingsBusy !== null) {
+      return
+    }
+
+    setRoomSettingsBusy('avatar')
+    setRoomSettingsError(null)
+    setRoomSettingsNotice(null)
+
+    try {
+      const updated = await updateVoiceRoomAvatar(
+        roomId,
+        avatarFile,
+      )
+      setRoom(updated)
+      setAvatarFile(null)
+      event.currentTarget.reset()
+      setRoomSettingsNotice('Voice Room avatar updated.')
+    } catch (requestError) {
+      setRoomSettingsError(errorText(requestError))
+    } finally {
+      setRoomSettingsBusy(null)
+    }
+  }
+
+  async function handleAvatarRemove() {
+    if (!roomId || roomSettingsBusy !== null) {
+      return
+    }
+
+    setRoomSettingsBusy('avatar')
+    setRoomSettingsError(null)
+    setRoomSettingsNotice(null)
+
+    try {
+      const updated = await removeVoiceRoomAvatar(roomId)
+      setRoom(updated)
+      setAvatarFile(null)
+      setRoomSettingsNotice('Voice Room avatar removed.')
+    } catch (requestError) {
+      setRoomSettingsError(errorText(requestError))
+    } finally {
+      setRoomSettingsBusy(null)
+    }
+  }
 
   async function handleRenameRoom(
     event: FormEvent<HTMLFormElement>,
@@ -771,14 +835,21 @@ function VoiceRoomDetailPage() {
         </Link>
 
         <div className="d-flex flex-column flex-md-row justify-content-between gap-3">
-          <div>
-            <h1 className="h2 mb-1">
-              {room.name}
-            </h1>
+          <div className="d-flex align-items-center gap-3">
+            <VoiceRoomAvatar
+              name={room.name}
+              avatarUrl={room.avatar_url}
+              size="lg"
+            />
+            <div>
+              <h1 className="h2 mb-1">
+                {room.name}
+              </h1>
 
-            <p className="text-secondary mb-0">
-              Owned by @{room.owner.username}
-            </p>
+              <p className="text-secondary mb-0">
+                Owned by @{room.owner.username}
+              </p>
+            </div>
           </div>
 
           <div className="align-self-md-start d-flex align-items-center gap-2">
@@ -825,144 +896,7 @@ function VoiceRoomDetailPage() {
             )}
           </div>
 
-          {roomParticipants.length === 0 ? (
-            <p className="text-secondary">
-              Nobody is connected.
-            </p>
-          ) : (
-            <div className="mb-3">
-              <div className="small text-secondary mb-2">
-                Connected
-              </div>
-
-              <div className="d-flex flex-column gap-2">
-                {roomParticipants.map(
-                  (participation) => {
-                    const isCurrentUser =
-                      participation.user.id ===
-                        currentUserId
-
-                    const volumePercent =
-                      Math.round(
-                        getParticipantVolume(
-                          participation.user.id,
-                        ) * 100,
-                      )
-
-                    const isSpeaking =
-                      speakingUserIds.includes(
-                        participation.user.id,
-                      )
-                      && (
-                        !isCurrentUser
-                        || microphoneEnabled
-                      )
-
-                    return (
-                      <div
-                        className={
-                          `voice-participant-row d-flex flex-column flex-sm-row align-items-sm-center justify-content-between gap-2${
-                            isSpeaking
-                              ? ' voice-participant-row-speaking'
-                              : ''
-                          }`
-                        }
-                        key={participation.id}
-                      >
-                        <div className="d-flex align-items-center flex-wrap gap-2">
-                          <div className="fw-semibold">
-                            @{participation.user.username}
-                            {isCurrentUser
-                              ? ' · you'
-                              : ''}
-                          </div>
-
-                          {isSpeaking && (
-                            <span className="badge voice-speaking-badge">
-                              Speaking
-                            </span>
-                          )}
-                        </div>
-
-                        {!isCurrentUser
-                          && ownsThisRoomSession
-                          && mediaStatus ===
-                            'connected' && (
-                          <div
-                            className="d-flex align-items-center gap-2"
-                            style={{
-                              minWidth: '14rem',
-                            }}
-                          >
-                            <span
-                              className="small text-secondary"
-                              style={{
-                                minWidth: '3rem',
-                              }}
-                            >
-                              {volumePercent}%
-                            </span>
-
-                            <input
-                              className="form-range m-0"
-                              type="range"
-                              min="0"
-                              max="100"
-                              step="5"
-                              value={volumePercent}
-                              aria-label={
-                                `Volume for @${participation.user.username}`
-                              }
-                              onChange={(event) =>
-                                setParticipantVolume(
-                                  participation
-                                    .user.id,
-                                  Number(
-                                    event.target
-                                      .value,
-                                  ) / 100,
-                                )
-                              }
-                            />
-
-                            <button
-                              className="btn btn-sm btn-outline-secondary flex-shrink-0"
-                              type="button"
-                              onClick={() =>
-                                toggleParticipantMuted(
-                                  participation
-                                    .user.id,
-                                )
-                              }
-                            >
-                              {volumePercent === 0
-                                ? 'Unmute'
-                                : 'Mute'}
-                            </button>
-                          </div>
-                        )}
-                      </div>
-                    )
-                  },
-                )}
-              </div>
-            </div>
-          )}
-
-          <div className="voice-media-copy mb-3">
-            <span>{mediaDescription}</span>
-          </div>
-
-          {(actionError || voiceError) && (
-            <div
-              className="alert alert-danger py-2 px-3 small"
-              role="alert"
-            >
-              {actionError ?? voiceError}
-            </div>
-          )}
-
-          <div className="d-flex flex-wrap gap-2">
+          <div className="voice-room-control-bar d-flex flex-wrap align-items-center gap-2">
             {!isThisRoomSession && (
               <button
                 className="btn btn-primary"
@@ -988,6 +922,8 @@ function VoiceRoomDetailPage() {
                   : 'Join voice'}
               </button>
             )}
+
+            <VoiceAudioSettings buttonSize="md" />
 
             {ownsThisRoomSession && (
               <>
@@ -1100,6 +1036,164 @@ function VoiceRoomDetailPage() {
               </button>
             )}
           </div>
+
+          {roomParticipants.length === 0 ? (
+            <p className="text-secondary">
+              Nobody is connected.
+            </p>
+          ) : (
+            <div className="mb-3">
+              <div className="small text-secondary mb-2">
+                Connected
+              </div>
+
+              <div className="d-flex flex-column gap-2">
+                {roomParticipants.map(
+                  (participation) => {
+                    const isCurrentUser =
+                      participation.user.id ===
+                        currentUserId
+
+                    const volumePercent =
+                      Math.round(
+                        getParticipantVolume(
+                          participation.user.id,
+                        ) * 100,
+                      )
+
+                    const isMuted =
+                      mutedUserIds.includes(
+                        participation.user.id,
+                      )
+
+                    const isSpeaking =
+                      !isMuted
+                      && speakingUserIds.includes(
+                        participation.user.id,
+                      )
+                      && (
+                        !isCurrentUser
+                        || microphoneEnabled
+                      )
+
+                    return (
+                      <div
+                        className={
+                          `voice-participant-row d-flex flex-column flex-sm-row align-items-sm-center justify-content-between gap-2${
+                            isSpeaking
+                              ? ' voice-participant-row-speaking'
+                              : ''
+                          }`
+                        }
+                        key={participation.id}
+                      >
+                        <div className="voice-participant-identity">
+                          <Avatar
+                            user={participation.user}
+                            size="sm"
+                            alt=""
+                          />
+
+                          <div className="min-width-0">
+                            <div className="fw-semibold text-truncate">
+                              @{participation.user.username}
+                              {isCurrentUser
+                                ? ' · you'
+                                : ''}
+                            </div>
+
+                            <span
+                              className={`voice-participant-state${isMuted ? ' voice-participant-state-muted' : ''}${isMuted || isSpeaking ? '' : ' invisible'}`}
+                              aria-hidden={
+                                !isMuted
+                                && !isSpeaking
+                              }
+                            >
+                              {isMuted
+                                ? 'Mic muted'
+                                : 'Speaking'}
+                            </span>
+                          </div>
+                        </div>
+
+                        {!isCurrentUser
+                          && ownsThisRoomSession
+                          && mediaStatus ===
+                            'connected' && (
+                          <div
+                            className="d-flex align-items-center gap-2"
+                            style={{
+                              minWidth: '14rem',
+                            }}
+                          >
+                            <span
+                              className="small text-secondary"
+                              style={{
+                                minWidth: '3rem',
+                              }}
+                            >
+                              {volumePercent}%
+                            </span>
+
+                            <input
+                              className="form-range m-0"
+                              type="range"
+                              min="0"
+                              max="100"
+                              step="5"
+                              value={volumePercent}
+                              aria-label={
+                                `Volume for @${participation.user.username}`
+                              }
+                              onChange={(event) =>
+                                setParticipantVolume(
+                                  participation
+                                    .user.id,
+                                  Number(
+                                    event.target
+                                      .value,
+                                  ) / 100,
+                                )
+                              }
+                            />
+
+                            <button
+                              className="btn btn-sm btn-outline-secondary flex-shrink-0"
+                              type="button"
+                              onClick={() =>
+                                toggleParticipantMuted(
+                                  participation
+                                    .user.id,
+                                )
+                              }
+                            >
+                              {volumePercent === 0
+                                ? 'Unmute'
+                                : 'Mute'}
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    )
+                  },
+                )}
+              </div>
+            </div>
+          )}
+
+          <div className="voice-media-copy mb-3">
+            <span>{mediaDescription}</span>
+          </div>
+
+          {(actionError || voiceError) && (
+            <div
+              className="alert alert-danger py-2 px-3 small"
+              role="alert"
+            >
+              {actionError ?? voiceError}
+            </div>
+          )}
+
         </div>
       </div>
 
@@ -1122,7 +1216,61 @@ function VoiceRoomDetailPage() {
               </div>
             )}
 
-            <form
+            <div className="d-flex align-items-center gap-3 mb-4">
+              <VoiceRoomAvatar
+                name={room.name}
+                avatarUrl={room.avatar_url}
+                size="lg"
+              />
+
+              <div className="flex-grow-1">
+                <form
+                  className="d-flex flex-column flex-sm-row gap-2"
+                  onSubmit={handleAvatarUpload}
+                >
+                  <input
+                    className="form-control form-control-sm"
+                    type="file"
+                    accept="image/png,image/jpeg,image/webp"
+                    disabled={roomSettingsBusy !== null}
+                    onChange={(event) =>
+                      setAvatarFile(
+                        event.target.files?.[0] ?? null,
+                      )
+                    }
+                    aria-label="Voice Room avatar"
+                  />
+                  <button
+                    className="btn btn-sm btn-outline-primary"
+                    type="submit"
+                    disabled={
+                      roomSettingsBusy !== null || !avatarFile
+                    }
+                  >
+                    {roomSettingsBusy === 'avatar'
+                      ? 'Saving…'
+                      : 'Upload avatar'}
+                  </button>
+                  {room.avatar_url && (
+                    <button
+                      className="btn btn-sm btn-outline-secondary"
+                      type="button"
+                      disabled={roomSettingsBusy !== null}
+                      onClick={() =>
+                        void handleAvatarRemove()
+                      }
+                    >
+                      Remove
+                    </button>
+                  )}
+                </form>
+                <div className="form-text">
+                  JPEG, PNG or WebP. The image is cropped square.
+                </div>
+              </div>
+            </div>
+
+                        <form
               className="d-flex flex-column flex-sm-row gap-2 mb-4"
               onSubmit={handleRenameRoom}
             >
@@ -1264,17 +1412,25 @@ function VoiceRoomDetailPage() {
                     key={membership.id}
                   >
                     <div className="d-flex justify-content-between align-items-center gap-3">
-                      <div>
-                        <div className="fw-semibold">
-                          @{membership.user.username}
-                        </div>
+                      <div className="directory-user-identity">
+                        <Avatar
+                          user={membership.user}
+                          size="sm"
+                          alt=""
+                        />
 
-                        {membership.user.id ===
-                          room.owner.id && (
-                          <div className="small text-secondary">
-                            Owner
-                          </div>
-                        )}
+                        <span className="directory-user-copy">
+                          <span className="directory-user-name">
+                            @{membership.user.username}
+                          </span>
+
+                          {membership.user.id ===
+                            room.owner.id && (
+                            <span className="directory-user-state">
+                              Owner
+                            </span>
+                          )}
+                        </span>
                       </div>
 
                       {currentUserId ===

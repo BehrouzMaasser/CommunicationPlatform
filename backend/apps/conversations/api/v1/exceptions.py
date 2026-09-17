@@ -11,6 +11,7 @@ from apps.conversations.exceptions import (
     GroupInvitationNotFound,
     GroupInvitationRecipientRequired,
     GroupInvitationTargetNotFound,
+    InvalidGroupAvatar,
     GroupMembershipNotFound,
     GroupNotFound,
     GroupOwnerCannotBeRemoved,
@@ -45,6 +46,9 @@ _EXCEPTION_STATUS_MAP = {
         status.HTTP_400_BAD_REQUEST,
 
     InvalidGroupName:
+        status.HTTP_400_BAD_REQUEST,
+
+    InvalidGroupAvatar:
         status.HTTP_400_BAD_REQUEST,
 
     InvalidGroupInvitationLink:

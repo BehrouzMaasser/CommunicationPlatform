@@ -4,6 +4,7 @@ from rest_framework.response import Response
 from apps.voice.exceptions import (
     VoiceRoomInvitationLinkNotFound,
     InvalidVoiceRoomInvitationLink,
+    InvalidVoiceRoomAvatar,
     SelfVoiceCallNotAllowed,
     VoiceCallPermissionDenied,
     VoiceError,
@@ -122,6 +123,11 @@ _EXCEPTION_MAP = {
         status.HTTP_400_BAD_REQUEST,
         "VOICE_ROOM_NAME_REQUIRED",
         "A voice-room name is required.",
+    ),
+    InvalidVoiceRoomAvatar: (
+        status.HTTP_400_BAD_REQUEST,
+        "INVALID_VOICE_ROOM_AVATAR",
+        "The voice-room avatar is invalid.",
     ),
     VoiceRoomInvitationTargetNotFound: (
         status.HTTP_404_NOT_FOUND,

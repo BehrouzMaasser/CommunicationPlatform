@@ -5,7 +5,11 @@ import {
   useState,
 } from 'react'
 
-import { useRealtime } from '../../realtime/RealtimeContext'
+import { useRealtime } from '../../realtime/useRealtime'
+
+import Avatar from '../users/Avatar'
+
+import AttachmentViewer from './AttachmentViewer'
 
 import type {
   Message,
@@ -79,15 +83,22 @@ function getReplySummary(
 }
 
 
-function AttachmentLink({
+function AttachmentButton({
   attachment,
+  onOpen,
 }: {
   attachment: MessageAttachment
+  onOpen: (
+    attachment: MessageAttachment,
+  ) => void
 }) {
   return (
-    <a
-      className="border rounded p-2 text-decoration-none d-flex justify-content-between align-items-center gap-3"
-      href={attachment.download_url}
+    <button
+      className="message-attachment-open border rounded p-2 d-flex justify-content-between align-items-center gap-3 w-100 text-start"
+      type="button"
+      onClick={() => {
+        onOpen(attachment)
+      }}
     >
       <div className="text-break">
         <div className="fw-semibold">
@@ -104,12 +115,14 @@ function AttachmentLink({
           attachment.size_bytes,
         )}
       </span>
-    </a>
+    </button>
   )
 }
 
 
+
 type MessageThreadProps = {
+  variant?: 'default' | 'direct' | 'group'
   messages: Message[]
   hasOlderMessages?: boolean
   loadingOlderMessages?: boolean
@@ -126,6 +139,7 @@ type MessageThreadProps = {
 
 function MessageThread({
   messages,
+  variant = 'default',
   hasOlderMessages = false,
   loadingOlderMessages = false,
   olderMessagesError = null,
@@ -136,6 +150,13 @@ function MessageThread({
   const {
     currentUserId,
   } = useRealtime()
+
+  const [
+    openAttachment,
+    setOpenAttachment,
+  ] = useState<MessageAttachment | null>(
+    null,
+  )
 
   const viewportRef =
     useRef<HTMLDivElement | null>(
@@ -385,7 +406,7 @@ function MessageThread({
             </p>
           </div>
         ) : (
-          <div className="d-flex flex-column gap-3 pe-1">
+          <div className={`message-stack d-flex flex-column pe-1 ${variant !== 'default' ? 'message-stack-direct' : 'gap-3'}`}>
             {messages.map((message) => {
               const sentByCurrentUser =
                 message.sender.id ===
@@ -411,11 +432,20 @@ function MessageThread({
 
               return (
                 <div
-                  className={`message-row d-flex ${sentByCurrentUser ? 'justify-content-start' : 'justify-content-end'}`}
+                  className={`message-row d-flex align-items-end gap-2 ${variant !== 'default' ? `message-row-direct ${sentByCurrentUser ? 'is-own' : 'is-other'} ${sentByCurrentUser ? 'justify-content-end' : 'justify-content-start'}` : (sentByCurrentUser ? 'justify-content-start' : 'justify-content-end')}`}
                   key={message.id}
                 >
+                  {variant !== 'default' && !sentByCurrentUser && (
+                    <Avatar
+                      user={message.sender}
+                      size="sm"
+                      className="message-row-avatar"
+                      alt=""
+                    />
+                  )}
+
                   <article
-                    className={`message-bubble ${sentByCurrentUser ? 'message-bubble-own' : 'message-bubble-other'}`}
+                    className={`message-bubble ${sentByCurrentUser ? 'message-bubble-own' : 'message-bubble-other'}${variant !== 'default' ? ' message-bubble-direct' : ''}`}
                   >
                     {message.reply_to && (
                       <div className="message-reply-preview">
@@ -431,12 +461,18 @@ function MessageThread({
                       </div>
                     )}
 
-                    <div className="message-meta d-flex justify-content-between align-items-baseline gap-3 mb-2">
-                      <strong className="message-sender">
-                        {sentByCurrentUser
-                          ? 'You'
-                          : `@${message.sender.username}`}
-                      </strong>
+                    <div className={`message-meta d-flex align-items-baseline gap-3 mb-2 ${variant === 'direct' || (variant === 'group' && sentByCurrentUser) ? 'justify-content-end' : 'justify-content-between'}`}>
+                      {variant !== 'direct'
+                        && (
+                          variant === 'default'
+                          || !sentByCurrentUser
+                        ) && (
+                        <strong className="message-sender">
+                          {sentByCurrentUser
+                            ? 'You'
+                            : `@${message.sender.username}`}
+                        </strong>
+                      )}
 
                       <span className="small text-secondary text-nowrap">
                         {formatMessageTime(
@@ -455,9 +491,10 @@ function MessageThread({
                       <div className="mt-3 d-flex flex-column gap-2">
                         {message.attachments.map(
                           (attachment) => (
-                            <AttachmentLink
+                            <AttachmentButton
                               attachment={attachment}
                               key={attachment.id}
+                              onOpen={setOpenAttachment}
                             />
                           ),
                         )}
@@ -470,13 +507,22 @@ function MessageThread({
                       >
                         {onReply && (
                           <button
+                            aria-label="Reply to message"
                             className="btn btn-sm btn-link px-0 py-0"
+                            title="Reply"
                             type="button"
                             onClick={() =>
                               onReply(message)
                             }
                           >
-                            Reply
+                            <svg
+                              aria-hidden="true"
+                              className="message-action-icon"
+                              viewBox="0 0 24 24"
+                            >
+                              <path d="M9 17 4 12l5-5" />
+                              <path d="M4 12h9a7 7 0 0 1 7 7" />
+                            </svg>
                           </button>
                         )}
 
@@ -514,6 +560,16 @@ function MessageThread({
             ? 'new message'
             : 'new messages'}
         </button>
+      )}
+
+      {openAttachment && (
+        <AttachmentViewer
+          key={openAttachment.id}
+          attachment={openAttachment}
+          onClose={() => {
+            setOpenAttachment(null)
+          }}
+        />
       )}
     </div>
   )

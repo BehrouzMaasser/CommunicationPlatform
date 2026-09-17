@@ -9,6 +9,16 @@ from uuid6 import uuid7
 from apps.conversations.models import GroupConversation
 
 
+def voice_room_avatar_upload_to(instance, filename):
+    del filename
+
+    return (
+        f"voice_room_avatars/"
+        f"{instance.pk}/"
+        f"{uuid.uuid4().hex}.webp"
+    )
+
+
 class VoiceRoom(models.Model):
 
     id = models.UUIDField(
@@ -19,6 +29,11 @@ class VoiceRoom(models.Model):
 
     name = models.CharField(
         max_length=50,
+    )
+
+    avatar = models.ImageField(
+        upload_to=voice_room_avatar_upload_to,
+        blank=True,
     )
 
     owner = models.ForeignKey(

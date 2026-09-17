@@ -18,7 +18,7 @@ import {
 
 import {
   useRealtimeEvent,
-} from '../../realtime/RealtimeContext'
+} from '../../realtime/useRealtime'
 
 import type {
   VoiceRoom,

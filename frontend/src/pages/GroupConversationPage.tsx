@@ -17,6 +17,7 @@ import {
   sendGroupMessage,
 } from '../api/messages'
 
+import GroupAvatar from '../components/groups/GroupAvatar'
 import MessageComposer from '../components/messages/MessageComposer'
 import MessageThread from '../components/messages/MessageThread'
 import {
@@ -30,7 +31,7 @@ import {
   useConversationRealtimeSubscription,
   useRealtime,
   useRealtimeEvent,
-} from '../realtime/RealtimeContext'
+} from '../realtime/useRealtime'
 
 import type {
   MessageCreatedPayload,
@@ -291,6 +292,31 @@ function GroupConversationPage() {
       [parsedGroupId],
     )
 
+  const handleGroupAvatarUpdated =
+    useCallback(
+      ({
+        payload,
+      }: {
+        payload: {
+          group_id: number
+        }
+      }) => {
+        if (
+          payload.group_id !==
+          parsedGroupId
+        ) {
+          return
+        }
+
+        void getGroup(parsedGroupId)
+          .then(setGroup)
+          .catch(() => {
+            // A later navigation/refetch can reconcile again.
+          })
+      },
+      [parsedGroupId],
+    )
+
   const handleGroupDeleted =
     useCallback(
       ({
@@ -450,6 +476,11 @@ function GroupConversationPage() {
   useRealtimeEvent(
     'group.renamed',
     handleGroupRenamed,
+  )
+
+  useRealtimeEvent(
+    'group.avatar_updated',
+    handleGroupAvatarUpdated,
   )
 
   useRealtimeEvent(
@@ -644,14 +675,33 @@ function GroupConversationPage() {
   }
 
   return (
-    <section className="conversation-page">
-      <div className="card shadow-sm conversation-card">
-        <div className="card-header bg-white conversation-header">
-          <div className="d-flex align-items-center justify-content-between gap-2">
-            <h1 className="h5 mb-0 text-truncate">
-              {group.name}
-            </h1>
+    <section className="conversation-page group-conversation-page">
+      <div className="conversation-card group-conversation-surface">
+        <header className="conversation-header group-conversation-header">
+          <div className="group-conversation-identity">
+            <Link
+              className="dm-conversation-back"
+              to="/groups"
+              aria-label="Back to group chats"
+              title="Back to group chats"
+            >
+              <span aria-hidden="true">←</span>
+            </Link>
 
+            <GroupAvatar
+              name={group.name}
+              avatarUrl={group.avatar_url}
+              size="md"
+            />
+
+            <div className="group-conversation-header-copy">
+              <h1 className="group-conversation-title mb-0">
+                {group.name}
+              </h1>
+            </div>
+          </div>
+
+          <div className="group-conversation-actions">
             <Link
               className="btn btn-outline-secondary btn-sm conversation-header-action"
               to={`/groups/${group.id}`}
@@ -659,11 +709,12 @@ function GroupConversationPage() {
               Details
             </Link>
           </div>
-        </div>
+        </header>
 
-        <div className="card-body conversation-card-body">
+        <div className="conversation-card-body group-conversation-body">
           <MessageThread
             key={`group-${group.id}`}
+            variant="group"
             messages={messages}
             hasOlderMessages={
               olderMessagesUrl !== null
@@ -688,9 +739,9 @@ function GroupConversationPage() {
           />
         </div>
 
-        <div className="card-footer bg-white py-3">
+        <footer className="group-conversation-composer">
           {typingUsernames.length > 0 && (
-            <div className="small text-secondary mb-2">
+            <div className="dm-typing-indicator">
               {typingUsernames.length === 1
                 ? `@${typingUsernames[0]} is typing…`
                 : `${typingUsernames.length} people are typing…`}
@@ -707,7 +758,7 @@ function GroupConversationPage() {
             onTyping={notifyTyping}
             onTypingStop={stopTyping}
           />
-        </div>
+        </footer>
       </div>
     </section>
   )

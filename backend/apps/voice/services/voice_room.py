@@ -1,9 +1,12 @@
 from uuid import UUID
 
+from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.db import transaction
 
+from apps.avatar_images import AvatarImageService, InvalidAvatarImage
 from apps.voice.exceptions import (
+    InvalidVoiceRoomAvatar,
     VoiceRoomMembershipRequired,
     VoiceRoomNameRequired,
     VoiceRoomNotFound,
@@ -160,6 +163,96 @@ class VoiceRoomService:
                 .room_renamed_after_commit(
                     room_id=room.pk,
                     room_name=room.name,
+                    audience_user_ids=(
+                        cls._member_user_ids(
+                            room=room,
+                        )
+                    ),
+                )
+            )
+
+        return room
+
+
+    @classmethod
+    def replace_avatar(
+        cls,
+        *,
+        current_user: User,
+        room_id: UUID,
+        file_obj,
+    ) -> VoiceRoom:
+        try:
+            room = VoiceRoom.objects.get(
+                pk=room_id,
+            )
+        except VoiceRoom.DoesNotExist as exc:
+            raise VoiceRoomNotFound from exc
+
+        cls._require_owner(
+            room=room,
+            user=current_user,
+        )
+
+        try:
+            normalized_file = AvatarImageService.normalize(
+                file_obj=file_obj,
+                max_size_bytes=settings.USER_AVATAR_MAX_SIZE_BYTES,
+                max_dimension=settings.USER_AVATAR_MAX_DIMENSION,
+            )
+        except InvalidAvatarImage as exc:
+            raise InvalidVoiceRoomAvatar(str(exc)) from exc
+
+        with transaction.atomic():
+            room = cls._get_room_for_update(
+                room_id=room_id,
+            )
+            cls._require_owner(
+                room=room,
+                user=current_user,
+            )
+            AvatarImageService.replace(
+                instance=room,
+                field_name="avatar",
+                normalized_file=normalized_file,
+            )
+            (
+                VoiceRoomRealtimePublisher
+                .room_avatar_updated_after_commit(
+                    room_id=room.pk,
+                    audience_user_ids=(
+                        cls._member_user_ids(
+                            room=room,
+                        )
+                    ),
+                )
+            )
+
+        return room
+
+    @classmethod
+    def remove_avatar(
+        cls,
+        *,
+        current_user: User,
+        room_id: UUID,
+    ) -> VoiceRoom:
+        with transaction.atomic():
+            room = cls._get_room_for_update(
+                room_id=room_id,
+            )
+            cls._require_owner(
+                room=room,
+                user=current_user,
+            )
+            AvatarImageService.remove(
+                instance=room,
+                field_name="avatar",
+            )
+            (
+                VoiceRoomRealtimePublisher
+                .room_avatar_updated_after_commit(
+                    room_id=room.pk,
                     audience_user_ids=(
                         cls._member_user_ids(
                             room=room,

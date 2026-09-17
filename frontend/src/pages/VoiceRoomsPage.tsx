@@ -2,6 +2,7 @@ import {
   type FormEvent,
   useCallback,
   useEffect,
+  useMemo,
   useState,
 } from 'react'
 import {
@@ -9,6 +10,8 @@ import {
 } from 'react-router-dom'
 
 import { ApiError } from '../api/client'
+import VoiceAudioSettings from '../components/voice/VoiceAudioSettings'
+import VoiceRoomAvatar from '../components/voice/VoiceRoomAvatar'
 import {
   acceptVoiceRoomInvitation,
   createVoiceRoom,
@@ -18,7 +21,7 @@ import {
 } from '../api/voice'
 import {
   useRealtimeEvent,
-} from '../realtime/RealtimeContext'
+} from '../realtime/useRealtime'
 
 import type {
   VoiceRoom,
@@ -65,6 +68,12 @@ function VoiceRoomsPage() {
 
   const [name, setName] =
     useState('')
+
+  const [searchQuery, setSearchQuery] =
+    useState('')
+
+  const [createOpen, setCreateOpen] =
+    useState(false)
 
   const [loading, setLoading] =
     useState(true)
@@ -178,6 +187,11 @@ function VoiceRoomsPage() {
     handleRealtimeChange,
   )
 
+  useRealtimeEvent(
+    'voice_room.avatar_updated',
+    handleRealtimeChange,
+  )
+
 
   useEffect(() => {
     let cancelled = false
@@ -246,6 +260,7 @@ function VoiceRoomsPage() {
       )
 
       setName('')
+      setCreateOpen(false)
       setNotice(
         `Voice Room "${room.name}" created.`,
       )
@@ -325,6 +340,30 @@ function VoiceRoomsPage() {
   }
 
 
+  const normalizedQuery =
+    searchQuery.trim().toLocaleLowerCase()
+
+  const filteredRooms =
+    useMemo(
+      () => {
+        if (!normalizedQuery) {
+          return rooms
+        }
+
+        return rooms.filter(
+          (room) =>
+            room.name
+              .toLocaleLowerCase()
+              .includes(normalizedQuery)
+            || room.owner.username
+              .toLocaleLowerCase()
+              .includes(normalizedQuery),
+        )
+      },
+      [normalizedQuery, rooms],
+    )
+
+
   if (loading) {
     return (
       <div className="py-5 text-center">
@@ -339,15 +378,39 @@ function VoiceRoomsPage() {
 
 
   return (
-    <section>
-      <div className="mb-4">
-        <h1 className="h2 mb-1">
-          Voice Rooms
-        </h1>
+    <section className="voice-rooms-page">
+      <div className="directory-page-header">
+        <div>
+          <h1 className="directory-page-title mb-1">
+            Voice Rooms
+          </h1>
+          <p className="directory-page-subtitle mb-0">
+            Persistent rooms you can join whenever people are around.
+          </p>
+        </div>
 
-        <p className="text-secondary mb-0">
-          Persistent voice rooms you can join whenever you want.
-        </p>
+        <div className="directory-page-actions">
+          <VoiceAudioSettings buttonSize="md" />
+
+          <button
+            className={`directory-primary-action${createOpen ? ' is-active' : ''}`}
+            type="button"
+            aria-expanded={createOpen}
+            aria-controls="voice-room-create-panel"
+            onClick={() => {
+              setCreateOpen(
+                (current) => !current,
+              )
+            }}
+          >
+            <span aria-hidden="true">
+              {createOpen ? '×' : '+'}
+            </span>
+            <span className="directory-primary-action-label">
+              {createOpen ? 'Close' : 'New room'}
+            </span>
+          </button>
+        </div>
       </div>
 
       {error && (
@@ -362,93 +425,28 @@ function VoiceRoomsPage() {
         </div>
       )}
 
-      {invitations.length > 0 && (
-        <div className="card shadow-sm mb-4">
-          <div className="card-body">
-            <div className="d-flex justify-content-between align-items-center mb-3">
-              <h2 className="h5 mb-0">
-                Invitations
+      {createOpen && (
+        <section
+          id="voice-room-create-panel"
+          className="directory-surface directory-create-panel"
+        >
+          <div className="directory-section-header">
+            <div>
+              <h2 className="directory-section-title">
+                Create a Voice Room
               </h2>
-
-              <span className="badge text-bg-primary">
-                {invitations.length}
-              </span>
-            </div>
-
-            <div className="list-group list-group-flush">
-              {invitations.map(
-                (invitation) => (
-                  <div
-                    className="list-group-item px-0 d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3"
-                    key={invitation.id}
-                  >
-                    <div>
-                      <div className="fw-semibold">
-                        {invitation.room_name}
-                      </div>
-
-                      <div className="small text-secondary">
-                        Invited by @{invitation.invited_by.username}
-                      </div>
-                    </div>
-
-                    <div className="d-flex gap-2">
-                      <button
-                        className="btn btn-sm btn-primary"
-                        type="button"
-                        disabled={
-                          busy !== null
-                        }
-                        onClick={() =>
-                          void handleAccept(
-                            invitation,
-                          )
-                        }
-                      >
-                        {busy ===
-                        `accept-${invitation.id}`
-                          ? 'Accepting…'
-                          : 'Accept'}
-                      </button>
-
-                      <button
-                        className="btn btn-sm btn-outline-secondary"
-                        type="button"
-                        disabled={
-                          busy !== null
-                        }
-                        onClick={() =>
-                          void handleReject(
-                            invitation,
-                          )
-                        }
-                      >
-                        {busy ===
-                        `reject-${invitation.id}`
-                          ? 'Rejecting…'
-                          : 'Reject'}
-                      </button>
-                    </div>
-                  </div>
-                ),
-              )}
+              <p className="directory-section-subtitle mb-0">
+                Give the room a name. You can invite friends after creation.
+              </p>
             </div>
           </div>
-        </div>
-      )}
-
-      <div className="card shadow-sm mb-4">
-        <div className="card-body">
-          <h2 className="h5 mb-3">
-            Create a Voice Room
-          </h2>
 
           <form
-            className="d-flex flex-column flex-sm-row gap-2"
+            className="directory-create-form"
             onSubmit={handleCreate}
           >
             <input
-              className="form-control"
+              className="form-control directory-search-input"
               maxLength={50}
               value={name}
               onChange={(event) =>
@@ -458,6 +456,7 @@ function VoiceRoomsPage() {
               }
               placeholder="Room name"
               aria-label="Voice room name"
+              autoFocus
             />
 
             <button
@@ -470,70 +469,206 @@ function VoiceRoomsPage() {
             >
               {creating
                 ? 'Creating…'
-                : 'Create'}
+                : 'Create room'}
             </button>
           </form>
-        </div>
-      </div>
+        </section>
+      )}
 
-      <div className="card shadow-sm">
-        <div className="card-body">
-          <div className="d-flex justify-content-between align-items-center mb-3">
-            <h2 className="h5 mb-0">
-              Your Voice Rooms
-            </h2>
+      {invitations.length > 0 && (
+        <section className="directory-surface voice-room-invitations">
+          <div className="directory-section-header">
+            <div>
+              <h2 className="directory-section-title">
+                Invitations
+              </h2>
+              <p className="directory-section-subtitle mb-0">
+                Rooms waiting for your response.
+              </p>
+            </div>
 
-            <span className="badge text-bg-secondary">
-              {rooms.length}
+            <span className="directory-section-count">
+              {invitations.length}
             </span>
           </div>
 
-          {rooms.length === 0 ? (
-            <p className="text-secondary mb-0">
-              You are not a member of any Voice Rooms yet.
-            </p>
-          ) : (
-            <div className="list-group">
-              {rooms.map((room) => (
-                <Link
-                  className="list-group-item list-group-item-action"
-                  key={room.id}
-                  to={`/voice/rooms/${room.id}`}
+          <div className="directory-list directory-list-compact">
+            {invitations.map(
+              (invitation) => (
+                <div
+                  className="directory-request-row"
+                  key={invitation.id}
                 >
-                  <div className="d-flex justify-content-between align-items-center gap-3">
-                    <div>
-                      <div className="fw-semibold">
-                        {room.name}
+                  <div className="voice-room-list-identity">
+                    <VoiceRoomAvatar
+                      name={invitation.room_name}
+                      avatarUrl={invitation.room_avatar_url}
+                      size="sm"
+                    />
+                    <div className="voice-room-list-copy">
+                      <div className="voice-room-list-name">
+                        {invitation.room_name}
                       </div>
-
-                      <div className="small text-secondary">
-                        Owner @{room.owner.username}
+                      <div className="voice-room-list-meta">
+                        Invited by @{invitation.invited_by.username}
                       </div>
-                    </div>
-
-                    <div className="d-flex flex-wrap justify-content-end gap-2">
-                      {room.connected_count > 0 && (
-                        <span className="badge text-bg-success">
-                          {room.connected_count}{' '}
-                          connected
-                        </span>
-                      )}
-
-                      <span className="badge text-bg-secondary">
-                        {room.member_count}{' '}
-                        {room.member_count === 1
-                          ? 'member'
-                          : 'members'}
-                      </span>
                     </div>
                   </div>
-                </Link>
-              ))}
-            </div>
-          )}
+
+                  <div className="directory-request-actions">
+                    <button
+                      className="btn btn-sm btn-primary"
+                      type="button"
+                      disabled={busy !== null}
+                      onClick={() =>
+                        void handleAccept(
+                          invitation,
+                        )
+                      }
+                    >
+                      {busy ===
+                      `accept-${invitation.id}`
+                        ? 'Accepting…'
+                        : 'Accept'}
+                    </button>
+
+                    <button
+                      className="btn btn-sm btn-outline-secondary"
+                      type="button"
+                      disabled={busy !== null}
+                      onClick={() =>
+                        void handleReject(
+                          invitation,
+                        )
+                      }
+                    >
+                      {busy ===
+                      `reject-${invitation.id}`
+                        ? 'Rejecting…'
+                        : 'Reject'}
+                    </button>
+                  </div>
+                </div>
+              ),
+            )}
+          </div>
+        </section>
+      )}
+
+      <section className="directory-surface voice-room-directory">
+        <div className="directory-section-header voice-room-directory-header">
+          <div>
+            <h2 className="directory-section-title">
+              Your Voice Rooms
+            </h2>
+            <p className="directory-section-subtitle mb-0">
+              {rooms.length}{' '}
+              {rooms.length === 1
+                ? 'room'
+                : 'rooms'}
+            </p>
+          </div>
+
+          <label className="voice-room-search">
+            <span className="visually-hidden">
+              Search Voice Rooms
+            </span>
+            <input
+              className="form-control directory-search-input"
+              type="search"
+              value={searchQuery}
+              placeholder="Search rooms"
+              autoComplete="off"
+              onChange={(event) => {
+                setSearchQuery(
+                  event.target.value,
+                )
+              }}
+            />
+          </label>
         </div>
-      </div>
+
+        {rooms.length === 0 ? (
+          <DirectoryEmpty
+            title="No Voice Rooms yet"
+            text="Create one or accept an invitation to get started."
+          />
+        ) : filteredRooms.length === 0 ? (
+          <DirectoryEmpty
+            title="No matching rooms"
+            text="Try a different room or owner name."
+          />
+        ) : (
+          <div className="voice-room-directory-list">
+            {filteredRooms.map((room) => (
+              <Link
+                className="voice-room-directory-row"
+                key={room.id}
+                to={`/voice/rooms/${room.id}`}
+              >
+                <VoiceRoomAvatar
+                  name={room.name}
+                  avatarUrl={room.avatar_url}
+                  size="md"
+                />
+
+                <span className="voice-room-list-copy">
+                  <span className="voice-room-list-row-top">
+                    <span className="voice-room-list-name">
+                      {room.name}
+                    </span>
+                    {room.connected_count > 0 && (
+                      <span className="voice-room-live-pill">
+                        <span className="voice-room-live-dot" aria-hidden="true" />
+                        {room.connected_count} live
+                      </span>
+                    )}
+                  </span>
+
+                  <span className="voice-room-list-row-bottom">
+                    <span className="voice-room-list-meta">
+                      Owner @{room.owner.username}
+                    </span>
+                    <span className="voice-room-list-meta">
+                      {room.member_count}{' '}
+                      {room.member_count === 1
+                        ? 'member'
+                        : 'members'}
+                    </span>
+                  </span>
+                </span>
+
+                <span
+                  className="voice-room-row-chevron"
+                  aria-hidden="true"
+                >
+                  ›
+                </span>
+              </Link>
+            ))}
+          </div>
+        )}
+      </section>
     </section>
+  )
+}
+
+function DirectoryEmpty({
+  title,
+  text,
+}: {
+  title: string
+  text: string
+}) {
+  return (
+    <div className="directory-empty">
+      <div className="fw-semibold">
+        {title}
+      </div>
+      <p className="small text-secondary mb-0">
+        {text}
+      </p>
+    </div>
   )
 }
 

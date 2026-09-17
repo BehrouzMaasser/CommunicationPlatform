@@ -9,12 +9,16 @@ import type {
   ReactNode,
 } from 'react'
 
-import VoiceCallOverlay from '../components/voice/VoiceCallOverlay'
-import VoiceRoomOverlay from '../components/voice/VoiceRoomOverlay'
-
 import {
   ApiError,
 } from '../api/client'
+
+import {
+  browserAudioOutputPromptSupported,
+  browserAudioOutputSelectionSupported,
+  listBrowserAudioOutputDevices,
+  requestBrowserAudioOutputDevice,
+} from '../platform/browserAudioOutput'
 
 import {
   acceptDirectCall as acceptDirectCallRequest,
@@ -30,7 +34,7 @@ import {
 
 import {
   useRealtime,
-} from '../realtime/RealtimeContext'
+} from '../realtime/useRealtime'
 
 import {
   VOICE_REALTIME_EVENT_TYPES,
@@ -41,6 +45,7 @@ import type {
 } from '../realtime/voiceEvents'
 
 import type {
+  VoiceAudioOutputDevice,
   VoiceState,
 } from '../types/voice'
 
@@ -60,6 +65,24 @@ import {
   readVoiceParticipantVolume,
   writeVoiceParticipantVolume,
 } from './volumePreferences'
+
+import {
+  clearVoiceSessionMediaPreferences,
+  normalizeVoiceOutputVolume,
+  readVoiceNoiseGateThresholdDb,
+  readVoiceOutputDeviceId,
+  readVoiceOutputVolume,
+  readVoiceSessionMediaPreferences,
+  writeVoiceNoiseGateThresholdDb,
+  writeVoiceOutputDeviceId,
+  writeVoiceOutputVolume,
+  writeVoiceSessionMediaPreferences,
+} from './mediaPreferences'
+
+import {
+  normalizeVoiceNoiseGateThresholdDb,
+  voiceNoiseGateSupported,
+} from './noiseGateProcessor'
 
 import {
   playVoiceRoomJoinSound,
@@ -135,6 +158,47 @@ export function VoiceProvider({
   ] =
     useState(false)
 
+  const [
+    microphoneNoiseGateThresholdDb,
+    setMicrophoneNoiseGateThresholdDbState,
+  ] = useState<number | null>(
+    () =>
+      readVoiceNoiseGateThresholdDb(
+        currentUserId ?? null,
+      ),
+  )
+
+  const [
+    audioOutputMuted,
+    setAudioOutputMutedState,
+  ] =
+    useState(false)
+
+  const [
+    audioOutputVolume,
+    setAudioOutputVolumeState,
+  ] = useState(
+    () =>
+      readVoiceOutputVolume(
+        currentUserId ?? null,
+      ),
+  )
+
+  const [
+    audioOutputDeviceId,
+    setAudioOutputDeviceIdState,
+  ] = useState(
+    () =>
+      readVoiceOutputDeviceId(
+        currentUserId ?? null,
+      ),
+  )
+
+  const [
+    audioOutputDevices,
+    setAudioOutputDevices,
+  ] = useState<VoiceAudioOutputDevice[]>([])
+
   const [error, setError] =
     useState<string | null>(
       null,
@@ -143,6 +207,11 @@ export function VoiceProvider({
   const [
     speakingParticipantIdentities,
     setSpeakingParticipantIdentities,
+  ] = useState<string[]>([])
+
+  const [
+    mutedMicrophoneParticipantIdentities,
+    setMutedMicrophoneParticipantIdentities,
   ] = useState<string[]>([])
 
   const [
@@ -161,6 +230,29 @@ export function VoiceProvider({
     useRef<Record<number, number>>(
       {},
     )
+
+  const audioOutputMutedRef =
+    useRef(false)
+
+  const microphoneNoiseGateThresholdDbRef =
+    useRef(
+      microphoneNoiseGateThresholdDb,
+    )
+
+  const audioOutputVolumeRef =
+    useRef(audioOutputVolume)
+
+  const audioOutputDeviceIdRef =
+    useRef(audioOutputDeviceId)
+
+  const activeOwnedSessionIdRef =
+    useRef<string | null>(null)
+
+  const mediaRetryTimerRef =
+    useRef<number | null>(null)
+
+  const mediaRetryAttemptRef =
+    useRef(0)
 
   const desiredVoiceStateRef =
     useRef<VoiceState>(
@@ -268,6 +360,75 @@ export function VoiceProvider({
     )
 
 
+  const clearMediaRetry =
+    useCallback(
+      (): void => {
+        if (
+          mediaRetryTimerRef.current
+          !== null
+        ) {
+          window.clearTimeout(
+            mediaRetryTimerRef.current,
+          )
+
+          mediaRetryTimerRef.current =
+            null
+        }
+
+        mediaRetryAttemptRef.current = 0
+      },
+      [],
+    )
+
+
+  const persistActiveSessionMediaPreferences =
+    useCallback(
+      (
+        overrides?: Partial<{
+          microphoneEnabled: boolean
+          audioOutputMuted: boolean
+        }>,
+      ): void => {
+        const session =
+          desiredVoiceStateRef
+            .current.session
+
+        const participation =
+          desiredVoiceStateRef
+            .current
+            .current_participation
+
+        if (
+          currentUserId === undefined
+          || session?.status !== 'ACTIVE'
+          || participation
+            ?.client_instance_id
+            !== clientInstanceId
+        ) {
+          return
+        }
+
+        writeVoiceSessionMediaPreferences({
+          currentUserId,
+          sessionId: session.id,
+          microphoneEnabled:
+            overrides
+              ?.microphoneEnabled
+            ?? microphoneEnabled,
+          audioOutputMuted:
+            overrides
+              ?.audioOutputMuted
+            ?? audioOutputMutedRef.current,
+        })
+      },
+      [
+        clientInstanceId,
+        currentUserId,
+        microphoneEnabled,
+      ],
+    )
+
+
   const reconcileMedia =
     useCallback(
       async (): Promise<void> => {
@@ -313,6 +474,22 @@ export function VoiceProvider({
                 === clientInstanceId
 
             if (!ownsActiveSession) {
+              clearMediaRetry()
+
+              const previousSessionId =
+                activeOwnedSessionIdRef
+                  .current
+
+              if (previousSessionId) {
+                clearVoiceSessionMediaPreferences(
+                  currentUserId ?? null,
+                  previousSessionId,
+                )
+              }
+
+              activeOwnedSessionIdRef.current =
+                null
+
               await voiceMediaClient
                 .disconnect()
 
@@ -324,8 +501,21 @@ export function VoiceProvider({
                 false,
               )
 
+              audioOutputMutedRef.current =
+                false
+
+              voiceMediaClient
+                .setOutputMuted(false)
+
+              setAudioOutputMutedState(
+                false,
+              )
+
               continue
             }
+
+            activeOwnedSessionIdRef.current =
+              session.id
 
             if (
               voiceMediaClient
@@ -335,12 +525,65 @@ export function VoiceProvider({
                 desiredState,
               )
 
+              clearMediaRetry()
+
               setMediaStatus(
                 'connected',
               )
 
               continue
             }
+
+            /*
+             * LiveKit performs its own transient
+             * reconnection while the Room object is
+             * still alive. Do not race that recovery
+             * with a second fresh Room connection.
+             */
+            if (
+              voiceMediaClient
+                .currentRoom !== null
+            ) {
+              setMediaStatus(
+                'connecting',
+              )
+
+              continue
+            }
+
+            const recoveredPreferences =
+              readVoiceSessionMediaPreferences(
+                currentUserId ?? null,
+                session.id,
+              )
+
+            const desiredMicrophoneEnabled =
+              recoveredPreferences
+                ?.microphoneEnabled
+              ?? true
+
+            const desiredOutputMuted =
+              recoveredPreferences
+                ?.audioOutputMuted
+              ?? false
+
+            audioOutputMutedRef.current =
+              desiredOutputMuted
+
+            voiceMediaClient
+              .setOutputMuted(
+                desiredOutputMuted,
+              )
+
+            voiceMediaClient
+              .setOutputVolume(
+                audioOutputVolumeRef
+                  .current,
+              )
+
+            setAudioOutputMutedState(
+              desiredOutputMuted,
+            )
 
             setMediaStatus(
               'connecting',
@@ -364,14 +607,64 @@ export function VoiceProvider({
                 desiredState,
               )
 
+              const preferredOutputDeviceId =
+                audioOutputDeviceIdRef
+                  .current
+
+              if (
+                preferredOutputDeviceId
+                && browserAudioOutputSelectionSupported()
+              ) {
+                try {
+                  const switched =
+                    await voiceMediaClient
+                      .switchAudioOutputDevice(
+                        preferredOutputDeviceId,
+                      )
+
+                  if (!switched) {
+                    throw new Error(
+                      'The preferred audio output is unavailable.',
+                    )
+                  }
+                } catch {
+                  audioOutputDeviceIdRef.current =
+                    ''
+
+                  setAudioOutputDeviceIdState(
+                    '',
+                  )
+
+                  writeVoiceOutputDeviceId(
+                    currentUserId ?? null,
+                    '',
+                  )
+                }
+              }
+
               await voiceMediaClient
                 .setMicrophoneEnabled(
-                  true,
+                  desiredMicrophoneEnabled,
                 )
 
               setMicrophoneEnabledState(
-                true,
+                desiredMicrophoneEnabled,
               )
+
+              if (
+                currentUserId !== undefined
+              ) {
+                writeVoiceSessionMediaPreferences({
+                  currentUserId,
+                  sessionId: session.id,
+                  microphoneEnabled:
+                    desiredMicrophoneEnabled,
+                  audioOutputMuted:
+                    desiredOutputMuted,
+                })
+              }
+
+              clearMediaRetry()
 
               setMediaStatus(
                 'connected',
@@ -397,6 +690,48 @@ export function VoiceProvider({
                   mediaError,
                 ),
               )
+
+              const retryDelays = [
+                1000,
+                2000,
+                5000,
+                10000,
+              ]
+
+              const attempt =
+                mediaRetryAttemptRef
+                  .current
+
+              const delay =
+                retryDelays[
+                  Math.min(
+                    attempt,
+                    retryDelays.length - 1,
+                  )
+                ]
+
+              mediaRetryAttemptRef.current =
+                attempt + 1
+
+              if (
+                mediaRetryTimerRef.current
+                !== null
+              ) {
+                window.clearTimeout(
+                  mediaRetryTimerRef.current,
+                )
+              }
+
+              mediaRetryTimerRef.current =
+                window.setTimeout(
+                  () => {
+                    mediaRetryTimerRef.current =
+                      null
+
+                    void reconcileMedia()
+                  },
+                  delay,
+                )
             }
           } while (
             mediaReconcileRequestedRef
@@ -419,7 +754,9 @@ export function VoiceProvider({
         }
       },
       [
+        clearMediaRetry,
         clientInstanceId,
+        currentUserId,
         enabled,
         syncParticipantVolumesToMedia,
       ],
@@ -777,6 +1114,11 @@ export function VoiceProvider({
             nextEnabled,
           )
 
+          persistActiveSessionMediaPreferences({
+            microphoneEnabled:
+              nextEnabled,
+          })
+
           if (
             !nextEnabled
             && currentUserId !== undefined
@@ -820,7 +1162,204 @@ export function VoiceProvider({
           throw microphoneError
         }
       },
+      [
+        currentUserId,
+        persistActiveSessionMediaPreferences,
+      ],
+    )
+
+
+  const setMicrophoneNoiseGateThresholdDb =
+    useCallback(
+      async (
+        value: number | null,
+      ): Promise<void> => {
+        const threshold =
+          normalizeVoiceNoiseGateThresholdDb(
+            value,
+          )
+
+        microphoneNoiseGateThresholdDbRef.current =
+          threshold
+
+        try {
+          await voiceMediaClient
+            .setMicrophoneNoiseGateThresholdDb(
+              threshold,
+            )
+
+          setMicrophoneNoiseGateThresholdDbState(
+            threshold,
+          )
+
+          writeVoiceNoiseGateThresholdDb(
+            currentUserId ?? null,
+            threshold,
+          )
+
+          setError(null)
+        } catch (
+          noiseGateError
+        ) {
+          setError(
+            errorMessage(
+              noiseGateError,
+            ),
+          )
+
+          throw noiseGateError
+        }
+      },
       [currentUserId],
+    )
+
+
+  const setAudioOutputMuted =
+    useCallback(
+      (
+        muted: boolean,
+      ): void => {
+        audioOutputMutedRef.current =
+          muted
+
+        voiceMediaClient
+          .setOutputMuted(muted)
+
+        setAudioOutputMutedState(
+          muted,
+        )
+
+        persistActiveSessionMediaPreferences({
+          audioOutputMuted: muted,
+        })
+      },
+      [persistActiveSessionMediaPreferences],
+    )
+
+
+  const setAudioOutputVolume =
+    useCallback(
+      (
+        value: number,
+      ): void => {
+        const volume =
+          normalizeVoiceOutputVolume(
+            value,
+          )
+
+        audioOutputVolumeRef.current =
+          volume
+
+        voiceMediaClient
+          .setOutputVolume(volume)
+
+        setAudioOutputVolumeState(
+          volume,
+        )
+
+        writeVoiceOutputVolume(
+          currentUserId ?? null,
+          volume,
+        )
+      },
+      [currentUserId],
+    )
+
+
+  const refreshAudioOutputDevices =
+    useCallback(
+      async (): Promise<void> => {
+        if (
+          !browserAudioOutputSelectionSupported()
+        ) {
+          setAudioOutputDevices([])
+          return
+        }
+
+        const devices =
+          await listBrowserAudioOutputDevices()
+
+        setAudioOutputDevices(
+          devices.map(
+            (device) => ({
+              device_id:
+                device.deviceId,
+              label: device.label,
+            }),
+          ),
+        )
+      },
+      [],
+    )
+
+
+  const setAudioOutputDevice =
+    useCallback(
+      async (
+        deviceId: string,
+      ): Promise<void> => {
+        if (
+          !browserAudioOutputSelectionSupported()
+        ) {
+          throw new Error(
+            'Audio output selection is not supported by this browser.',
+          )
+        }
+
+        if (mediaStatus === 'connected') {
+          const switched =
+            await voiceMediaClient
+              .switchAudioOutputDevice(
+                deviceId,
+              )
+
+          if (!switched) {
+            throw new Error(
+              'Could not switch the audio output device.',
+            )
+          }
+        }
+
+        audioOutputDeviceIdRef.current =
+          deviceId
+
+        setAudioOutputDeviceIdState(
+          deviceId,
+        )
+
+        writeVoiceOutputDeviceId(
+          currentUserId ?? null,
+          deviceId,
+        )
+
+        setError(null)
+      },
+      [
+        currentUserId,
+        mediaStatus,
+      ],
+    )
+
+
+  const chooseAudioOutputDevice =
+    useCallback(
+      async (): Promise<void> => {
+        const selected =
+          await requestBrowserAudioOutputDevice(
+            audioOutputDeviceIdRef
+              .current || undefined,
+          )
+
+        await setAudioOutputDevice(
+          selected.deviceId,
+        )
+
+        await refreshAudioOutputDevices()
+      },
+      [
+        refreshAudioOutputDevices,
+        setAudioOutputDevice,
+      ],
     )
 
 
@@ -960,6 +1499,120 @@ export function VoiceProvider({
   useEffect(
     () => {
       voiceMediaClient
+        .setConnectionStatusListener(
+          (connectionStatus) => {
+            if (
+              connectionStatus ===
+                'connected'
+            ) {
+              clearMediaRetry()
+              setMediaStatus(
+                'connected',
+              )
+              setError(null)
+              return
+            }
+
+            if (
+              connectionStatus ===
+                'connecting'
+            ) {
+              setMediaStatus(
+                'connecting',
+              )
+              return
+            }
+
+            const currentState =
+              desiredVoiceStateRef
+                .current
+
+            const stillOwnsActiveSession =
+              enabled
+              && currentState
+                .session
+                ?.status === 'ACTIVE'
+              && currentState
+                .current_participation
+                ?.client_instance_id
+                === clientInstanceId
+
+            if (stillOwnsActiveSession) {
+              setMediaStatus(
+                'connecting',
+              )
+
+              if (
+                mediaRetryTimerRef.current
+                !== null
+              ) {
+                window.clearTimeout(
+                  mediaRetryTimerRef.current,
+                )
+              }
+
+              mediaRetryTimerRef.current =
+                window.setTimeout(
+                  () => {
+                    mediaRetryTimerRef.current =
+                      null
+
+                    void reconcileMedia()
+                  },
+                  500,
+                )
+            } else {
+              setMediaStatus(
+                'disconnected',
+              )
+            }
+          },
+        )
+
+      return () => {
+        voiceMediaClient
+          .setConnectionStatusListener(
+            null,
+          )
+      }
+    },
+    [
+      clearMediaRetry,
+      clientInstanceId,
+      enabled,
+      reconcileMedia,
+    ],
+  )
+
+
+  useEffect(
+    () => {
+      voiceMediaClient
+        .setOutputVolume(
+          audioOutputVolumeRef.current,
+        )
+    },
+    [],
+  )
+
+
+  useEffect(
+    () => {
+      void voiceMediaClient
+        .setMicrophoneNoiseGateThresholdDb(
+          microphoneNoiseGateThresholdDbRef.current,
+        )
+        .catch(() => {
+          /* The setting can be retried from the Audio panel. */
+        })
+    },
+    [],
+  )
+
+
+  useEffect(
+    () => {
+      voiceMediaClient
         .setAudioPlaybackRequiredListener(
           setAudioPlaybackRequired,
         )
@@ -1009,6 +1662,34 @@ export function VoiceProvider({
 
   useEffect(
     () => {
+      voiceMediaClient
+        .setMutedMicrophonesListener(
+          (
+            participantIdentities,
+          ) => {
+            setMutedMicrophoneParticipantIdentities(
+              participantIdentities,
+            )
+          },
+        )
+
+      return () => {
+        voiceMediaClient
+          .setMutedMicrophonesListener(
+            null,
+          )
+
+        setMutedMicrophoneParticipantIdentities(
+          [],
+        )
+      }
+    },
+    [],
+  )
+
+
+  useEffect(
+    () => {
       if (!enabled) {
         desiredVoiceStateRef
           .current =
@@ -1024,6 +1705,70 @@ export function VoiceProvider({
     [
       enabled,
       reconcileMedia,
+      refresh,
+    ],
+  )
+
+
+  useEffect(
+    () => {
+      if (!enabled) {
+        return
+      }
+
+      const recover = () => {
+        const currentState =
+          desiredVoiceStateRef.current
+
+        if (
+          currentState.session
+            ?.status !== 'ACTIVE'
+          || currentState
+            .current_participation
+            ?.client_instance_id
+            !== clientInstanceId
+        ) {
+          return
+        }
+
+        if (
+          document.visibilityState
+            === 'visible'
+          && navigator.onLine
+        ) {
+          void refresh()
+        }
+      }
+
+      const handleVisibilityChange = () => {
+        recover()
+      }
+
+      window.addEventListener(
+        'online',
+        recover,
+      )
+
+      document.addEventListener(
+        'visibilitychange',
+        handleVisibilityChange,
+      )
+
+      return () => {
+        window.removeEventListener(
+          'online',
+          recover,
+        )
+
+        document.removeEventListener(
+          'visibilitychange',
+          handleVisibilityChange,
+        )
+      }
+    },
+    [
+      clientInstanceId,
+      enabled,
       refresh,
     ],
   )
@@ -1194,6 +1939,31 @@ export function VoiceProvider({
           .current =
             EMPTY_VOICE_STATE
 
+        if (
+          mediaRetryTimerRef.current
+          !== null
+        ) {
+          window.clearTimeout(
+            mediaRetryTimerRef.current,
+          )
+
+          mediaRetryTimerRef.current =
+            null
+        }
+
+        voiceMediaClient
+          .setConnectionStatusListener(
+            null,
+          )
+
+        voiceMediaClient
+          .setMutedMicrophonesListener(
+            null,
+          )
+
+        voiceMediaClient
+          .setOutputMuted(false)
+
         void voiceMediaClient
           .disconnect()
       }
@@ -1227,6 +1997,37 @@ export function VoiceProvider({
           participation.user.id,
       )
 
+  const mutedMicrophoneIdentitySet =
+    new Set(
+      mutedMicrophoneParticipantIdentities,
+    )
+
+  const mutedUserIds =
+    state.participants
+      .filter(
+        (participation) => {
+          if (
+            participation.user.id
+              === currentUserId
+          ) {
+            return (
+              ownsCurrentParticipation
+              && !microphoneEnabled
+            )
+          }
+
+          return mutedMicrophoneIdentitySet.has(
+            voiceMediaParticipantIdentity(
+              participation.id,
+            ),
+          )
+        },
+      )
+      .map(
+        (participation) =>
+          participation.user.id,
+      )
+
   return (
     <VoiceContext.Provider
       value={{
@@ -1239,7 +2040,19 @@ export function VoiceProvider({
         state,
         ownsCurrentParticipation,
         microphoneEnabled,
+        microphoneNoiseGateThresholdDb,
+        microphoneNoiseGateSupported:
+          voiceNoiseGateSupported(),
+        audioOutputMuted,
+        audioOutputVolume,
+        audioOutputDeviceId,
+        audioOutputDevices,
+        audioOutputSelectionSupported:
+          browserAudioOutputSelectionSupported(),
+        audioOutputPromptSupported:
+          browserAudioOutputPromptSupported(),
         speakingUserIds,
+        mutedUserIds,
         error,
         refresh,
         startDirectCall,
@@ -1250,6 +2063,12 @@ export function VoiceProvider({
         joinVoiceRoom,
         leaveVoiceRoom,
         setMicrophoneEnabled,
+        setMicrophoneNoiseGateThresholdDb,
+        setAudioOutputMuted,
+        setAudioOutputVolume,
+        refreshAudioOutputDevices,
+        setAudioOutputDevice,
+        chooseAudioOutputDevice,
         startAudioPlayback,
         getParticipantVolume,
         setParticipantVolume,
@@ -1257,14 +2076,6 @@ export function VoiceProvider({
       }}
     >
       {children}
-      <VoiceCallOverlay />
-      <VoiceRoomOverlay
-        key={
-          state.session?.kind === 'ROOM'
-            ? state.session.id
-            : 'voice-room-idle'
-        }
-      />
     </VoiceContext.Provider>
   )
 }

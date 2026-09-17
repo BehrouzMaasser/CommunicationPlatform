@@ -1,3 +1,6 @@
+from django.db.models import Q
+from django.http import FileResponse, Http404
+
 from rest_framework import generics, mixins, status
 from rest_framework.exceptions import NotFound
 from rest_framework.response import Response
@@ -9,6 +12,7 @@ from apps.conversations.api.v1.exceptions import (
 from apps.conversations.api.v1.serializers import (
     DirectConversationCreateSerializer,
     DirectConversationSerializer,
+    GroupAvatarUploadSerializer,
     GroupConversationSerializer,
     GroupInvitationCreateSerializer,
     GroupInvitationLinkCreateResponseSerializer,
@@ -20,6 +24,11 @@ from apps.conversations.api.v1.serializers import (
 from apps.conversations.exceptions import (
     ConversationsError,
     GroupOwnerRequired,
+)
+from apps.conversations.models import (
+    GroupConversation,
+    GroupInvitation,
+    GroupMembership,
 )
 from apps.conversations.selectors import (
     DirectConversationSelector,
@@ -220,6 +229,83 @@ class GroupConversationDetailView(APIView):
 
         return Response(
             status=status.HTTP_204_NO_CONTENT,
+        )
+
+
+class GroupConversationAvatarView(APIView):
+
+    def _get_visible_group(self, *, request, group_id):
+        group = (
+            GroupConversation.objects
+            .filter(pk=group_id)
+            .filter(
+                Q(memberships__user=request.user)
+                | Q(invitations__recipient=request.user)
+            )
+            .distinct()
+            .first()
+        )
+        if group is None:
+            raise NotFound
+        return group
+
+    def get(self, request, group_id):
+        group = self._get_visible_group(
+            request=request,
+            group_id=group_id,
+        )
+        if not group.avatar:
+            raise Http404
+        try:
+            avatar_file = group.avatar.open("rb")
+        except (FileNotFoundError, OSError) as exc:
+            raise Http404 from exc
+        response = FileResponse(
+            avatar_file,
+            content_type="image/webp",
+        )
+        response["Cache-Control"] = (
+            "private, max-age=31536000, immutable"
+        )
+        return response
+
+    def put(self, request, group_id):
+        _get_accessible_group_or_404(
+            user=request.user,
+            group_id=group_id,
+        )
+        serializer = GroupAvatarUploadSerializer(
+            data=request.data,
+        )
+        serializer.is_valid(raise_exception=True)
+        try:
+            group = GroupConversationService.replace_avatar(
+                current_user=request.user,
+                group_id=group_id,
+                file_obj=serializer.validated_data["avatar"],
+            )
+        except ConversationsError as exc:
+            return conversations_error_response(exc)
+        return Response(
+            GroupConversationSerializer(group).data,
+            status=status.HTTP_200_OK,
+        )
+
+    def delete(self, request, group_id):
+        _get_accessible_group_or_404(
+            user=request.user,
+            group_id=group_id,
+        )
+        try:
+            group = GroupConversationService.remove_avatar(
+                current_user=request.user,
+                group_id=group_id,
+            )
+        except ConversationsError as exc:
+            return conversations_error_response(exc)
+        return Response(
+            GroupConversationSerializer(group).data,
+            status=status.HTTP_200_OK,
         )
 
 

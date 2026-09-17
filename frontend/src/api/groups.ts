@@ -3,6 +3,7 @@ import {
   apiGet,
   apiPatch,
   apiPost,
+  apiRequest,
 } from './client'
 import { getAllPages } from './pagination'
 
@@ -179,5 +180,27 @@ export function joinGroupWithToken(
 ): Promise<GroupMembership> {
   return apiPost<GroupMembership>(
     `/api/v1/group-invitations/${encodeURIComponent(token)}/join/`,
+  )
+}
+
+
+export function updateGroupAvatar(
+  groupId: number,
+  avatar: File,
+): Promise<GroupConversation> {
+  const body = new FormData()
+  body.append('avatar', avatar)
+  return apiRequest<GroupConversation>(
+    `/api/v1/groups/${groupId}/avatar/`,
+    { method: 'PUT', body },
+  )
+}
+
+
+export function removeGroupAvatar(
+  groupId: number,
+): Promise<GroupConversation> {
+  return apiDelete<GroupConversation>(
+    `/api/v1/groups/${groupId}/avatar/`,
   )
 }

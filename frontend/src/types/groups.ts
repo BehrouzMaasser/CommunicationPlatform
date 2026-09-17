@@ -3,6 +3,7 @@ import type { PublicUser } from './users'
 export type GroupConversation = {
   id: number
   name: string
+  avatar_url: string | null
   created_at: string
   last_activity_at: string
 }

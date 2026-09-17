@@ -191,6 +191,13 @@ MESSAGE_MAX_ATTACHMENTS = int(
     os.getenv('MESSAGE_MAX_ATTACHMENTS', '5')
 )
 
+USER_AVATAR_MAX_SIZE_BYTES = int(
+    os.getenv('USER_AVATAR_MAX_SIZE_BYTES', str(5 * 1024 * 1024))
+)
+USER_AVATAR_MAX_DIMENSION = int(
+    os.getenv('USER_AVATAR_MAX_DIMENSION', '4096')
+)
+
 
 # Voice / LiveKit
 #

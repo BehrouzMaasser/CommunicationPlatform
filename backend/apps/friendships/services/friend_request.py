@@ -199,13 +199,25 @@ class FriendRequestService:
         request_id = friend_request.pk
         sender_id = friend_request.sender_id
         sender_username = friend_request.sender.username
+        sender_avatar_name = (
+            friend_request.sender.avatar.name
+            if friend_request.sender.avatar
+            else None
+        )
         recipient_id = friend_request.recipient_id
         recipient_username = friend_request.recipient.username
+        recipient_avatar_name = (
+            friend_request.recipient.avatar.name
+            if friend_request.recipient.avatar
+            else None
+        )
 
         return {
             "request_id": request_id,
             "sender_id": sender_id,
             "sender_username": sender_username,
+            "sender_avatar_name": sender_avatar_name,
             "recipient_id": recipient_id,
             "recipient_username": recipient_username,
+            "recipient_avatar_name": recipient_avatar_name,
         }

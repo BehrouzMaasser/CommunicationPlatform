@@ -470,9 +470,9 @@ class AttachmentMessageCreateApiTests(AttachmentApiTestBase):
             attachment_data,
         )
 
-        self.assertIn(
-            f"/api/v1/attachments/{attachment_data['id']}/",
+        self.assertEqual(
             attachment_data["download_url"],
+            f"/api/v1/attachments/{attachment_data['id']}/",
         )
 
 

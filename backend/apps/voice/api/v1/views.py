@@ -1,5 +1,7 @@
 from django.conf import settings
 from django.contrib.auth import get_user_model
+from django.db.models import Q
+from django.http import FileResponse, Http404
 from rest_framework import generics, status
 from rest_framework.exceptions import NotFound
 from rest_framework.response import Response
@@ -12,6 +14,7 @@ from apps.voice.api.v1.serializers import (
     CurrentVoiceParticipationSerializer,
     DirectCallStartSerializer,
     VoiceMediaCredentialsSerializer,
+    VoiceRoomAvatarUploadSerializer,
     VoiceRoomInvitationCreateSerializer,
     VoiceRoomInvitationLinkJoinSerializer,
     VoiceRoomInvitationLinkSerializer,
@@ -23,6 +26,7 @@ from apps.voice.api.v1.serializers import (
     VoiceSessionSerializer,
 )
 from apps.voice.exceptions import VoiceError, VoiceUnavailable
+from apps.voice.models import VoiceRoom
 from apps.voice.selectors.voice_room import VoiceRoomSelector
 from apps.voice.selectors.voice_room_invitation import (
     VoiceRoomInvitationSelector,
@@ -488,6 +492,81 @@ class VoiceRoomDetailView(APIView):
         return _handle_voice_operation(
             operation
         )
+
+
+class VoiceRoomAvatarView(APIView):
+
+    def _get_visible_room(self, *, request, room_id):
+        room = (
+            VoiceRoom.objects
+            .filter(pk=room_id)
+            .filter(
+                Q(memberships__user=request.user)
+                | Q(invitations__recipient=request.user)
+            )
+            .distinct()
+            .first()
+        )
+        if room is None:
+            raise NotFound
+        return room
+
+    def get(self, request, room_id):
+        room = self._get_visible_room(
+            request=request,
+            room_id=room_id,
+        )
+        if not room.avatar:
+            raise Http404
+        try:
+            avatar_file = room.avatar.open("rb")
+        except (FileNotFoundError, OSError) as exc:
+            raise Http404 from exc
+        response = FileResponse(
+            avatar_file,
+            content_type="image/webp",
+        )
+        response["Cache-Control"] = (
+            "private, max-age=31536000, immutable"
+        )
+        return response
+
+    def put(self, request, room_id):
+        _get_voice_room_for_member_or_404(
+            user=request.user,
+            room_id=room_id,
+        )
+        serializer = VoiceRoomAvatarUploadSerializer(
+            data=request.data,
+        )
+        serializer.is_valid(raise_exception=True)
+
+        def operation():
+            room = VoiceRoomService.replace_avatar(
+                current_user=request.user,
+                room_id=room_id,
+                file_obj=serializer.validated_data["avatar"],
+            )
+            return Response(
+                VoiceRoomSerializer(room).data
+            )
+        return _handle_voice_operation(operation)
+
+    def delete(self, request, room_id):
+        _get_voice_room_for_member_or_404(
+            user=request.user,
+            room_id=room_id,
+        )
+
+        def operation():
+            room = VoiceRoomService.remove_avatar(
+                current_user=request.user,
+                room_id=room_id,
+            )
+            return Response(
+                VoiceRoomSerializer(room).data
+            )
+        return _handle_voice_operation(operation)
 
 
 class VoiceRoomMemberListView(

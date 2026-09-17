@@ -9,6 +9,7 @@ from apps.voice.api.v1.views import (
     GroupVoiceLeaveView,
     GroupVoiceView,
     VoiceMediaCredentialsView,
+    VoiceRoomAvatarView,
     VoiceRoomDetailView,
     VoiceRoomIncomingInvitationListView,
     VoiceRoomInvitationAcceptView,
@@ -88,6 +89,11 @@ urlpatterns = [
         "voice/rooms/<uuid:room_id>/",
         VoiceRoomDetailView.as_view(),
         name="voice-room-detail",
+    ),
+    path(
+        "voice/rooms/<uuid:room_id>/avatar/",
+        VoiceRoomAvatarView.as_view(),
+        name="api-voice-room-avatar",
     ),
     path(
         "voice/rooms/<uuid:room_id>/members/",
