@@ -2882,3 +2882,482 @@ a {
   display: block;
   object-fit: cover;
 }
+
+/* Friends and Voice Room directory surfaces */
+.directory-page-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.directory-page-title {
+  font-size: clamp(1.45rem, 2vw, 1.85rem);
+  font-weight: 800;
+  letter-spacing: -0.025em;
+}
+
+.directory-page-subtitle,
+.directory-section-subtitle {
+  color: var(--app-muted);
+}
+
+.directory-count-pill,
+.directory-section-count {
+  display: inline-grid;
+  min-width: 1.8rem;
+  min-height: 1.8rem;
+  place-items: center;
+  padding: 0.2rem 0.65rem;
+  color: #5f587a;
+  background: #f0eefb;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.directory-surface {
+  padding: 1rem;
+  background: #fff;
+  border: 1px solid var(--app-border);
+  border-radius: var(--app-radius);
+  box-shadow: var(--app-shadow-sm);
+}
+
+.directory-section-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.8rem;
+  margin-bottom: 0.8rem;
+}
+
+.directory-section-title {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 780;
+  letter-spacing: -0.012em;
+}
+
+.directory-section-subtitle {
+  margin-top: 0.12rem;
+  font-size: 0.78rem;
+}
+
+.directory-list {
+  display: grid;
+  gap: 0.18rem;
+}
+
+.directory-list-compact {
+  gap: 0.1rem;
+}
+
+.directory-list-row,
+.directory-request-row {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.68rem 0.2rem;
+  border-bottom: 1px solid #eef0f4;
+}
+
+.directory-list-row:last-child,
+.directory-request-row:last-child {
+  border-bottom: 0;
+}
+
+.directory-request-actions {
+  display: flex;
+  flex: 0 0 auto;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 0.4rem;
+}
+
+.directory-row-action {
+  flex: 0 0 auto;
+}
+
+.directory-user-identity {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 0.65rem;
+}
+
+.directory-user-avatar-wrap {
+  position: relative;
+  display: inline-flex;
+  flex: 0 0 auto;
+}
+
+.directory-presence-dot {
+  position: absolute;
+  right: -0.08rem;
+  bottom: -0.08rem;
+  width: 0.62rem;
+  height: 0.62rem;
+  background: #9aa3b5;
+  border: 2px solid #fff;
+  border-radius: 999px;
+}
+
+.directory-presence-dot.is-online {
+  background: #22a06b;
+}
+
+.directory-user-copy {
+  display: grid;
+  min-width: 0;
+  gap: 0.08rem;
+}
+
+.directory-user-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.9rem;
+  font-weight: 730;
+}
+
+.directory-user-state {
+  color: #188557;
+  font-size: 0.7rem;
+  font-weight: 700;
+}
+
+.directory-empty {
+  display: grid;
+  justify-items: center;
+  gap: 0.3rem;
+  padding: 2.6rem 1rem;
+  text-align: center;
+}
+
+.directory-empty-compact {
+  justify-items: start;
+  padding: 0.65rem 0.2rem;
+  text-align: left;
+}
+
+.directory-search-form,
+.directory-create-form {
+  display: flex;
+  gap: 0.55rem;
+}
+
+.directory-search-input {
+  min-height: 2.45rem;
+  background: #f6f7fb;
+  border-color: transparent;
+  border-radius: 0.78rem;
+  font-size: 0.88rem;
+}
+
+.directory-search-input:focus {
+  background: #fff;
+  border-color: rgba(102, 87, 232, 0.35);
+  box-shadow: 0 0 0 0.18rem rgba(102, 87, 232, 0.1);
+}
+
+.directory-search-results {
+  margin-top: 0.65rem;
+}
+
+.friends-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1.45fr) minmax(19rem, 0.85fr);
+  gap: 1rem;
+}
+
+.friends-primary-column,
+.friends-secondary-column {
+  min-width: 0;
+}
+
+.friends-secondary-column {
+  display: grid;
+  align-content: start;
+  gap: 1rem;
+}
+
+.directory-primary-action {
+  display: inline-flex;
+  min-height: 2.45rem;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  padding: 0.45rem 0.8rem;
+  color: var(--app-primary);
+  background: var(--app-primary-soft);
+  border: 0;
+  border-radius: 0.78rem;
+  font-size: 0.82rem;
+  font-weight: 760;
+}
+
+.directory-primary-action:hover,
+.directory-primary-action:focus-visible,
+.directory-primary-action.is-active {
+  color: #fff;
+  background: var(--app-primary);
+  outline: none;
+}
+
+.directory-primary-action > span:first-child {
+  font-size: 1.15rem;
+  line-height: 1;
+}
+
+.directory-create-panel,
+.voice-room-invitations {
+  margin-bottom: 1rem;
+}
+
+.voice-room-directory-header {
+  align-items: center;
+}
+
+.voice-room-search {
+  width: min(17rem, 42vw);
+}
+
+.voice-room-directory-list {
+  display: grid;
+  gap: 0.22rem;
+}
+
+.voice-room-directory-row {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.72rem 0.55rem;
+  color: inherit;
+  border-radius: 0.82rem;
+  text-decoration: none;
+  transition: background-color 130ms ease, transform 130ms ease;
+}
+
+.voice-room-directory-row:hover,
+.voice-room-directory-row:focus-visible {
+  color: inherit;
+  background: #f7f7fb;
+  outline: none;
+}
+
+.voice-room-directory-row:active {
+  transform: scale(0.995);
+}
+
+.voice-room-list-identity {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 0.65rem;
+}
+
+.voice-room-list-copy {
+  display: grid;
+  min-width: 0;
+  flex: 1 1 auto;
+  gap: 0.2rem;
+}
+
+.voice-room-list-row-top,
+.voice-room-list-row-bottom {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.65rem;
+}
+
+.voice-room-list-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.92rem;
+  font-weight: 760;
+}
+
+.voice-room-list-meta {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--app-muted);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.72rem;
+}
+
+.voice-room-live-pill {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 0.32rem;
+  color: #177c52;
+  font-size: 0.68rem;
+  font-weight: 800;
+}
+
+.voice-room-live-dot {
+  width: 0.48rem;
+  height: 0.48rem;
+  background: #24a76f;
+  border-radius: 999px;
+  box-shadow: 0 0 0 0.18rem rgba(36, 167, 111, 0.12);
+}
+
+.voice-room-row-chevron {
+  flex: 0 0 auto;
+  color: #9aa1ae;
+  font-size: 1.35rem;
+  line-height: 1;
+}
+
+.voice-participant-identity {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.voice-participant-state {
+  display: block;
+  margin-top: 0.05rem;
+  color: #188557;
+  font-size: 0.68rem;
+  font-weight: 720;
+}
+
+@media (max-width: 991.98px) {
+  .friends-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .friends-secondary-column {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .friends-secondary-column > :first-child {
+    grid-column: 1 / -1;
+  }
+}
+
+@media (max-width: 767.98px) {
+  .directory-page-header {
+    align-items: center;
+  }
+
+  .directory-surface {
+    padding: 0.85rem;
+    border-right: 0;
+    border-left: 0;
+    border-radius: 0;
+    box-shadow: none;
+  }
+
+  .friends-page,
+  .voice-rooms-page {
+    margin-right: -1rem;
+    margin-left: -1rem;
+  }
+
+  .friends-page > .directory-page-header,
+  .voice-rooms-page > .directory-page-header,
+  .friends-page > .alert,
+  .voice-rooms-page > .alert {
+    margin-right: 1rem;
+    margin-left: 1rem;
+  }
+
+  .friends-layout,
+  .friends-secondary-column {
+    gap: 0.7rem;
+  }
+
+  .friends-secondary-column {
+    grid-template-columns: 1fr;
+  }
+
+  .friends-secondary-column > :first-child {
+    grid-column: auto;
+  }
+
+  .directory-create-panel,
+  .voice-room-invitations {
+    margin-bottom: 0.7rem;
+  }
+
+  .voice-room-search {
+    width: min(14rem, 48vw);
+  }
+}
+
+@media (max-width: 499.98px) {
+  .directory-page-header {
+    gap: 0.65rem;
+  }
+
+  .directory-page-subtitle {
+    font-size: 0.78rem;
+  }
+
+  .directory-count-pill {
+    display: none;
+  }
+
+  .directory-primary-action {
+    width: 2.4rem;
+    min-height: 2.4rem;
+    flex: 0 0 auto;
+    padding: 0;
+  }
+
+  .directory-primary-action-label {
+    display: none;
+  }
+
+  .directory-search-form,
+  .directory-create-form {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .directory-request-row {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .directory-request-actions {
+    width: 100%;
+    justify-content: flex-start;
+    padding-left: 2.75rem;
+  }
+
+  .voice-room-directory-header {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .voice-room-search {
+    width: 100%;
+  }
+
+  .voice-room-list-row-bottom {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 0.12rem;
+  }
+
+  .voice-room-directory-row {
+    padding-right: 0.35rem;
+    padding-left: 0.35rem;
+  }
+}

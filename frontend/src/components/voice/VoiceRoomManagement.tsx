@@ -21,6 +21,7 @@ import {
 import {
   useRealtimeEvent,
 } from '../../realtime/RealtimeContext'
+import Avatar from '../users/Avatar'
 
 import type {
   VoiceRoom,
@@ -500,9 +501,16 @@ function VoiceRoomManagement({
                           className="list-group-item px-0 d-flex justify-content-between align-items-center gap-3"
                           key={friend.id}
                         >
-                          <span>
-                            @{friend.username}
-                          </span>
+                          <div className="directory-user-identity">
+                            <Avatar
+                              user={friend}
+                              size="sm"
+                              alt=""
+                            />
+                            <span className="directory-user-name">
+                              @{friend.username}
+                            </span>
+                          </div>
 
                           {invitation ? (
                             <button

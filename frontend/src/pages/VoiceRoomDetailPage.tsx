@@ -11,6 +11,7 @@ import {
 } from 'react-router-dom'
 
 import { ApiError } from '../api/client'
+import Avatar from '../components/users/Avatar'
 import VoiceRoomAvatar from '../components/voice/VoiceRoomAvatar'
 import VoiceRoomManagement from '../components/voice/VoiceRoomManagement'
 import {
@@ -937,19 +938,27 @@ function VoiceRoomDetailPage() {
                         }
                         key={participation.id}
                       >
-                        <div className="d-flex align-items-center flex-wrap gap-2">
-                          <div className="fw-semibold">
-                            @{participation.user.username}
-                            {isCurrentUser
-                              ? ' · you'
-                              : ''}
-                          </div>
+                        <div className="voice-participant-identity">
+                          <Avatar
+                            user={participation.user}
+                            size="sm"
+                            alt=""
+                          />
 
-                          {isSpeaking && (
-                            <span className="badge voice-speaking-badge">
-                              Speaking
-                            </span>
-                          )}
+                          <div className="min-width-0">
+                            <div className="fw-semibold text-truncate">
+                              @{participation.user.username}
+                              {isCurrentUser
+                                ? ' · you'
+                                : ''}
+                            </div>
+
+                            {isSpeaking && (
+                              <span className="voice-participant-state">
+                                Speaking
+                              </span>
+                            )}
+                          </div>
                         </div>
 
                         {!isCurrentUser
@@ -1386,17 +1395,25 @@ function VoiceRoomDetailPage() {
                     key={membership.id}
                   >
                     <div className="d-flex justify-content-between align-items-center gap-3">
-                      <div>
-                        <div className="fw-semibold">
-                          @{membership.user.username}
-                        </div>
+                      <div className="directory-user-identity">
+                        <Avatar
+                          user={membership.user}
+                          size="sm"
+                          alt=""
+                        />
 
-                        {membership.user.id ===
-                          room.owner.id && (
-                          <div className="small text-secondary">
-                            Owner
-                          </div>
-                        )}
+                        <span className="directory-user-copy">
+                          <span className="directory-user-name">
+                            @{membership.user.username}
+                          </span>
+
+                          {membership.user.id ===
+                            room.owner.id && (
+                            <span className="directory-user-state">
+                              Owner
+                            </span>
+                          )}
+                        </span>
                       </div>
 
                       {currentUserId ===
