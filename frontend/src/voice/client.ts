@@ -48,6 +48,17 @@ type AudioPlaybackRequiredListener = (
 ) => void
 
 
+export type VoiceMediaConnectionStatus =
+  | 'disconnected'
+  | 'connecting'
+  | 'connected'
+
+
+type ConnectionStatusListener = (
+  status: VoiceMediaConnectionStatus,
+) => void
+
+
 function clampVolume(
   value: number,
 ): number {
@@ -82,12 +93,17 @@ export class VoiceMediaClient {
 
   private outputMuted = false
 
+  private outputVolume = 1
+
   private activeSpeakersListener:
     ActiveSpeakersListener | null = null
 
   private audioPlaybackRequiredListener:
     AudioPlaybackRequiredListener | null =
       null
+
+  private connectionStatusListener:
+    ConnectionStatusListener | null = null
 
 
   get currentRoom(): Room | null {
@@ -138,6 +154,23 @@ export class VoiceMediaClient {
   }
 
 
+  setConnectionStatusListener(
+    listener:
+      ConnectionStatusListener | null,
+  ): void {
+    this.connectionStatusListener =
+      listener
+
+    listener?.(
+      this.isConnected
+        ? 'connected'
+        : this.connecting
+          ? 'connecting'
+          : 'disconnected',
+    )
+  }
+
+
   setOutputMuted(
     muted: boolean,
   ): void {
@@ -146,6 +179,48 @@ export class VoiceMediaClient {
     for (const element of this.audioElements) {
       element.muted = muted
     }
+  }
+
+
+  setOutputVolume(
+    volume: number,
+  ): void {
+    this.outputVolume =
+      clampVolume(volume)
+
+    for (
+      const participant
+      of this.room
+        ?.remoteParticipants
+        .values() ?? []
+    ) {
+      const participantVolume =
+        this.participantVolumes.get(
+          participant.identity,
+        ) ?? 1
+
+      participant.setVolume(
+        participantVolume
+        * this.outputVolume,
+      )
+    }
+  }
+
+
+  async switchAudioOutputDevice(
+    deviceId: string,
+  ): Promise<boolean> {
+    if (!this.room) {
+      throw new Error(
+        'Voice media is not connected.',
+      )
+    }
+
+    return this.room
+      .switchActiveDevice(
+        'audiooutput',
+        deviceId,
+      )
   }
 
 
@@ -172,7 +247,8 @@ export class VoiceMediaClient {
         .get(identity)
 
     participant?.setVolume(
-      normalized,
+      normalized
+      * this.outputVolume,
     )
   }
 
@@ -191,6 +267,9 @@ export class VoiceMediaClient {
     }
 
     this.connecting = true
+    this.emitConnectionStatus(
+      'connecting',
+    )
 
     try {
       const liveKit =
@@ -236,6 +315,27 @@ export class VoiceMediaClient {
         this.handleTrackUnsubscribed,
       )
 
+      room.on(
+        liveKit
+          .RoomEvent
+          .Reconnecting,
+        this.handleRoomReconnecting,
+      )
+
+      room.on(
+        liveKit
+          .RoomEvent
+          .Reconnected,
+        this.handleRoomReconnected,
+      )
+
+      room.on(
+        liveKit
+          .RoomEvent
+          .Disconnected,
+        this.handleRoomDisconnected,
+      )
+
       try {
         await room.connect(
           credentials.server_url,
@@ -247,6 +347,9 @@ export class VoiceMediaClient {
         )
 
         this.emitAudioPlaybackRequired()
+        this.emitConnectionStatus(
+          'connected',
+        )
       } catch (error) {
         if (
           this.room === room
@@ -257,6 +360,10 @@ export class VoiceMediaClient {
         this.unbindRoom(room)
 
         await room.disconnect()
+
+        this.emitConnectionStatus(
+          'disconnected',
+        )
 
         throw error
       }
@@ -311,6 +418,9 @@ export class VoiceMediaClient {
       this.participantVolumes.clear()
       this.emitActiveSpeakers([])
       this.emitAudioPlaybackRequired()
+      this.emitConnectionStatus(
+        'disconnected',
+      )
       return
     }
 
@@ -342,6 +452,10 @@ export class VoiceMediaClient {
     this.emitAudioPlaybackRequired()
 
     await room.disconnect(true)
+
+    this.emitConnectionStatus(
+      'disconnected',
+    )
   }
 
 
@@ -408,10 +522,58 @@ export class VoiceMediaClient {
   }
 
 
+  private readonly handleRoomReconnecting =
+    (): void => {
+      this.emitConnectionStatus(
+        'connecting',
+      )
+    }
+
+
+  private readonly handleRoomReconnected =
+    (): void => {
+      this.emitConnectionStatus(
+        'connected',
+      )
+    }
+
+
+  private readonly handleRoomDisconnected =
+    (): void => {
+      const room = this.room
+
+      if (!room) {
+        this.emitConnectionStatus(
+          'disconnected',
+        )
+        return
+      }
+
+      this.room = null
+      this.stopLocalMicrophone(room)
+      this.unbindRoom(room)
+      this.removeAudioElements()
+      this.emitActiveSpeakers([])
+      this.emitAudioPlaybackRequired()
+      this.emitConnectionStatus(
+        'disconnected',
+      )
+    }
+
+
   private readonly handleAudioPlaybackStatusChanged =
     (): void => {
       this.emitAudioPlaybackRequired()
     }
+
+
+  private emitConnectionStatus(
+    status: VoiceMediaConnectionStatus,
+  ): void {
+    this.connectionStatusListener?.(
+      status,
+    )
+  }
 
 
   private emitAudioPlaybackRequired():
@@ -465,9 +627,10 @@ export class VoiceMediaClient {
         participant.identity,
       )
 
-    if (volume !== undefined) {
-      participant.setVolume(volume)
-    }
+    participant.setVolume(
+      (volume ?? 1)
+      * this.outputVolume,
+    )
 
     const element =
       track.attach()
@@ -544,6 +707,27 @@ export class VoiceMediaClient {
         .RoomEvent
         .TrackUnsubscribed,
       this.handleTrackUnsubscribed,
+    )
+
+    room.off(
+      liveKit
+        .RoomEvent
+        .Reconnecting,
+      this.handleRoomReconnecting,
+    )
+
+    room.off(
+      liveKit
+        .RoomEvent
+        .Reconnected,
+      this.handleRoomReconnected,
+    )
+
+    room.off(
+      liveKit
+        .RoomEvent
+        .Disconnected,
+      this.handleRoomDisconnected,
     )
   }
 

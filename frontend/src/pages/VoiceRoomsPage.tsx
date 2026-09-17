@@ -10,6 +10,7 @@ import {
 } from 'react-router-dom'
 
 import { ApiError } from '../api/client'
+import VoiceAudioSettings from '../components/voice/VoiceAudioSettings'
 import VoiceRoomAvatar from '../components/voice/VoiceRoomAvatar'
 import {
   acceptVoiceRoomInvitation,
@@ -388,24 +389,28 @@ function VoiceRoomsPage() {
           </p>
         </div>
 
-        <button
-          className={`directory-primary-action${createOpen ? ' is-active' : ''}`}
-          type="button"
-          aria-expanded={createOpen}
-          aria-controls="voice-room-create-panel"
-          onClick={() => {
-            setCreateOpen(
-              (current) => !current,
-            )
-          }}
-        >
-          <span aria-hidden="true">
-            {createOpen ? '×' : '+'}
-          </span>
-          <span className="directory-primary-action-label">
-            {createOpen ? 'Close' : 'New room'}
-          </span>
-        </button>
+        <div className="directory-page-actions">
+          <VoiceAudioSettings buttonSize="md" />
+
+          <button
+            className={`directory-primary-action${createOpen ? ' is-active' : ''}`}
+            type="button"
+            aria-expanded={createOpen}
+            aria-controls="voice-room-create-panel"
+            onClick={() => {
+              setCreateOpen(
+                (current) => !current,
+              )
+            }}
+          >
+            <span aria-hidden="true">
+              {createOpen ? '×' : '+'}
+            </span>
+            <span className="directory-primary-action-label">
+              {createOpen ? 'Close' : 'New room'}
+            </span>
+          </button>
+        </div>
       </div>
 
       {error && (

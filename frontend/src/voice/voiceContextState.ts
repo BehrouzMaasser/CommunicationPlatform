@@ -3,6 +3,7 @@ import {
 } from 'react'
 
 import type {
+  VoiceAudioOutputDevice,
   VoiceState,
 } from '../types/voice'
 
@@ -35,6 +36,12 @@ export type VoiceContextValue = {
   ownsCurrentParticipation: boolean
   microphoneEnabled: boolean
   audioOutputMuted: boolean
+  audioOutputVolume: number
+  audioOutputDeviceId: string
+  audioOutputDevices:
+    VoiceAudioOutputDevice[]
+  audioOutputSelectionSupported: boolean
+  audioOutputPromptSupported: boolean
   speakingUserIds: number[]
 
   error: string | null
@@ -67,6 +74,18 @@ export type VoiceContextValue = {
 
   setAudioOutputMuted:
     (muted: boolean) => void
+
+  setAudioOutputVolume:
+    (volume: number) => void
+
+  refreshAudioOutputDevices:
+    () => Promise<void>
+
+  setAudioOutputDevice:
+    (deviceId: string) => Promise<void>
+
+  chooseAudioOutputDevice:
+    () => Promise<void>
 
   startAudioPlayback:
     () => Promise<void>

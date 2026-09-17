@@ -51,6 +51,13 @@ export type VoiceMediaCredentials = {
 
 
 
+export type VoiceAudioOutputDevice = {
+  device_id: string
+  label: string
+}
+
+
+
 export type VoiceRoom = {
   id: string
   name: string

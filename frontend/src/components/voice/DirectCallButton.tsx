@@ -10,6 +10,8 @@ import {
   useVoice,
 } from '../../voice/useVoice'
 
+import VoiceAudioSettings from './VoiceAudioSettings'
+
 
 type DirectCallButtonProps = {
   otherUser: PublicUser
@@ -194,6 +196,8 @@ function DirectCallButton({
             : 'Mute'}
         </button>
 
+        <VoiceAudioSettings />
+
         <button
           className="btn btn-sm btn-outline-danger text-nowrap"
           type="button"
@@ -279,6 +283,8 @@ function DirectCallButton({
       >
         {label}
       </button>
+
+      <VoiceAudioSettings />
 
       {localError && (
         <span

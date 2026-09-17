@@ -1658,7 +1658,7 @@ a {
 /* Voice */
 
 .voice-panel {
-  overflow: hidden;
+  overflow: visible;
   background:
     linear-gradient(
       135deg,
@@ -1743,6 +1743,17 @@ a {
   color: var(--app-muted);
   font-size: 0.875rem;
 }
+
+.voice-room-control-bar {
+  min-height: 2.5rem;
+  margin-bottom: 1rem;
+}
+
+.voice-room-control-bar .btn,
+.voice-room-control-bar .voice-audio-settings-trigger {
+  min-height: 2.5rem;
+}
+
 
 
 /* Persistent active-voice dock. The desktop/tablet instance lives in the
@@ -2920,6 +2931,13 @@ a {
   margin-bottom: 1rem;
 }
 
+.directory-page-actions {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 0.55rem;
+}
+
 .directory-page-title {
   font-size: clamp(1.45rem, 2vw, 1.85rem);
   font-weight: 800;
@@ -3333,6 +3351,10 @@ a {
     gap: 0.65rem;
   }
 
+  .directory-page-actions {
+    gap: 0.4rem;
+  }
+
   .directory-page-subtitle {
     font-size: 0.78rem;
   }
@@ -3694,4 +3716,62 @@ a {
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
   }
+}
+
+
+/* Voice audio output settings */
+.voice-audio-settings {
+  position: relative;
+  flex: 0 0 auto;
+}
+
+.voice-audio-settings-layer {
+  position: fixed;
+  inset: 0;
+  z-index: 1200;
+  display: grid;
+  place-items: center;
+  padding:
+    max(1rem, env(safe-area-inset-top))
+    max(1rem, env(safe-area-inset-right))
+    max(1rem, env(safe-area-inset-bottom))
+    max(1rem, env(safe-area-inset-left));
+  background: rgba(15, 23, 42, 0.12);
+}
+
+.voice-audio-settings-popover {
+  display: grid;
+  width: min(22rem, calc(100vw - 2rem));
+  max-height: min(30rem, calc(100dvh - 2rem));
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  gap: 0.8rem;
+  padding: 1rem;
+  color: var(--bs-body-color);
+  background: rgba(255, 255, 255, 0.995);
+  border: 1px solid var(--app-border);
+  border-radius: 0.95rem;
+  box-shadow: 0 1.25rem 3rem rgba(15, 23, 42, 0.24);
+}
+
+.voice-audio-settings-heading-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.voice-audio-settings-heading {
+  font-size: 0.82rem;
+  font-weight: 800;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+
+.voice-audio-settings-field {
+  display: grid;
+  gap: 0.35rem;
+  margin: 0;
+  font-size: 0.82rem;
+  font-weight: 650;
 }

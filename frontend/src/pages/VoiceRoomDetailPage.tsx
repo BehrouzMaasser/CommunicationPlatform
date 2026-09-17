@@ -12,6 +12,7 @@ import {
 
 import { ApiError } from '../api/client'
 import Avatar from '../components/users/Avatar'
+import VoiceAudioSettings from '../components/voice/VoiceAudioSettings'
 import VoiceRoomAvatar from '../components/voice/VoiceRoomAvatar'
 import VoiceRoomManagement from '../components/voice/VoiceRoomManagement'
 import {
@@ -894,152 +895,7 @@ function VoiceRoomDetailPage() {
             )}
           </div>
 
-          {roomParticipants.length === 0 ? (
-            <p className="text-secondary">
-              Nobody is connected.
-            </p>
-          ) : (
-            <div className="mb-3">
-              <div className="small text-secondary mb-2">
-                Connected
-              </div>
-
-              <div className="d-flex flex-column gap-2">
-                {roomParticipants.map(
-                  (participation) => {
-                    const isCurrentUser =
-                      participation.user.id ===
-                        currentUserId
-
-                    const volumePercent =
-                      Math.round(
-                        getParticipantVolume(
-                          participation.user.id,
-                        ) * 100,
-                      )
-
-                    const isSpeaking =
-                      speakingUserIds.includes(
-                        participation.user.id,
-                      )
-                      && (
-                        !isCurrentUser
-                        || microphoneEnabled
-                      )
-
-                    return (
-                      <div
-                        className={
-                          `voice-participant-row d-flex flex-column flex-sm-row align-items-sm-center justify-content-between gap-2${
-                            isSpeaking
-                              ? ' voice-participant-row-speaking'
-                              : ''
-                          }`
-                        }
-                        key={participation.id}
-                      >
-                        <div className="voice-participant-identity">
-                          <Avatar
-                            user={participation.user}
-                            size="sm"
-                            alt=""
-                          />
-
-                          <div className="min-width-0">
-                            <div className="fw-semibold text-truncate">
-                              @{participation.user.username}
-                              {isCurrentUser
-                                ? ' · you'
-                                : ''}
-                            </div>
-
-                            {isSpeaking && (
-                              <span className="voice-participant-state">
-                                Speaking
-                              </span>
-                            )}
-                          </div>
-                        </div>
-
-                        {!isCurrentUser
-                          && ownsThisRoomSession
-                          && mediaStatus ===
-                            'connected' && (
-                          <div
-                            className="d-flex align-items-center gap-2"
-                            style={{
-                              minWidth: '14rem',
-                            }}
-                          >
-                            <span
-                              className="small text-secondary"
-                              style={{
-                                minWidth: '3rem',
-                              }}
-                            >
-                              {volumePercent}%
-                            </span>
-
-                            <input
-                              className="form-range m-0"
-                              type="range"
-                              min="0"
-                              max="100"
-                              step="5"
-                              value={volumePercent}
-                              aria-label={
-                                `Volume for @${participation.user.username}`
-                              }
-                              onChange={(event) =>
-                                setParticipantVolume(
-                                  participation
-                                    .user.id,
-                                  Number(
-                                    event.target
-                                      .value,
-                                  ) / 100,
-                                )
-                              }
-                            />
-
-                            <button
-                              className="btn btn-sm btn-outline-secondary flex-shrink-0"
-                              type="button"
-                              onClick={() =>
-                                toggleParticipantMuted(
-                                  participation
-                                    .user.id,
-                                )
-                              }
-                            >
-                              {volumePercent === 0
-                                ? 'Unmute'
-                                : 'Mute'}
-                            </button>
-                          </div>
-                        )}
-                      </div>
-                    )
-                  },
-                )}
-              </div>
-            </div>
-          )}
-
-          <div className="voice-media-copy mb-3">
-            <span>{mediaDescription}</span>
-          </div>
-
-          {(actionError || voiceError) && (
-            <div
-              className="alert alert-danger py-2 px-3 small"
-              role="alert"
-            >
-              {actionError ?? voiceError}
-            </div>
-          )}
-
-          <div className="d-flex flex-wrap gap-2">
+          <div className="voice-room-control-bar d-flex flex-wrap align-items-center gap-2">
             {!isThisRoomSession && (
               <button
                 className="btn btn-primary"
@@ -1065,6 +921,8 @@ function VoiceRoomDetailPage() {
                   : 'Join voice'}
               </button>
             )}
+
+            <VoiceAudioSettings buttonSize="md" />
 
             {ownsThisRoomSession && (
               <>
@@ -1177,6 +1035,153 @@ function VoiceRoomDetailPage() {
               </button>
             )}
           </div>
+
+          {roomParticipants.length === 0 ? (
+            <p className="text-secondary">
+              Nobody is connected.
+            </p>
+          ) : (
+            <div className="mb-3">
+              <div className="small text-secondary mb-2">
+                Connected
+              </div>
+
+              <div className="d-flex flex-column gap-2">
+                {roomParticipants.map(
+                  (participation) => {
+                    const isCurrentUser =
+                      participation.user.id ===
+                        currentUserId
+
+                    const volumePercent =
+                      Math.round(
+                        getParticipantVolume(
+                          participation.user.id,
+                        ) * 100,
+                      )
+
+                    const isSpeaking =
+                      speakingUserIds.includes(
+                        participation.user.id,
+                      )
+                      && (
+                        !isCurrentUser
+                        || microphoneEnabled
+                      )
+
+                    return (
+                      <div
+                        className={
+                          `voice-participant-row d-flex flex-column flex-sm-row align-items-sm-center justify-content-between gap-2${
+                            isSpeaking
+                              ? ' voice-participant-row-speaking'
+                              : ''
+                          }`
+                        }
+                        key={participation.id}
+                      >
+                        <div className="voice-participant-identity">
+                          <Avatar
+                            user={participation.user}
+                            size="sm"
+                            alt=""
+                          />
+
+                          <div className="min-width-0">
+                            <div className="fw-semibold text-truncate">
+                              @{participation.user.username}
+                              {isCurrentUser
+                                ? ' · you'
+                                : ''}
+                            </div>
+
+                            <span
+                              className={`voice-participant-state${isSpeaking ? '' : ' invisible'}`}
+                              aria-hidden={!isSpeaking}
+                            >
+                              Speaking
+                            </span>
+                          </div>
+                        </div>
+
+                        {!isCurrentUser
+                          && ownsThisRoomSession
+                          && mediaStatus ===
+                            'connected' && (
+                          <div
+                            className="d-flex align-items-center gap-2"
+                            style={{
+                              minWidth: '14rem',
+                            }}
+                          >
+                            <span
+                              className="small text-secondary"
+                              style={{
+                                minWidth: '3rem',
+                              }}
+                            >
+                              {volumePercent}%
+                            </span>
+
+                            <input
+                              className="form-range m-0"
+                              type="range"
+                              min="0"
+                              max="100"
+                              step="5"
+                              value={volumePercent}
+                              aria-label={
+                                `Volume for @${participation.user.username}`
+                              }
+                              onChange={(event) =>
+                                setParticipantVolume(
+                                  participation
+                                    .user.id,
+                                  Number(
+                                    event.target
+                                      .value,
+                                  ) / 100,
+                                )
+                              }
+                            />
+
+                            <button
+                              className="btn btn-sm btn-outline-secondary flex-shrink-0"
+                              type="button"
+                              onClick={() =>
+                                toggleParticipantMuted(
+                                  participation
+                                    .user.id,
+                                )
+                              }
+                            >
+                              {volumePercent === 0
+                                ? 'Unmute'
+                                : 'Mute'}
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    )
+                  },
+                )}
+              </div>
+            </div>
+          )}
+
+          <div className="voice-media-copy mb-3">
+            <span>{mediaDescription}</span>
+          </div>
+
+          {(actionError || voiceError) && (
+            <div
+              className="alert alert-danger py-2 px-3 small"
+              role="alert"
+            >
+              {actionError ?? voiceError}
+            </div>
+          )}
+
         </div>
       </div>
 
