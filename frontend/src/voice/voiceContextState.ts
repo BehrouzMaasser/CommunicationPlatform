@@ -35,6 +35,8 @@ export type VoiceContextValue = {
 
   ownsCurrentParticipation: boolean
   microphoneEnabled: boolean
+  microphoneNoiseGateThresholdDb: number | null
+  microphoneNoiseGateSupported: boolean
   audioOutputMuted: boolean
   audioOutputVolume: number
   audioOutputDeviceId: string
@@ -43,6 +45,7 @@ export type VoiceContextValue = {
   audioOutputSelectionSupported: boolean
   audioOutputPromptSupported: boolean
   speakingUserIds: number[]
+  mutedUserIds: number[]
 
   error: string | null
 
@@ -71,6 +74,9 @@ export type VoiceContextValue = {
 
   setMicrophoneEnabled:
     (enabled: boolean) => Promise<void>
+
+  setMicrophoneNoiseGateThresholdDb:
+    (thresholdDb: number | null) => Promise<void>
 
   setAudioOutputMuted:
     (muted: boolean) => void

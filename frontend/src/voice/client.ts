@@ -1,14 +1,21 @@
 import type {
+  LocalAudioTrack,
   Participant,
   RemoteParticipant,
   RemoteTrack,
   RemoteTrackPublication,
   Room,
+  TrackPublication,
 } from 'livekit-client'
 
 import type {
   VoiceMediaCredentials,
 } from '../types/voice'
+
+import {
+  VoiceNoiseGateProcessor,
+  normalizeVoiceNoiseGateThresholdDb,
+} from './noiseGateProcessor'
 
 
 type LiveKitModule =
@@ -45,6 +52,11 @@ type ActiveSpeakersListener = (
 
 type AudioPlaybackRequiredListener = (
   required: boolean,
+) => void
+
+
+type MutedMicrophonesListener = (
+  participantIdentities: string[],
 ) => void
 
 
@@ -95,12 +107,21 @@ export class VoiceMediaClient {
 
   private outputVolume = 1
 
+  private microphoneNoiseGateThresholdDb:
+    number | null = null
+
+  private noiseGateProcessor:
+    VoiceNoiseGateProcessor | null = null
+
   private activeSpeakersListener:
     ActiveSpeakersListener | null = null
 
   private audioPlaybackRequiredListener:
     AudioPlaybackRequiredListener | null =
       null
+
+  private mutedMicrophonesListener:
+    MutedMicrophonesListener | null = null
 
   private connectionStatusListener:
     ConnectionStatusListener | null = null
@@ -151,6 +172,17 @@ export class VoiceMediaClient {
       this.room !== null
       && !this.room.canPlaybackAudio,
     )
+  }
+
+
+  setMutedMicrophonesListener(
+    listener:
+      MutedMicrophonesListener | null,
+  ): void {
+    this.mutedMicrophonesListener =
+      listener
+
+    this.emitMutedMicrophones()
   }
 
 
@@ -253,6 +285,18 @@ export class VoiceMediaClient {
   }
 
 
+  async setMicrophoneNoiseGateThresholdDb(
+    thresholdDb: number | null,
+  ): Promise<void> {
+    this.microphoneNoiseGateThresholdDb =
+      normalizeVoiceNoiseGateThresholdDb(
+        thresholdDb,
+      )
+
+    await this.applyMicrophoneNoiseGate()
+  }
+
+
   async connect(
     credentials:
       VoiceMediaCredentials,
@@ -318,6 +362,27 @@ export class VoiceMediaClient {
       room.on(
         liveKit
           .RoomEvent
+          .TrackMuted,
+        this.handleTrackMuteChanged,
+      )
+
+      room.on(
+        liveKit
+          .RoomEvent
+          .TrackUnmuted,
+        this.handleTrackMuteChanged,
+      )
+
+      room.on(
+        liveKit
+          .RoomEvent
+          .ParticipantDisconnected,
+        this.handleParticipantDisconnected,
+      )
+
+      room.on(
+        liveKit
+          .RoomEvent
           .Reconnecting,
         this.handleRoomReconnecting,
       )
@@ -347,6 +412,7 @@ export class VoiceMediaClient {
         )
 
         this.emitAudioPlaybackRequired()
+        this.emitMutedMicrophones()
         this.emitConnectionStatus(
           'connected',
         )
@@ -404,6 +470,10 @@ export class VoiceMediaClient {
           MICROPHONE_OPTIONS,
         )
     )
+
+    if (enabled) {
+      await this.applyMicrophoneNoiseGate()
+    }
   }
 
 
@@ -416,7 +486,9 @@ export class VoiceMediaClient {
     if (!room) {
       this.removeAudioElements()
       this.participantVolumes.clear()
+      this.noiseGateProcessor = null
       this.emitActiveSpeakers([])
+      this.emitMutedMicrophones()
       this.emitAudioPlaybackRequired()
       this.emitConnectionStatus(
         'disconnected',
@@ -448,7 +520,9 @@ export class VoiceMediaClient {
 
     this.removeAudioElements()
     this.participantVolumes.clear()
+    this.noiseGateProcessor = null
     this.emitActiveSpeakers([])
+    this.emitMutedMicrophones()
     this.emitAudioPlaybackRequired()
 
     await room.disconnect(true)
@@ -553,12 +627,137 @@ export class VoiceMediaClient {
       this.stopLocalMicrophone(room)
       this.unbindRoom(room)
       this.removeAudioElements()
+      this.noiseGateProcessor = null
       this.emitActiveSpeakers([])
+      this.emitMutedMicrophones()
       this.emitAudioPlaybackRequired()
       this.emitConnectionStatus(
         'disconnected',
       )
     }
+
+
+  private readonly handleTrackMuteChanged = (
+    publication: TrackPublication,
+  ): void => {
+    const liveKit = this.liveKit
+
+    if (
+      !liveKit
+      || publication.source
+        !== liveKit.Track.Source.Microphone
+    ) {
+      return
+    }
+
+    this.emitMutedMicrophones()
+  }
+
+
+  private readonly handleParticipantDisconnected =
+    (): void => {
+      this.emitMutedMicrophones()
+    }
+
+
+  private emitMutedMicrophones(): void {
+    const liveKit = this.liveKit
+    const room = this.room
+
+    if (!liveKit || !room) {
+      this.mutedMicrophonesListener?.([])
+      return
+    }
+
+    const identities: string[] = []
+
+    for (
+      const participant
+      of room.remoteParticipants.values()
+    ) {
+      const publication =
+        participant.getTrackPublication(
+          liveKit.Track.Source.Microphone,
+        )
+
+      if (publication?.isMuted) {
+        identities.push(
+          participant.identity,
+        )
+      }
+    }
+
+    this.mutedMicrophonesListener?.(
+      identities,
+    )
+  }
+
+
+  private async applyMicrophoneNoiseGate():
+  Promise<void> {
+    const liveKit = this.liveKit
+    const room = this.room
+
+    if (!liveKit || !room) {
+      return
+    }
+
+    const publication =
+      room.localParticipant
+        .getTrackPublication(
+          liveKit.Track.Source.Microphone,
+        )
+
+    const track = publication?.track
+
+    if (
+      !track
+      || track.kind
+        !== liveKit.Track.Kind.Audio
+    ) {
+      return
+    }
+
+    const audioTrack =
+      track as LocalAudioTrack
+
+    const threshold =
+      this.microphoneNoiseGateThresholdDb
+
+    const currentProcessor =
+      audioTrack.getProcessor()
+
+    if (threshold === null) {
+      if (
+        currentProcessor?.name
+        === 'communication-platform-noise-gate'
+      ) {
+        await audioTrack.stopProcessor()
+      }
+
+      this.noiseGateProcessor = null
+      return
+    }
+
+    if (
+      currentProcessor?.name
+      === 'communication-platform-noise-gate'
+      && this.noiseGateProcessor
+    ) {
+      this.noiseGateProcessor
+        .setThresholdDb(threshold)
+      return
+    }
+
+    const processor =
+      new VoiceNoiseGateProcessor(
+        threshold,
+      )
+
+    await audioTrack.setProcessor(processor)
+
+    this.noiseGateProcessor = processor
+  }
 
 
   private readonly handleAudioPlaybackStatusChanged =
@@ -707,6 +906,27 @@ export class VoiceMediaClient {
         .RoomEvent
         .TrackUnsubscribed,
       this.handleTrackUnsubscribed,
+    )
+
+    room.off(
+      liveKit
+        .RoomEvent
+        .TrackMuted,
+      this.handleTrackMuteChanged,
+    )
+
+    room.off(
+      liveKit
+        .RoomEvent
+        .TrackUnmuted,
+      this.handleTrackMuteChanged,
+    )
+
+    room.off(
+      liveKit
+        .RoomEvent
+        .ParticipantDisconnected,
+      this.handleParticipantDisconnected,
     )
 
     room.off(

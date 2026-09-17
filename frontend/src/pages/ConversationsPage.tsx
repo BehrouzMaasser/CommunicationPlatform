@@ -17,7 +17,7 @@ import {
 } from '../api/conversations'
 import { getFriends } from '../api/friendships'
 import DirectConversationList from '../components/messages/DirectConversationList'
-import { useRealtimeEvent } from '../realtime/RealtimeContext'
+import { useRealtimeEvent } from '../realtime/useRealtime'
 import type { MessageCreatedPayload } from '../realtime/messageEvents'
 
 import type { DirectConversation } from '../types/conversations'

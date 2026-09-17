@@ -34,6 +34,7 @@ function DirectCallButton({
     state,
     mediaStatus,
     ownsCurrentParticipation,
+    mutedUserIds,
     startDirectCall,
     endDirectCall,
     getParticipantVolume,
@@ -142,8 +143,23 @@ function DirectCallButton({
       ownsCurrentParticipation
       && mediaStatus === 'connected'
 
+    const otherUserMuted =
+      mutedUserIds.includes(
+        otherUser.id,
+      )
+
     return (
       <div className="direct-call-active-controls">
+        <span
+          className={`voice-remote-mute-indicator${otherUserMuted ? '' : ' invisible'}`}
+          aria-hidden={!otherUserMuted}
+          title={
+            `@${otherUser.username} muted their microphone`
+          }
+        >
+          Mic muted
+        </span>
+
         <label
           className="direct-call-volume-control"
           title={`Volume for @${otherUser.username}`}

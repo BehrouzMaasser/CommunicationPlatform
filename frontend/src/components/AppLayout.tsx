@@ -18,7 +18,7 @@ import {
 } from '../api/session'
 import {
   useRealtime,
-} from '../realtime/RealtimeContext'
+} from '../realtime/useRealtime'
 import {
   useSession,
 } from '../session/useSession'

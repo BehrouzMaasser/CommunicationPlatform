@@ -4,6 +4,9 @@ const OUTPUT_VOLUME_PREFIX =
 const OUTPUT_DEVICE_PREFIX =
   'communication-platform.voice.output-device'
 
+const MICROPHONE_NOISE_GATE_THRESHOLD_PREFIX =
+  'communication-platform.voice.microphone-noise-gate-threshold-db'
+
 const SESSION_MEDIA_PREFERENCES_KEY =
   'communication-platform.voice.session-media-preferences'
 
@@ -167,6 +170,83 @@ export function writeVoiceOutputDeviceId(
     )
   } catch {
     /* Current-session routing still works without storage. */
+  }
+}
+
+
+export function readVoiceNoiseGateThresholdDb(
+  currentUserId: number | null,
+): number | null {
+  if (
+    currentUserId === null
+    || typeof window === 'undefined'
+  ) {
+    return null
+  }
+
+  try {
+    const raw =
+      window.localStorage.getItem(
+        userPreferenceKey(
+          MICROPHONE_NOISE_GATE_THRESHOLD_PREFIX,
+          currentUserId,
+        ),
+      )
+
+    if (raw === null) {
+      return null
+    }
+
+    const value = Number(raw)
+
+    if (!Number.isFinite(value)) {
+      return null
+    }
+
+    return Math.min(
+      -20,
+      Math.max(-60, Math.round(value)),
+    )
+  } catch {
+    return null
+  }
+}
+
+
+export function writeVoiceNoiseGateThresholdDb(
+  currentUserId: number | null,
+  value: number | null,
+): void {
+  if (
+    currentUserId === null
+    || typeof window === 'undefined'
+  ) {
+    return
+  }
+
+  try {
+    const key =
+      userPreferenceKey(
+        MICROPHONE_NOISE_GATE_THRESHOLD_PREFIX,
+        currentUserId,
+      )
+
+    if (value === null) {
+      window.localStorage.removeItem(key)
+      return
+    }
+
+    const normalized = Math.min(
+      -20,
+      Math.max(-60, Math.round(value)),
+    )
+
+    window.localStorage.setItem(
+      key,
+      String(normalized),
+    )
+  } catch {
+    /* Current-session input processing still works without storage. */
   }
 }
 

@@ -34,7 +34,7 @@ import {
   updateGroupAvatar,
 } from '../api/groups'
 import { getCurrentUser } from '../api/session'
-import { useRealtimeEvent } from '../realtime/RealtimeContext'
+import { useRealtimeEvent } from '../realtime/useRealtime'
 import type {
   GroupInvitationEventPayload,
   GroupMemberEventPayload,

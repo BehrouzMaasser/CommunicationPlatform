@@ -9,7 +9,7 @@ import {
 
 import {
   useRealtime,
-} from '../../realtime/RealtimeContext'
+} from '../../realtime/useRealtime'
 import type {
   DirectConversation,
 } from '../../types/conversations'

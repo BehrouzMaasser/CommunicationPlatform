@@ -20,7 +20,7 @@ import {
 import {
   useRealtime,
   useRealtimeEvent,
-} from '../realtime/RealtimeContext'
+} from '../realtime/useRealtime'
 import type {
   FriendRequestAcceptedRealtimePayload,
   FriendRequestRealtimePayload,

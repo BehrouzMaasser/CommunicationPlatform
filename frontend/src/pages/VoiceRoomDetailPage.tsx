@@ -28,7 +28,7 @@ import {
 } from '../api/voice'
 import {
   useRealtimeEvent,
-} from '../realtime/RealtimeContext'
+} from '../realtime/useRealtime'
 import {
   useVoice,
 } from '../voice/useVoice'
@@ -85,6 +85,7 @@ function VoiceRoomDetailPage() {
     ownsCurrentParticipation,
     microphoneEnabled,
     speakingUserIds,
+    mutedUserIds,
     error: voiceError,
     refresh: refreshGlobalVoice,
     joinVoiceRoom,
@@ -1060,8 +1061,14 @@ function VoiceRoomDetailPage() {
                         ) * 100,
                       )
 
+                    const isMuted =
+                      mutedUserIds.includes(
+                        participation.user.id,
+                      )
+
                     const isSpeaking =
-                      speakingUserIds.includes(
+                      !isMuted
+                      && speakingUserIds.includes(
                         participation.user.id,
                       )
                       && (
@@ -1096,10 +1103,15 @@ function VoiceRoomDetailPage() {
                             </div>
 
                             <span
-                              className={`voice-participant-state${isSpeaking ? '' : ' invisible'}`}
-                              aria-hidden={!isSpeaking}
+                              className={`voice-participant-state${isMuted ? ' voice-participant-state-muted' : ''}${isMuted || isSpeaking ? '' : ' invisible'}`}
+                              aria-hidden={
+                                !isMuted
+                                && !isSpeaking
+                              }
                             >
-                              Speaking
+                              {isMuted
+                                ? 'Mic muted'
+                                : 'Speaking'}
                             </span>
                           </div>
                         </div>

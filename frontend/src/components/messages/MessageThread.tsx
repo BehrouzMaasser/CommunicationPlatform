@@ -5,7 +5,7 @@ import {
   useState,
 } from 'react'
 
-import { useRealtime } from '../../realtime/RealtimeContext'
+import { useRealtime } from '../../realtime/useRealtime'
 
 import Avatar from '../users/Avatar'
 
@@ -507,13 +507,22 @@ function MessageThread({
                       >
                         {onReply && (
                           <button
+                            aria-label="Reply to message"
                             className="btn btn-sm btn-link px-0 py-0"
+                            title="Reply"
                             type="button"
                             onClick={() =>
                               onReply(message)
                             }
                           >
-                            Reply
+                            <svg
+                              aria-hidden="true"
+                              className="message-action-icon"
+                              viewBox="0 0 24 24"
+                            >
+                              <path d="M9 17 4 12l5-5" />
+                              <path d="M4 12h9a7 7 0 0 1 7 7" />
+                            </svg>
                           </button>
                         )}
 
@@ -555,6 +564,7 @@ function MessageThread({
 
       {openAttachment && (
         <AttachmentViewer
+          key={openAttachment.id}
           attachment={openAttachment}
           onClose={() => {
             setOpenAttachment(null)

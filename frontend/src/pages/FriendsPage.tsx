@@ -23,7 +23,7 @@ import Avatar from '../components/users/Avatar'
 import {
   useRealtime,
   useRealtimeEvent,
-} from '../realtime/RealtimeContext'
+} from '../realtime/useRealtime'
 
 import type { FriendRequest } from '../types/friendships'
 import type { PublicUser } from '../types/users'

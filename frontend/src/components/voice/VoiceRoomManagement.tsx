@@ -20,7 +20,7 @@ import {
 } from '../../api/voice'
 import {
   useRealtimeEvent,
-} from '../../realtime/RealtimeContext'
+} from '../../realtime/useRealtime'
 import Avatar from '../users/Avatar'
 
 import type {

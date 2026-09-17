@@ -23,7 +23,7 @@ import {
 } from '../../api/voice'
 import {
   useRealtimeEvent,
-} from '../../realtime/RealtimeContext'
+} from '../../realtime/useRealtime'
 import {
   useVoice,
 } from '../../voice/useVoice'
@@ -156,8 +156,12 @@ function GlobalVoiceDock() {
   const [pendingAction, setPendingAction] =
     useState<PendingAction>(null)
 
-  const [offset, setOffset] =
-    useState({ x: 0, y: 0 })
+  const [dragPosition, setDragPosition] =
+    useState({
+      sessionId: null as string | null,
+      x: 0,
+      y: 0,
+    })
 
   const dockRef =
     useRef<HTMLDivElement | null>(null)
@@ -193,9 +197,20 @@ function GlobalVoiceDock() {
     activeRoomId !== null
     || directCallUser !== null
 
+  const activeRoom =
+    room?.id === activeRoomId
+      ? room
+      : null
+
+  const offset =
+    dragPosition.sessionId ===
+      (session?.id ?? null)
+      ? dragPosition
+      : { x: 0, y: 0 }
+
   const label =
     activeRoomId !== null
-      ? room?.name ?? 'Voice Room'
+      ? activeRoom?.name ?? 'Voice Room'
       : directCallUser !== null
         ? `@${directCallUser.username}`
         : 'Voice'
@@ -259,16 +274,28 @@ function GlobalVoiceDock() {
   useEffect(
     () => {
       if (!activeRoomId) {
-        setRoom(null)
         return
       }
 
-      void loadRoom(activeRoomId)
+      let cancelled = false
+
+      void getVoiceRoom(activeRoomId)
+        .then((nextRoom) => {
+          if (!cancelled) {
+            setRoom(nextRoom)
+          }
+        })
+        .catch(() => {
+          if (!cancelled) {
+            setRoom(null)
+          }
+        })
+
+      return () => {
+        cancelled = true
+      }
     },
-    [
-      activeRoomId,
-      loadRoom,
-    ],
+    [activeRoomId],
   )
 
 
@@ -293,17 +320,12 @@ function GlobalVoiceDock() {
 
   useEffect(
     () => {
-      setOffset({ x: 0, y: 0 })
-      suppressClickRef.current = false
-    },
-    [session?.id],
-  )
-
-
-  useEffect(
-    () => {
       function resetPosition() {
-        setOffset({ x: 0, y: 0 })
+        setDragPosition({
+          sessionId: session?.id ?? null,
+          x: 0,
+          y: 0,
+        })
       }
 
       window.addEventListener(
@@ -318,7 +340,7 @@ function GlobalVoiceDock() {
         )
       }
     },
-    [],
+    [session?.id],
   )
 
 
@@ -548,7 +570,8 @@ function GlobalVoiceDock() {
         - margin,
     )
 
-    setOffset({
+    setDragPosition({
+      sessionId: session?.id ?? null,
       x:
         drag.originX
         + desiredLeft

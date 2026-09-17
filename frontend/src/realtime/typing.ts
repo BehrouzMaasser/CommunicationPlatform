@@ -8,7 +8,7 @@ import {
 import {
   useRealtime,
   useRealtimeEvent,
-} from './RealtimeContext'
+} from './useRealtime'
 
 import type {
   ConversationType,

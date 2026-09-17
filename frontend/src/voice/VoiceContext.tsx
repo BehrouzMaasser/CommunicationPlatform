@@ -34,7 +34,7 @@ import {
 
 import {
   useRealtime,
-} from '../realtime/RealtimeContext'
+} from '../realtime/useRealtime'
 
 import {
   VOICE_REALTIME_EVENT_TYPES,
@@ -69,13 +69,20 @@ import {
 import {
   clearVoiceSessionMediaPreferences,
   normalizeVoiceOutputVolume,
+  readVoiceNoiseGateThresholdDb,
   readVoiceOutputDeviceId,
   readVoiceOutputVolume,
   readVoiceSessionMediaPreferences,
+  writeVoiceNoiseGateThresholdDb,
   writeVoiceOutputDeviceId,
   writeVoiceOutputVolume,
   writeVoiceSessionMediaPreferences,
 } from './mediaPreferences'
+
+import {
+  normalizeVoiceNoiseGateThresholdDb,
+  voiceNoiseGateSupported,
+} from './noiseGateProcessor'
 
 import {
   playVoiceRoomJoinSound,
@@ -152,6 +159,16 @@ export function VoiceProvider({
     useState(false)
 
   const [
+    microphoneNoiseGateThresholdDb,
+    setMicrophoneNoiseGateThresholdDbState,
+  ] = useState<number | null>(
+    () =>
+      readVoiceNoiseGateThresholdDb(
+        currentUserId ?? null,
+      ),
+  )
+
+  const [
     audioOutputMuted,
     setAudioOutputMutedState,
   ] =
@@ -193,6 +210,11 @@ export function VoiceProvider({
   ] = useState<string[]>([])
 
   const [
+    mutedMicrophoneParticipantIdentities,
+    setMutedMicrophoneParticipantIdentities,
+  ] = useState<string[]>([])
+
+  const [
     audioPlaybackRequired,
     setAudioPlaybackRequired,
   ] = useState(false)
@@ -211,6 +233,11 @@ export function VoiceProvider({
 
   const audioOutputMutedRef =
     useRef(false)
+
+  const microphoneNoiseGateThresholdDbRef =
+    useRef(
+      microphoneNoiseGateThresholdDb,
+    )
 
   const audioOutputVolumeRef =
     useRef(audioOutputVolume)
@@ -1142,6 +1169,51 @@ export function VoiceProvider({
     )
 
 
+  const setMicrophoneNoiseGateThresholdDb =
+    useCallback(
+      async (
+        value: number | null,
+      ): Promise<void> => {
+        const threshold =
+          normalizeVoiceNoiseGateThresholdDb(
+            value,
+          )
+
+        microphoneNoiseGateThresholdDbRef.current =
+          threshold
+
+        try {
+          await voiceMediaClient
+            .setMicrophoneNoiseGateThresholdDb(
+              threshold,
+            )
+
+          setMicrophoneNoiseGateThresholdDbState(
+            threshold,
+          )
+
+          writeVoiceNoiseGateThresholdDb(
+            currentUserId ?? null,
+            threshold,
+          )
+
+          setError(null)
+        } catch (
+          noiseGateError
+        ) {
+          setError(
+            errorMessage(
+              noiseGateError,
+            ),
+          )
+
+          throw noiseGateError
+        }
+      },
+      [currentUserId],
+    )
+
+
   const setAudioOutputMuted =
     useCallback(
       (
@@ -1526,6 +1598,20 @@ export function VoiceProvider({
 
   useEffect(
     () => {
+      void voiceMediaClient
+        .setMicrophoneNoiseGateThresholdDb(
+          microphoneNoiseGateThresholdDbRef.current,
+        )
+        .catch(() => {
+          /* The setting can be retried from the Audio panel. */
+        })
+    },
+    [],
+  )
+
+
+  useEffect(
+    () => {
       voiceMediaClient
         .setAudioPlaybackRequiredListener(
           setAudioPlaybackRequired,
@@ -1566,6 +1652,34 @@ export function VoiceProvider({
           )
 
         setSpeakingParticipantIdentities(
+          [],
+        )
+      }
+    },
+    [],
+  )
+
+
+  useEffect(
+    () => {
+      voiceMediaClient
+        .setMutedMicrophonesListener(
+          (
+            participantIdentities,
+          ) => {
+            setMutedMicrophoneParticipantIdentities(
+              participantIdentities,
+            )
+          },
+        )
+
+      return () => {
+        voiceMediaClient
+          .setMutedMicrophonesListener(
+            null,
+          )
+
+        setMutedMicrophoneParticipantIdentities(
           [],
         )
       }
@@ -1843,6 +1957,11 @@ export function VoiceProvider({
           )
 
         voiceMediaClient
+          .setMutedMicrophonesListener(
+            null,
+          )
+
+        voiceMediaClient
           .setOutputMuted(false)
 
         void voiceMediaClient
@@ -1878,6 +1997,37 @@ export function VoiceProvider({
           participation.user.id,
       )
 
+  const mutedMicrophoneIdentitySet =
+    new Set(
+      mutedMicrophoneParticipantIdentities,
+    )
+
+  const mutedUserIds =
+    state.participants
+      .filter(
+        (participation) => {
+          if (
+            participation.user.id
+              === currentUserId
+          ) {
+            return (
+              ownsCurrentParticipation
+              && !microphoneEnabled
+            )
+          }
+
+          return mutedMicrophoneIdentitySet.has(
+            voiceMediaParticipantIdentity(
+              participation.id,
+            ),
+          )
+        },
+      )
+      .map(
+        (participation) =>
+          participation.user.id,
+      )
+
   return (
     <VoiceContext.Provider
       value={{
@@ -1890,6 +2040,9 @@ export function VoiceProvider({
         state,
         ownsCurrentParticipation,
         microphoneEnabled,
+        microphoneNoiseGateThresholdDb,
+        microphoneNoiseGateSupported:
+          voiceNoiseGateSupported(),
         audioOutputMuted,
         audioOutputVolume,
         audioOutputDeviceId,
@@ -1899,6 +2052,7 @@ export function VoiceProvider({
         audioOutputPromptSupported:
           browserAudioOutputPromptSupported(),
         speakingUserIds,
+        mutedUserIds,
         error,
         refresh,
         startDirectCall,
@@ -1909,6 +2063,7 @@ export function VoiceProvider({
         joinVoiceRoom,
         leaveVoiceRoom,
         setMicrophoneEnabled,
+        setMicrophoneNoiseGateThresholdDb,
         setAudioOutputMuted,
         setAudioOutputVolume,
         refreshAudioOutputDevices,

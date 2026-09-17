@@ -34,7 +34,7 @@ import {
   useConversationRealtimeSubscription,
   useRealtime,
   useRealtimeEvent,
-} from '../realtime/RealtimeContext'
+} from '../realtime/useRealtime'
 
 import type {
   FriendRequestAcceptedRealtimePayload,

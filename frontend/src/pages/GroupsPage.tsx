@@ -19,7 +19,7 @@ import {
   rejectGroupInvitation,
 } from '../api/groups'
 import GroupConversationList from '../components/groups/GroupConversationList'
-import { useRealtimeEvent } from '../realtime/RealtimeContext'
+import { useRealtimeEvent } from '../realtime/useRealtime'
 import type { MessageCreatedPayload } from '../realtime/messageEvents'
 
 import type {

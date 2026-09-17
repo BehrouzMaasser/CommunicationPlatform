@@ -8,6 +8,9 @@ import {
 } from 'react-dom'
 
 import {
+  DEFAULT_VOICE_NOISE_GATE_THRESHOLD_DB,
+} from '../../voice/noiseGateProcessor'
+import {
   useVoice,
 } from '../../voice/useVoice'
 
@@ -22,11 +25,14 @@ function VoiceAudioSettings({
 }: VoiceAudioSettingsProps) {
   const {
     mediaStatus,
+    microphoneNoiseGateThresholdDb,
+    microphoneNoiseGateSupported,
     audioOutputVolume,
     audioOutputDeviceId,
     audioOutputDevices,
     audioOutputSelectionSupported,
     audioOutputPromptSupported,
+    setMicrophoneNoiseGateThresholdDb,
     setAudioOutputVolume,
     refreshAudioOutputDevices,
     setAudioOutputDevice,
@@ -41,6 +47,14 @@ function VoiceAudioSettings({
 
   const [localError, setLocalError] =
     useState<string | null>(null)
+
+  const [noiseGateThresholdDraftDb, setNoiseGateThresholdDraftDb] =
+    useState<number | null>(
+      microphoneNoiseGateThresholdDb,
+    )
+
+  const noiseGateApplyTimerRef =
+    useRef<number | null>(null)
 
   const rootRef =
     useRef<HTMLDivElement | null>(null)
@@ -63,6 +77,21 @@ function VoiceAudioSettings({
         device.device_id ===
           audioOutputDeviceId,
     )
+
+
+  useEffect(
+    () => () => {
+      if (
+        noiseGateApplyTimerRef.current
+        !== null
+      ) {
+        window.clearTimeout(
+          noiseGateApplyTimerRef.current,
+        )
+      }
+    },
+    [],
+  )
 
 
   useEffect(
@@ -177,6 +206,62 @@ function VoiceAudioSettings({
   }
 
 
+  async function updateNoiseGate(
+    value: number | null,
+  ) {
+    setNoiseGateThresholdDraftDb(value)
+    setBusy(true)
+    setLocalError(null)
+
+    try {
+      await setMicrophoneNoiseGateThresholdDb(
+        value,
+      )
+    } catch (error) {
+      setLocalError(
+        error instanceof Error
+          ? error.message
+          : 'Could not update microphone threshold.',
+      )
+    } finally {
+      setBusy(false)
+    }
+  }
+
+
+  function updateNoiseGateThresholdDraft(
+    value: number,
+  ) {
+    setNoiseGateThresholdDraftDb(value)
+    setLocalError(null)
+
+    if (
+      noiseGateApplyTimerRef.current
+      !== null
+    ) {
+      window.clearTimeout(
+        noiseGateApplyTimerRef.current,
+      )
+    }
+
+    noiseGateApplyTimerRef.current =
+      window.setTimeout(() => {
+        noiseGateApplyTimerRef.current =
+          null
+
+        void setMicrophoneNoiseGateThresholdDb(
+          value,
+        ).catch((error) => {
+          setLocalError(
+            error instanceof Error
+              ? error.message
+              : 'Could not update microphone threshold.',
+          )
+        })
+      }, 80)
+  }
+
+
   const settingsPanel =
     open
     && typeof document !== 'undefined'
@@ -194,7 +279,7 @@ function VoiceAudioSettings({
           >
             <div className="voice-audio-settings-heading-row">
               <div className="voice-audio-settings-heading">
-                Audio output
+                Voice audio
               </div>
 
               <button
@@ -206,6 +291,87 @@ function VoiceAudioSettings({
                 }}
               />
             </div>
+
+            <div className="voice-audio-settings-section">
+              <div className="voice-audio-settings-section-title">
+                Microphone input
+              </div>
+
+              {microphoneNoiseGateSupported ? (
+                <>
+                  <label className="form-check form-switch voice-audio-settings-switch">
+                    <input
+                      className="form-check-input"
+                      type="checkbox"
+                      role="switch"
+                      checked={
+                        microphoneNoiseGateThresholdDb
+                          !== null
+                      }
+                      disabled={busy}
+                      onChange={(event) => {
+                        void updateNoiseGate(
+                          event.target.checked
+                            ? DEFAULT_VOICE_NOISE_GATE_THRESHOLD_DB
+                            : null,
+                        )
+                      }}
+                    />
+                    <span className="form-check-label">
+                      Noise gate
+                    </span>
+                  </label>
+
+                  {microphoneNoiseGateThresholdDb !== null && (
+                    <label className="voice-audio-settings-field">
+                      <span className="d-flex justify-content-between gap-3">
+                        <span>Threshold</span>
+                        <span className="text-secondary">
+                          {noiseGateThresholdDraftDb ?? microphoneNoiseGateThresholdDb} dB
+                        </span>
+                      </span>
+
+                      <input
+                        className="form-range m-0"
+                        type="range"
+                        min="-60"
+                        max="-20"
+                        step="1"
+                        value={
+                          noiseGateThresholdDraftDb
+                          ?? microphoneNoiseGateThresholdDb
+                        }
+                        aria-label="Microphone noise gate threshold"
+                        onChange={(event) => {
+                          updateNoiseGateThresholdDraft(
+                            Number(
+                              event.target.value,
+                            ),
+                          )
+                        }}
+                      />
+
+                      <span className="voice-audio-settings-help">
+                        Lower values let quieter sounds through. Higher values block more background noise.
+                      </span>
+                    </label>
+                  )}
+
+                  <div className="voice-audio-settings-help">
+                    Browser echo cancellation and noise suppression remain enabled. The gate only suppresses audio below your chosen level.
+                  </div>
+                </>
+              ) : (
+                <div className="voice-audio-settings-help">
+                  Adjustable microphone gating is not supported by this browser.
+                </div>
+              )}
+            </div>
+
+            <div className="voice-audio-settings-section">
+              <div className="voice-audio-settings-section-title">
+                Audio output
+              </div>
 
             <label className="voice-audio-settings-field">
               <span className="d-flex justify-content-between gap-3">
@@ -301,6 +467,8 @@ function VoiceAudioSettings({
                 Speaker, earpiece, and Bluetooth routing are controlled by your browser or device on this platform.
               </div>
             )}
+
+            </div>
 
             {localError && (
               <div

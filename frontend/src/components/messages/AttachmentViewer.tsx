@@ -76,6 +76,15 @@ function AttachmentViewer({
   attachment,
   onClose,
 }: AttachmentViewerProps) {
+  const previewKind =
+    useMemo(
+      () =>
+        previewKindFor(
+          attachment.mime_type,
+        ),
+      [attachment.mime_type],
+    )
+
   const [blob, setBlob] =
     useState<Blob | null>(null)
 
@@ -89,7 +98,9 @@ function AttachmentViewer({
     useState<string | null>(null)
 
   const [isLoading, setIsLoading] =
-    useState(true)
+    useState(
+      previewKind !== 'unsupported',
+    )
 
   const [isDownloading, setIsDownloading] =
     useState(false)
@@ -97,23 +108,8 @@ function AttachmentViewer({
   const dialogRef =
     useRef<HTMLDivElement | null>(null)
 
-  const previewKind =
-    useMemo(
-      () =>
-        previewKindFor(
-          attachment.mime_type,
-        ),
-      [attachment.mime_type],
-    )
-
   useEffect(() => {
-    setBlob(null)
-    setObjectUrl(null)
-    setTextContent(null)
-    setError(null)
-
     if (previewKind === 'unsupported') {
-      setIsLoading(false)
       return
     }
 
@@ -124,8 +120,6 @@ function AttachmentViewer({
       string | null = null
 
     async function loadAttachment() {
-      setIsLoading(true)
-
       try {
         const nextBlob =
           await getAttachmentFile(
