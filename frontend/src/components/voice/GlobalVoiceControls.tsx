@@ -1,5 +1,4 @@
 import VoiceCallOverlay from './VoiceCallOverlay'
-import VoiceRoomOverlay from './VoiceRoomOverlay'
 
 import {
   useVoice,
@@ -9,18 +8,13 @@ import {
 function GlobalVoiceControls() {
   const { state } = useVoice()
 
-  return (
-    <>
-      <VoiceCallOverlay />
-      <VoiceRoomOverlay
-        key={
-          state.session?.kind === 'ROOM'
-            ? state.session.id
-            : 'voice-room-idle'
-        }
-      />
-    </>
-  )
+  if (
+    state.session?.status !== 'RINGING'
+  ) {
+    return null
+  }
+
+  return <VoiceCallOverlay />
 }
 
 

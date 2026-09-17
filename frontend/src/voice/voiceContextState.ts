@@ -34,6 +34,7 @@ export type VoiceContextValue = {
 
   ownsCurrentParticipation: boolean
   microphoneEnabled: boolean
+  audioOutputMuted: boolean
   speakingUserIds: number[]
 
   error: string | null
@@ -63,6 +64,9 @@ export type VoiceContextValue = {
 
   setMicrophoneEnabled:
     (enabled: boolean) => Promise<void>
+
+  setAudioOutputMuted:
+    (muted: boolean) => void
 
   startAudioPlayback:
     () => Promise<void>

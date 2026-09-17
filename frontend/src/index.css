@@ -90,8 +90,12 @@ a {
 }
 
 .app-topbar-center {
+  display: flex;
   min-width: 0;
   min-height: 1px;
+  align-items: center;
+  justify-content: center;
+  padding: 0 0.75rem;
 }
 
 .app-topbar-account-region {
@@ -850,7 +854,10 @@ a {
   }
 
   .app-topbar {
-    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-columns:
+      minmax(0, 1fr)
+      minmax(8rem, 40vw)
+      minmax(0, 1fr);
   }
 
   .app-topbar-brand-region {
@@ -879,10 +886,6 @@ a {
     white-space: nowrap;
     font-size: 0.94rem;
     font-weight: 700;
-  }
-
-  .app-topbar-center {
-    display: none;
   }
 
   .app-topbar-account-region {
@@ -1008,15 +1011,36 @@ a {
     display: none;
   }
 
-  /* Temporary compatibility until the compact global voice dock replaces
-     the legacy overlay in the next UI slice. */
+  /* Ringing direct calls still use the actionable call overlay. */
   .voice-overlay-shell {
     bottom: calc(var(--app-mobile-nav-height) + env(safe-area-inset-bottom));
+  }
+
+  .direct-call-volume-control {
+    width: 5rem;
   }
 
   .activity-toast-stack {
     top: calc(var(--app-topbar-height) + env(safe-area-inset-top) + 0.75rem);
   }
+}
+
+@media (max-width: 400px) {
+  .app-topbar {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .app-topbar-center {
+    position: fixed;
+    top: calc(var(--app-topbar-height) + env(safe-area-inset-top) + 0.5rem);
+    right: 0;
+    left: 0;
+    z-index: 1045;
+    display: flex;
+    padding: 0;
+    pointer-events: none;
+  }
+
 }
 
 @media (max-width: 379.98px) {
@@ -1479,6 +1503,257 @@ a {
   color: var(--app-muted);
   font-size: 0.875rem;
 }
+
+
+/* Persistent active-voice dock. The desktop/tablet instance lives in the
+   top bar. On phones its shell slot becomes a fixed, draggable overlay. */
+.global-voice-dock {
+  --voice-dock-x: 0px;
+  --voice-dock-y: 0px;
+
+  container-name: voiceDock;
+  container-type: inline-size;
+  display: flex;
+  width: min(28rem, 100%);
+  height: 2.55rem;
+  min-width: 0;
+  align-items: center;
+  overflow: hidden;
+  color: rgba(255, 255, 255, 0.92);
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.13);
+  border-radius: 999px;
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.16);
+  pointer-events: auto;
+  transform: translate3d(
+    var(--voice-dock-x),
+    var(--voice-dock-y),
+    0
+  );
+  transition:
+    border-color 140ms ease,
+    background-color 140ms ease,
+    box-shadow 140ms ease;
+  backdrop-filter: blur(14px);
+}
+
+.global-voice-dock:hover {
+  background: rgba(255, 255, 255, 0.11);
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+.global-voice-dock.has-media-error {
+  border-color: rgba(248, 113, 113, 0.68);
+}
+
+.voice-dock-destination {
+  display: flex;
+  min-width: 0;
+  height: 100%;
+  flex: 1 1 auto;
+  align-items: center;
+  gap: 0.48rem;
+  padding: 0 0.42rem 0 0.72rem;
+  overflow: hidden;
+  color: inherit;
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+  text-align: left;
+}
+
+.voice-dock-destination:focus-visible {
+  outline: 2px solid rgba(196, 181, 253, 0.9);
+  outline-offset: -2px;
+}
+
+.voice-dock-connection-indicator {
+  width: 0.52rem;
+  height: 0.52rem;
+  flex: 0 0 auto;
+  background: #94a3b8;
+  border-radius: 50%;
+  transition:
+    background-color 120ms ease,
+    box-shadow 120ms ease;
+}
+
+.global-voice-dock.connection-connected
+.voice-dock-connection-indicator {
+  background: #4ade80;
+  box-shadow: 0 0 0 3px rgba(74, 222, 128, 0.12);
+}
+
+.global-voice-dock.connection-connecting
+.voice-dock-connection-indicator {
+  background: #fbbf24;
+  box-shadow: 0 0 0 3px rgba(251, 191, 36, 0.12);
+  animation: voice-speaking-pulse 1.6s ease-out infinite;
+}
+
+.global-voice-dock.connection-error
+.voice-dock-connection-indicator {
+  background: #f87171;
+  box-shadow: 0 0 0 3px rgba(248, 113, 113, 0.12);
+}
+
+.global-voice-dock.is-speaking,
+.global-voice-dock.is-speaking:hover {
+  background: rgba(22, 101, 52, 0.88);
+  border-color: rgba(74, 222, 128, 0.48);
+  box-shadow: 0 10px 30px rgba(22, 101, 52, 0.24);
+}
+
+.voice-dock-label-full,
+.voice-dock-label-initials {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.82rem;
+  font-weight: 750;
+}
+
+.voice-dock-label-initials {
+  display: none;
+  letter-spacing: 0.04em;
+}
+
+.voice-dock-controls {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 0.22rem;
+  padding-right: 0.3rem;
+}
+
+.voice-dock-control {
+  display: inline-grid;
+  width: 2rem;
+  height: 2rem;
+  padding: 0;
+  place-items: center;
+  color: rgba(255, 255, 255, 0.86);
+  background: transparent;
+  border: 0;
+  border-radius: 50%;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+.voice-dock-control:hover:not(:disabled),
+.voice-dock-control:focus-visible {
+  color: #fff;
+  background: rgba(255, 255, 255, 0.12);
+  outline: none;
+}
+
+.voice-dock-control.is-muted {
+  color: #fca5a5;
+  background: rgba(239, 68, 68, 0.1);
+}
+
+.voice-dock-control.needs-attention {
+  color: #fde68a;
+  background: rgba(245, 158, 11, 0.12);
+}
+
+.voice-dock-control:disabled {
+  cursor: default;
+  opacity: 0.38;
+}
+
+.voice-dock-icon {
+  width: 1.08rem;
+  height: 1.08rem;
+  fill: currentColor;
+}
+
+@container voiceDock (max-width: 13.5rem) {
+  .voice-dock-label-full {
+    display: none;
+  }
+
+  .voice-dock-label-initials {
+    display: inline;
+  }
+}
+
+@media (max-width: 400px) {
+  /* Keep the floating dock compact and opaque over page content. Its
+     practical minimum is content/touch-target driven while 15vw remains
+     the requested proportional floor. */
+  .app-topbar-center .global-voice-dock {
+    width: auto;
+    min-width: max(15vw, 6.5rem);
+    max-width: 44vw;
+    height: 2.35rem;
+    background: rgba(17, 24, 39, 0.97);
+    border-color: rgba(255, 255, 255, 0.22);
+    box-shadow: 0 12px 34px rgba(15, 23, 42, 0.34);
+    backdrop-filter: blur(18px);
+  }
+
+  .app-topbar-center .global-voice-dock:hover {
+    background: rgba(17, 24, 39, 0.995);
+  }
+
+  .app-topbar-center .global-voice-dock.is-speaking,
+  .app-topbar-center .global-voice-dock.is-speaking:hover {
+    background: rgba(20, 83, 45, 0.98);
+    border-color: rgba(74, 222, 128, 0.62);
+  }
+
+  .app-topbar-center .voice-dock-destination {
+    padding-right: 0.12rem;
+    padding-left: 0.48rem;
+    cursor: grab;
+    touch-action: none;
+  }
+
+  .app-topbar-center .voice-dock-destination:active {
+    cursor: grabbing;
+  }
+
+  .app-topbar-center .voice-dock-label-full {
+    display: none;
+  }
+
+  .app-topbar-center .voice-dock-label-initials {
+    display: inline;
+    font-size: 0.72rem;
+  }
+
+  .app-topbar-center .voice-dock-controls {
+    gap: 0;
+    padding-right: 0.12rem;
+  }
+
+  .app-topbar-center .voice-dock-control {
+    width: 1.72rem;
+    height: 1.72rem;
+  }
+
+  .app-topbar-center .voice-dock-icon {
+    width: 0.94rem;
+    height: 0.94rem;
+  }
+}
+
+.direct-call-active-controls {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.4rem;
+}
+
+.direct-call-volume-control {
+  display: flex;
+  width: 6.5rem;
+  align-items: center;
+}
+
 
 .voice-media-copy::before {
   width: 0.48rem;

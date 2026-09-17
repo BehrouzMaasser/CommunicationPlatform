@@ -80,6 +80,8 @@ export class VoiceMediaClient {
   private participantVolumes =
     new Map<string, number>()
 
+  private outputMuted = false
+
   private activeSpeakersListener:
     ActiveSpeakersListener | null = null
 
@@ -133,6 +135,17 @@ export class VoiceMediaClient {
       this.room !== null
       && !this.room.canPlaybackAudio,
     )
+  }
+
+
+  setOutputMuted(
+    muted: boolean,
+  ): void {
+    this.outputMuted = muted
+
+    for (const element of this.audioElements) {
+      element.muted = muted
+    }
   }
 
 
@@ -460,6 +473,7 @@ export class VoiceMediaClient {
       track.attach()
 
     element.autoplay = true
+    element.muted = this.outputMuted
 
     element.setAttribute(
       'data-voice-audio',

@@ -710,7 +710,7 @@ function DirectConversationPage() {
                 .username}
             </h1>
 
-            <div className="d-flex align-items-center gap-2">
+            <div className="d-flex align-items-center justify-content-end flex-wrap gap-2">
               <span
                 className={
                   isUserOnline(

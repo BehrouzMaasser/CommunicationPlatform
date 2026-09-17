@@ -132,6 +132,12 @@ export function VoiceProvider({
   ] =
     useState(false)
 
+  const [
+    audioOutputMuted,
+    setAudioOutputMutedState,
+  ] =
+    useState(false)
+
   const [error, setError] =
     useState<string | null>(
       null,
@@ -318,6 +324,13 @@ export function VoiceProvider({
               )
 
               setMicrophoneEnabledState(
+                false,
+              )
+
+              voiceMediaClient
+                .setOutputMuted(false)
+
+              setAudioOutputMutedState(
                 false,
               )
 
@@ -821,6 +834,22 @@ export function VoiceProvider({
     )
 
 
+  const setAudioOutputMuted =
+    useCallback(
+      (
+        muted: boolean,
+      ): void => {
+        voiceMediaClient
+          .setOutputMuted(muted)
+
+        setAudioOutputMutedState(
+          muted,
+        )
+      },
+      [],
+    )
+
+
   const startAudioPlayback =
     useCallback(
       async (): Promise<void> => {
@@ -1191,6 +1220,9 @@ export function VoiceProvider({
           .current =
             EMPTY_VOICE_STATE
 
+        voiceMediaClient
+          .setOutputMuted(false)
+
         void voiceMediaClient
           .disconnect()
       }
@@ -1236,6 +1268,7 @@ export function VoiceProvider({
         state,
         ownsCurrentParticipation,
         microphoneEnabled,
+        audioOutputMuted,
         speakingUserIds,
         error,
         refresh,
@@ -1247,6 +1280,7 @@ export function VoiceProvider({
         joinVoiceRoom,
         leaveVoiceRoom,
         setMicrophoneEnabled,
+        setAudioOutputMuted,
         startAudioPlayback,
         getParticipantVolume,
         setParticipantVolume,

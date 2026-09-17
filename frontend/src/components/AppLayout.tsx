@@ -1,4 +1,5 @@
 import {
+  useEffect,
   useRef,
   useState,
 } from 'react'
@@ -21,6 +22,7 @@ import {
 import {
   useSession,
 } from '../session/useSession'
+import GlobalVoiceDock from './voice/GlobalVoiceDock'
 import Avatar from './users/Avatar'
 
 import type {
@@ -181,6 +183,53 @@ function AccountMenu({
   function closeMenu() {
     detailsRef.current?.removeAttribute('open')
   }
+
+  useEffect(() => {
+    function handlePointerDown(
+      event: PointerEvent,
+    ) {
+      const details = detailsRef.current
+      const target = event.target
+
+      if (
+        !details?.open
+        || !(target instanceof Node)
+        || details.contains(target)
+      ) {
+        return
+      }
+
+      detailsRef.current?.removeAttribute('open')
+    }
+
+    function handleKeyDown(
+      event: KeyboardEvent,
+    ) {
+      if (event.key === 'Escape') {
+        detailsRef.current?.removeAttribute('open')
+      }
+    }
+
+    document.addEventListener(
+      'pointerdown',
+      handlePointerDown,
+    )
+    document.addEventListener(
+      'keydown',
+      handleKeyDown,
+    )
+
+    return () => {
+      document.removeEventListener(
+        'pointerdown',
+        handlePointerDown,
+      )
+      document.removeEventListener(
+        'keydown',
+        handleKeyDown,
+      )
+    }
+  }, [])
 
   if (authStatus === 'loading') {
     return (
@@ -465,8 +514,9 @@ function AppLayoutContent({
         <div
           className="app-topbar-center"
           data-voice-dock-slot="true"
-          aria-hidden="true"
-        />
+        >
+          <GlobalVoiceDock />
+        </div>
 
         <div className="app-topbar-account-region">
           <AccountMenu
