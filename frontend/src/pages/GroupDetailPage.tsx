@@ -14,6 +14,7 @@ import {
 } from 'react-router-dom'
 
 import { ApiError } from '../api/client'
+import GroupAvatar from '../components/groups/GroupAvatar'
 import { useActivity } from '../activity/useActivity'
 import { getFriends } from '../api/friendships'
 import {
@@ -26,9 +27,11 @@ import {
   getGroupPendingInvitations,
   inviteUserToGroup,
   leaveGroup,
+  removeGroupAvatar,
   removeGroupMember,
   renameGroup,
   revokeGroupInvitationLink,
+  updateGroupAvatar,
 } from '../api/groups'
 import { getCurrentUser } from '../api/session'
 import { useRealtimeEvent } from '../realtime/RealtimeContext'
@@ -121,6 +124,8 @@ function GroupDetailPage() {
 
   const [renameText, setRenameText] =
     useState('')
+  const [avatarFile, setAvatarFile] =
+    useState<File | null>(null)
   const [busy, setBusy] =
     useState<string | null>(null)
   const [error, setError] =
@@ -307,6 +312,28 @@ function GroupDetailPage() {
       [parsedGroupId],
     )
 
+  const handleAvatarUpdated =
+    useCallback(
+      ({
+        payload,
+      }: {
+        payload: {
+          group_id: number
+        }
+      }) => {
+        if (
+          payload.group_id ===
+          parsedGroupId
+        ) {
+          void refreshGroupState()
+        }
+      },
+      [
+        parsedGroupId,
+        refreshGroupState,
+      ],
+    )
+
   const handleDeleted =
     useCallback(
       ({
@@ -361,6 +388,10 @@ function GroupDetailPage() {
   useRealtimeEvent(
     'group.renamed',
     handleRenamed,
+  )
+  useRealtimeEvent(
+    'group.avatar_updated',
+    handleAvatarUpdated,
   )
   useRealtimeEvent(
     'group.deleted',
@@ -519,6 +550,58 @@ function GroupDetailPage() {
       setGroup(updated)
       setRenameText(updated.name)
       setNotice('Group renamed.')
+    } catch (requestError) {
+      setError(errorText(requestError))
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  async function handleAvatarUpload(
+    event: FormEvent<HTMLFormElement>,
+  ) {
+    event.preventDefault()
+
+    if (!avatarFile || busy !== null) {
+      return
+    }
+
+    setBusy('avatar')
+    setError(null)
+    setNotice(null)
+
+    try {
+      const updated = await updateGroupAvatar(
+        parsedGroupId,
+        avatarFile,
+      )
+      setGroup(updated)
+      setAvatarFile(null)
+      event.currentTarget.reset()
+      setNotice('Group avatar updated.')
+    } catch (requestError) {
+      setError(errorText(requestError))
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  async function handleAvatarRemove() {
+    if (busy !== null) {
+      return
+    }
+
+    setBusy('avatar')
+    setError(null)
+    setNotice(null)
+
+    try {
+      const updated = await removeGroupAvatar(
+        parsedGroupId,
+      )
+      setGroup(updated)
+      setAvatarFile(null)
+      setNotice('Group avatar removed.')
     } catch (requestError) {
       setError(errorText(requestError))
     } finally {
@@ -768,10 +851,17 @@ function GroupDetailPage() {
       </Link>
 
       <div className="d-flex justify-content-between align-items-start gap-3 mb-4">
-        <div>
-          <h1 className="h2 mb-1">
-            {group.name}
-          </h1>
+        <div className="d-flex align-items-center gap-3">
+          <GroupAvatar
+            name={group.name}
+            avatarUrl={group.avatar_url}
+            size="lg"
+          />
+          <div>
+            <h1 className="h2 mb-1">
+              {group.name}
+            </h1>
+          </div>
         </div>
 
         <div className="d-flex gap-2">
@@ -839,6 +929,60 @@ function GroupDetailPage() {
             <h2 className="h5">
               Group settings
             </h2>
+
+            <div className="d-flex align-items-center gap-3 mb-4">
+              <GroupAvatar
+                name={group.name}
+                avatarUrl={group.avatar_url}
+                size="lg"
+              />
+
+              <div className="flex-grow-1">
+                <form
+                  className="d-flex flex-column flex-sm-row gap-2"
+                  onSubmit={handleAvatarUpload}
+                >
+                  <input
+                    className="form-control form-control-sm"
+                    type="file"
+                    accept="image/png,image/jpeg,image/webp"
+                    disabled={busy !== null}
+                    onChange={(event) =>
+                      setAvatarFile(
+                        event.target.files?.[0] ?? null,
+                      )
+                    }
+                    aria-label="Group avatar"
+                  />
+                  <button
+                    className="btn btn-sm btn-outline-primary"
+                    type="submit"
+                    disabled={
+                      busy !== null || !avatarFile
+                    }
+                  >
+                    {busy === 'avatar'
+                      ? 'Saving…'
+                      : 'Upload avatar'}
+                  </button>
+                  {group.avatar_url && (
+                    <button
+                      className="btn btn-sm btn-outline-secondary"
+                      type="button"
+                      disabled={busy !== null}
+                      onClick={() =>
+                        void handleAvatarRemove()
+                      }
+                    >
+                      Remove
+                    </button>
+                  )}
+                </form>
+                <div className="form-text">
+                  JPEG, PNG or WebP. The image is cropped square.
+                </div>
+              </div>
+            </div>
 
             <form
               className="d-flex gap-2"

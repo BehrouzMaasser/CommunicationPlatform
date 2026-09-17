@@ -292,6 +292,31 @@ function GroupConversationPage() {
       [parsedGroupId],
     )
 
+  const handleGroupAvatarUpdated =
+    useCallback(
+      ({
+        payload,
+      }: {
+        payload: {
+          group_id: number
+        }
+      }) => {
+        if (
+          payload.group_id !==
+          parsedGroupId
+        ) {
+          return
+        }
+
+        void getGroup(parsedGroupId)
+          .then(setGroup)
+          .catch(() => {
+            // A later navigation/refetch can reconcile again.
+          })
+      },
+      [parsedGroupId],
+    )
+
   const handleGroupDeleted =
     useCallback(
       ({
@@ -451,6 +476,11 @@ function GroupConversationPage() {
   useRealtimeEvent(
     'group.renamed',
     handleGroupRenamed,
+  )
+
+  useRealtimeEvent(
+    'group.avatar_updated',
+    handleGroupAvatarUpdated,
   )
 
   useRealtimeEvent(
@@ -660,6 +690,7 @@ function GroupConversationPage() {
 
             <GroupAvatar
               name={group.name}
+              avatarUrl={group.avatar_url}
               size="md"
             />
 

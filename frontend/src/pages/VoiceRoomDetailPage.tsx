@@ -11,6 +11,7 @@ import {
 } from 'react-router-dom'
 
 import { ApiError } from '../api/client'
+import VoiceRoomAvatar from '../components/voice/VoiceRoomAvatar'
 import VoiceRoomManagement from '../components/voice/VoiceRoomManagement'
 import {
   deleteVoiceRoom,
@@ -18,8 +19,10 @@ import {
   getVoiceRoomMembers,
   getVoiceRoomVoiceState,
   leaveVoiceRoomMembership,
+  removeVoiceRoomAvatar,
   removeVoiceRoomMember,
   renameVoiceRoom,
+  updateVoiceRoomAvatar,
 } from '../api/voice'
 import {
   useRealtimeEvent,
@@ -117,11 +120,13 @@ function VoiceRoomDetailPage() {
 
   const [renameText, setRenameText] =
     useState('')
+  const [avatarFile, setAvatarFile] =
+    useState<File | null>(null)
 
   const [
     roomSettingsBusy,
     setRoomSettingsBusy,
-  ] = useState<'rename' | 'delete' | null>(
+  ] = useState<'rename' | 'delete' | 'avatar' | null>(
     null,
   )
 
@@ -389,6 +394,12 @@ function VoiceRoomDetailPage() {
 
 
   useRealtimeEvent<RoomVoiceEventPayload>(
+    'voice_room.avatar_updated',
+    handleRoomRenamed,
+  )
+
+
+  useRealtimeEvent<RoomVoiceEventPayload>(
     'voice_room.deleted',
     handleRoomDeleted,
   )
@@ -468,6 +479,56 @@ function VoiceRoomDetailPage() {
     }
   }, [roomId])
 
+
+  async function handleAvatarUpload(
+    event: FormEvent<HTMLFormElement>,
+  ) {
+    event.preventDefault()
+
+    if (!roomId || !avatarFile || roomSettingsBusy !== null) {
+      return
+    }
+
+    setRoomSettingsBusy('avatar')
+    setRoomSettingsError(null)
+    setRoomSettingsNotice(null)
+
+    try {
+      const updated = await updateVoiceRoomAvatar(
+        roomId,
+        avatarFile,
+      )
+      setRoom(updated)
+      setAvatarFile(null)
+      event.currentTarget.reset()
+      setRoomSettingsNotice('Voice Room avatar updated.')
+    } catch (requestError) {
+      setRoomSettingsError(errorText(requestError))
+    } finally {
+      setRoomSettingsBusy(null)
+    }
+  }
+
+  async function handleAvatarRemove() {
+    if (!roomId || roomSettingsBusy !== null) {
+      return
+    }
+
+    setRoomSettingsBusy('avatar')
+    setRoomSettingsError(null)
+    setRoomSettingsNotice(null)
+
+    try {
+      const updated = await removeVoiceRoomAvatar(roomId)
+      setRoom(updated)
+      setAvatarFile(null)
+      setRoomSettingsNotice('Voice Room avatar removed.')
+    } catch (requestError) {
+      setRoomSettingsError(errorText(requestError))
+    } finally {
+      setRoomSettingsBusy(null)
+    }
+  }
 
   async function handleRenameRoom(
     event: FormEvent<HTMLFormElement>,
@@ -771,14 +832,21 @@ function VoiceRoomDetailPage() {
         </Link>
 
         <div className="d-flex flex-column flex-md-row justify-content-between gap-3">
-          <div>
-            <h1 className="h2 mb-1">
-              {room.name}
-            </h1>
+          <div className="d-flex align-items-center gap-3">
+            <VoiceRoomAvatar
+              name={room.name}
+              avatarUrl={room.avatar_url}
+              size="lg"
+            />
+            <div>
+              <h1 className="h2 mb-1">
+                {room.name}
+              </h1>
 
-            <p className="text-secondary mb-0">
-              Owned by @{room.owner.username}
-            </p>
+              <p className="text-secondary mb-0">
+                Owned by @{room.owner.username}
+              </p>
+            </div>
           </div>
 
           <div className="align-self-md-start d-flex align-items-center gap-2">
@@ -1122,7 +1190,61 @@ function VoiceRoomDetailPage() {
               </div>
             )}
 
-            <form
+            <div className="d-flex align-items-center gap-3 mb-4">
+              <VoiceRoomAvatar
+                name={room.name}
+                avatarUrl={room.avatar_url}
+                size="lg"
+              />
+
+              <div className="flex-grow-1">
+                <form
+                  className="d-flex flex-column flex-sm-row gap-2"
+                  onSubmit={handleAvatarUpload}
+                >
+                  <input
+                    className="form-control form-control-sm"
+                    type="file"
+                    accept="image/png,image/jpeg,image/webp"
+                    disabled={roomSettingsBusy !== null}
+                    onChange={(event) =>
+                      setAvatarFile(
+                        event.target.files?.[0] ?? null,
+                      )
+                    }
+                    aria-label="Voice Room avatar"
+                  />
+                  <button
+                    className="btn btn-sm btn-outline-primary"
+                    type="submit"
+                    disabled={
+                      roomSettingsBusy !== null || !avatarFile
+                    }
+                  >
+                    {roomSettingsBusy === 'avatar'
+                      ? 'Saving…'
+                      : 'Upload avatar'}
+                  </button>
+                  {room.avatar_url && (
+                    <button
+                      className="btn btn-sm btn-outline-secondary"
+                      type="button"
+                      disabled={roomSettingsBusy !== null}
+                      onClick={() =>
+                        void handleAvatarRemove()
+                      }
+                    >
+                      Remove
+                    </button>
+                  )}
+                </form>
+                <div className="form-text">
+                  JPEG, PNG or WebP. The image is cropped square.
+                </div>
+              </div>
+            </div>
+
+                        <form
               className="d-flex flex-column flex-sm-row gap-2 mb-4"
               onSubmit={handleRenameRoom}
             >

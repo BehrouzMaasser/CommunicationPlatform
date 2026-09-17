@@ -6,6 +6,7 @@ type GroupAvatarSize =
 
 type GroupAvatarProps = {
   name: string
+  avatarUrl?: string | null
   size?: GroupAvatarSize
   className?: string
 }
@@ -38,6 +39,7 @@ function getInitials(
 
 function GroupAvatar({
   name,
+  avatarUrl = null,
   size = 'md',
   className = '',
 }: GroupAvatarProps) {
@@ -48,6 +50,16 @@ function GroupAvatar({
   ]
     .filter(Boolean)
     .join(' ')
+
+  if (avatarUrl) {
+    return (
+      <img
+        className={`${classes} group-avatar-image`}
+        src={avatarUrl}
+        alt=""
+      />
+    )
+  }
 
   return (
     <span

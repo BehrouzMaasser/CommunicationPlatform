@@ -1,6 +1,7 @@
 from rest_framework import serializers
 
 from apps.accounts.api.v1.serializers import PublicUserSerializer
+from apps.conversations.avatar_urls import build_group_avatar_url
 from apps.conversations.models import (
     DirectConversation,
     GroupConversation,
@@ -52,16 +53,34 @@ class GroupNameSerializer(serializers.Serializer):
 
 
 class GroupConversationSerializer(serializers.ModelSerializer):
+    avatar_url = serializers.SerializerMethodField()
 
     class Meta:
         model = GroupConversation
         fields = (
             "id",
             "name",
+            "avatar_url",
             "created_at",
             "last_activity_at",
         )
         read_only_fields = fields
+
+    def get_avatar_url(self, group):
+        return build_group_avatar_url(
+            group_id=group.pk,
+            avatar_name=(
+                group.avatar.name
+                if group.avatar
+                else None
+            ),
+        )
+
+
+class GroupAvatarUploadSerializer(serializers.Serializer):
+    avatar = serializers.FileField(
+        allow_empty_file=False,
+    )
 
 
 class GroupMembershipSerializer(serializers.ModelSerializer):

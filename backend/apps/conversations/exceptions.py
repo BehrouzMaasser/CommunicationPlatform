@@ -54,6 +54,11 @@ class InvalidGroupName(ConversationsError):
     default_message = "The group name must not be empty."
 
 
+class InvalidGroupAvatar(ConversationsError):
+    code = "invalid_group_avatar"
+    default_message = "The group avatar is invalid."
+
+
 class GroupInvitationTargetNotFound(ConversationsError):
     code = "group_invitation_target_not_found"
     default_message = "The target user does not exist."

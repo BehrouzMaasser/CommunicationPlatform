@@ -295,6 +295,7 @@ function GroupConversationList({
                   >
                     <GroupAvatar
                       name={invitation.group.name}
+                      avatarUrl={invitation.group.avatar_url}
                       size="sm"
                     />
 
@@ -398,6 +399,7 @@ function GroupConversationList({
                 >
                   <GroupAvatar
                     name={group.name}
+                    avatarUrl={group.avatar_url}
                     size="md"
                   />
 

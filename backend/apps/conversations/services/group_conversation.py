@@ -1,8 +1,11 @@
+from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.db import transaction
 
+from apps.avatar_images import AvatarImageService, InvalidAvatarImage
 from apps.conversations.exceptions import (
     GroupMembershipNotFound,
+    InvalidGroupAvatar,
     GroupNotFound,
     GroupOwnerCannotBeRemoved,
     GroupOwnerRequired,
@@ -149,6 +152,86 @@ class GroupConversationService:
                 group_id=group.pk,
                 name=group.name,
                 audience_user_ids=audience_user_ids,
+            )
+
+        return group
+
+
+    @classmethod
+    def replace_avatar(
+        cls,
+        *,
+        current_user: User,
+        group_id: int,
+        file_obj,
+    ) -> GroupConversation:
+        try:
+            group = GroupConversation.objects.get(
+                pk=group_id,
+            )
+        except GroupConversation.DoesNotExist as exc:
+            raise GroupNotFound from exc
+
+        cls._require_owner(
+            group=group,
+            user=current_user,
+        )
+
+        try:
+            normalized_file = AvatarImageService.normalize(
+                file_obj=file_obj,
+                max_size_bytes=settings.USER_AVATAR_MAX_SIZE_BYTES,
+                max_dimension=settings.USER_AVATAR_MAX_DIMENSION,
+            )
+        except InvalidAvatarImage as exc:
+            raise InvalidGroupAvatar(str(exc)) from exc
+
+        with transaction.atomic():
+            group = cls._get_group_for_update(
+                group_id=group_id,
+            )
+            cls._require_owner(
+                group=group,
+                user=current_user,
+            )
+            AvatarImageService.replace(
+                instance=group,
+                field_name="avatar",
+                normalized_file=normalized_file,
+            )
+            GroupRealtimePublisher.avatar_updated_after_commit(
+                group_id=group.pk,
+                audience_user_ids=cls._member_user_ids(
+                    group=group,
+                ),
+            )
+
+        return group
+
+    @classmethod
+    def remove_avatar(
+        cls,
+        *,
+        current_user: User,
+        group_id: int,
+    ) -> GroupConversation:
+        with transaction.atomic():
+            group = cls._get_group_for_update(
+                group_id=group_id,
+            )
+            cls._require_owner(
+                group=group,
+                user=current_user,
+            )
+            AvatarImageService.remove(
+                instance=group,
+                field_name="avatar",
+            )
+            GroupRealtimePublisher.avatar_updated_after_commit(
+                group_id=group.pk,
+                audience_user_ids=cls._member_user_ids(
+                    group=group,
+                ),
             )
 
         return group

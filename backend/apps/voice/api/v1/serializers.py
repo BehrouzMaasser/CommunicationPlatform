@@ -1,6 +1,7 @@
 from rest_framework import serializers
 
 from apps.accounts.api.v1.serializers import PublicUserSerializer
+from apps.voice.avatar_urls import build_voice_room_avatar_url
 from apps.voice.models import (
     VoiceParticipation,
     VoiceRoom,
@@ -95,6 +96,8 @@ class VoiceRoomNameSerializer(
 class VoiceRoomSerializer(
     serializers.ModelSerializer
 ):
+    avatar_url = serializers.SerializerMethodField()
+
     owner = PublicUserSerializer(
         read_only=True,
     )
@@ -112,6 +115,7 @@ class VoiceRoomSerializer(
         fields = (
             "id",
             "name",
+            "avatar_url",
             "owner",
             "member_count",
             "connected_count",
@@ -119,6 +123,20 @@ class VoiceRoomSerializer(
             "updated_at",
         )
         read_only_fields = fields
+
+
+    def get_avatar_url(
+        self,
+        room: VoiceRoom,
+    ) -> str | None:
+        return build_voice_room_avatar_url(
+            room_id=room.pk,
+            avatar_name=(
+                room.avatar.name
+                if room.avatar
+                else None
+            ),
+        )
 
     def get_member_count(
         self,
@@ -164,6 +182,14 @@ class VoiceRoomSerializer(
         )
 
 
+class VoiceRoomAvatarUploadSerializer(
+    serializers.Serializer
+):
+    avatar = serializers.FileField(
+        allow_empty_file=False,
+    )
+
+
 class VoiceRoomMembershipSerializer(
     serializers.ModelSerializer
 ):
@@ -200,6 +226,7 @@ class VoiceRoomInvitationSerializer(
         source="room.name",
         read_only=True,
     )
+    room_avatar_url = serializers.SerializerMethodField()
     invited_by = PublicUserSerializer(
         read_only=True,
     )
@@ -213,11 +240,26 @@ class VoiceRoomInvitationSerializer(
             "id",
             "room_id",
             "room_name",
+            "room_avatar_url",
             "invited_by",
             "recipient",
             "created_at",
         )
         read_only_fields = fields
+
+    def get_room_avatar_url(
+        self,
+        invitation: VoiceRoomInvitation,
+    ) -> str | None:
+        room = invitation.room
+        return build_voice_room_avatar_url(
+            room_id=room.pk,
+            avatar_name=(
+                room.avatar.name
+                if room.avatar
+                else None
+            ),
+        )
 
 
 class VoiceRoomInvitationLinkSerializer(

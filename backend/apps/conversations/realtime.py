@@ -254,6 +254,22 @@ class GroupRealtimePublisher:
         )
 
     @classmethod
+    def avatar_updated_after_commit(
+        cls,
+        *,
+        group_id: int,
+        audience_user_ids: Iterable[int],
+    ) -> None:
+        cls._publish_group_event_after_commit(
+            event_type=RealtimeEventType.GROUP_AVATAR_UPDATED,
+            payload={
+                "group_id": group_id,
+            },
+            group_id=group_id,
+            user_ids=audience_user_ids,
+        )
+
+    @classmethod
     def deleted_after_commit(
         cls,
         *,

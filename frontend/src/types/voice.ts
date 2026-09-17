@@ -54,6 +54,7 @@ export type VoiceMediaCredentials = {
 export type VoiceRoom = {
   id: string
   name: string
+  avatar_url: string | null
   owner: PublicUser
   member_count: number
   connected_count: number
@@ -74,6 +75,7 @@ export type VoiceRoomInvitation = {
   id: string
   room_id: string
   room_name: string
+  room_avatar_url: string | null
   invited_by: PublicUser
   recipient: PublicUser
   created_at: string

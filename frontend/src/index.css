@@ -2877,3 +2877,8 @@ a {
     padding: 0.55rem 0.65rem;
   }
 }
+
+.group-avatar-image {
+  display: block;
+  object-fit: cover;
+}

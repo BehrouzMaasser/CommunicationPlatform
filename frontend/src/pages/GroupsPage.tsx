@@ -150,6 +150,10 @@ function GroupsPage() {
     handleRealtimeChange,
   )
   useRealtimeEvent(
+    'group.avatar_updated',
+    handleRealtimeChange,
+  )
+  useRealtimeEvent(
     'group.deleted',
     handleRealtimeChange,
   )

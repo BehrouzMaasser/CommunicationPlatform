@@ -30,6 +30,7 @@ class RealtimeEventType(str, Enum):
     GROUP_MEMBER_REMOVED = "group.member_removed"
     GROUP_MEMBER_LEFT = "group.member_left"
     GROUP_RENAMED = "group.renamed"
+    GROUP_AVATAR_UPDATED = "group.avatar_updated"
     GROUP_DELETED = "group.deleted"
 
     TYPING_STARTED = "typing.started"
@@ -55,6 +56,7 @@ class RealtimeEventType(str, Enum):
 
     VOICE_ROOM_CREATED = "voice_room.created"
     VOICE_ROOM_RENAMED = "voice_room.renamed"
+    VOICE_ROOM_AVATAR_UPDATED = "voice_room.avatar_updated"
     VOICE_ROOM_DELETED = "voice_room.deleted"
 
     VOICE_ROOM_MEMBER_ADDED = "voice_room.member_added"

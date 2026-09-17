@@ -74,6 +74,10 @@ class VoiceRoomNameRequired(VoiceError):
     """Raised when a voice-room name is empty."""
 
 
+class InvalidVoiceRoomAvatar(VoiceError):
+    """Raised when a voice-room avatar upload is invalid."""
+
+
 class VoiceRoomInvitationTargetNotFound(VoiceError):
     """Raised when the target user for a room invitation does not exist."""
 

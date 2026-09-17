@@ -3,6 +3,7 @@ from django.urls import path
 from apps.conversations.api.v1.views import (
     DirectConversationDetailView,
     DirectConversationListCreateView,
+    GroupConversationAvatarView,
     GroupConversationDetailView,
     GroupConversationLeaveView,
     GroupConversationListCreateView,
@@ -43,6 +44,11 @@ urlpatterns = [
         "groups/<int:group_id>/",
         GroupConversationDetailView.as_view(),
         name="group-detail",
+    ),
+    path(
+        "groups/<int:group_id>/avatar/",
+        GroupConversationAvatarView.as_view(),
+        name="api-group-avatar",
     ),
     path(
         "groups/<int:group_id>/rename/",

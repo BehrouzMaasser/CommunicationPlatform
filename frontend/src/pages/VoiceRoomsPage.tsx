@@ -9,6 +9,7 @@ import {
 } from 'react-router-dom'
 
 import { ApiError } from '../api/client'
+import VoiceRoomAvatar from '../components/voice/VoiceRoomAvatar'
 import {
   acceptVoiceRoomInvitation,
   createVoiceRoom,
@@ -175,6 +176,11 @@ function VoiceRoomsPage() {
 
   useRealtimeEvent(
     'voice_room.renamed',
+    handleRealtimeChange,
+  )
+
+  useRealtimeEvent(
+    'voice_room.avatar_updated',
     handleRealtimeChange,
   )
 
@@ -382,13 +388,20 @@ function VoiceRoomsPage() {
                     className="list-group-item px-0 d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3"
                     key={invitation.id}
                   >
-                    <div>
-                      <div className="fw-semibold">
-                        {invitation.room_name}
-                      </div>
+                    <div className="d-flex align-items-center gap-3">
+                      <VoiceRoomAvatar
+                        name={invitation.room_name}
+                        avatarUrl={invitation.room_avatar_url}
+                        size="sm"
+                      />
+                      <div>
+                        <div className="fw-semibold">
+                          {invitation.room_name}
+                        </div>
 
-                      <div className="small text-secondary">
-                        Invited by @{invitation.invited_by.username}
+                        <div className="small text-secondary">
+                          Invited by @{invitation.invited_by.username}
+                        </div>
                       </div>
                     </div>
 
@@ -501,13 +514,20 @@ function VoiceRoomsPage() {
                   to={`/voice/rooms/${room.id}`}
                 >
                   <div className="d-flex justify-content-between align-items-center gap-3">
-                    <div>
-                      <div className="fw-semibold">
-                        {room.name}
-                      </div>
+                    <div className="d-flex align-items-center gap-3">
+                      <VoiceRoomAvatar
+                        name={room.name}
+                        avatarUrl={room.avatar_url}
+                        size="md"
+                      />
+                      <div>
+                        <div className="fw-semibold">
+                          {room.name}
+                        </div>
 
-                      <div className="small text-secondary">
-                        Owner @{room.owner.username}
+                        <div className="small text-secondary">
+                          Owner @{room.owner.username}
+                        </div>
                       </div>
                     </div>
 
