@@ -376,6 +376,13 @@ export class VoiceMediaClient {
       room.on(
         liveKit
           .RoomEvent
+          .ParticipantConnected,
+        this.handleParticipantConnected,
+      )
+
+      room.on(
+        liveKit
+          .RoomEvent
           .ParticipantDisconnected,
         this.handleParticipantDisconnected,
       )
@@ -654,6 +661,12 @@ export class VoiceMediaClient {
   }
 
 
+  private readonly handleParticipantConnected =
+    (): void => {
+      this.emitMutedMicrophones()
+    }
+
+
   private readonly handleParticipantDisconnected =
     (): void => {
       this.emitMutedMicrophones()
@@ -680,7 +693,10 @@ export class VoiceMediaClient {
           liveKit.Track.Source.Microphone,
         )
 
-      if (publication?.isMuted) {
+      if (
+        !publication
+        || publication.isMuted
+      ) {
         identities.push(
           participant.identity,
         )
@@ -849,6 +865,8 @@ export class VoiceMediaClient {
     document.body.appendChild(
       element,
     )
+
+    this.emitMutedMicrophones()
   }
 
 
@@ -868,6 +886,8 @@ export class VoiceMediaClient {
         element,
       )
     }
+
+    this.emitMutedMicrophones()
   }
 
 
@@ -920,6 +940,13 @@ export class VoiceMediaClient {
         .RoomEvent
         .TrackUnmuted,
       this.handleTrackMuteChanged,
+    )
+
+    room.off(
+      liveKit
+        .RoomEvent
+        .ParticipantConnected,
+      this.handleParticipantConnected,
     )
 
     room.off(

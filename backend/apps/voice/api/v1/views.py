@@ -138,6 +138,61 @@ class VoiceStateView(APIView):
         return _handle_voice_operation(operation)
 
 
+class VoiceStateHeartbeatView(APIView):
+    def post(self, request):
+        serializer = ClientInstanceSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        def operation():
+            VoiceSessionService.heartbeat_current_participation(
+                current_user=request.user,
+                client_instance_id=serializer.validated_data[
+                    "client_instance_id"
+                ],
+            )
+            return Response(status=status.HTTP_204_NO_CONTENT)
+
+        return _handle_voice_operation(operation)
+
+
+class VoiceStateTakeOverView(APIView):
+    def post(self, request):
+        serializer = ClientInstanceSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        def operation():
+            participation = VoiceSessionService.take_over_current_participation(
+                current_user=request.user,
+                client_instance_id=serializer.validated_data[
+                    "client_instance_id"
+                ],
+            )
+            return Response(
+                _voice_state_data(
+                    session=participation.session,
+                    current_user=request.user,
+                )
+            )
+
+        return _handle_voice_operation(operation)
+
+
+class VoiceStateReleaseView(APIView):
+    def post(self, request):
+        def operation():
+            VoiceSessionService.release_current_participation(
+                current_user=request.user,
+            )
+            return Response(
+                _voice_state_data(
+                    session=None,
+                    current_user=request.user,
+                )
+            )
+
+        return _handle_voice_operation(operation)
+
+
 class DirectCallStartView(APIView):
     def post(self, request):
         serializer = DirectCallStartSerializer(data=request.data)
@@ -357,6 +412,9 @@ class VoiceRoomListCreateView(
         **kwargs,
     ):
         def operation():
+            VoiceSessionService.reconcile_voice_rooms_for_user(
+                current_user=request.user,
+            )
             return self.list(
                 request,
                 *args,
@@ -411,6 +469,17 @@ class VoiceRoomDetailView(APIView):
         room_id,
     ):
         def operation():
+            (
+                _get_voice_room_for_member_or_404(
+                    user=request.user,
+                    room_id=room_id,
+                )
+            )
+
+            VoiceSessionService.reconcile_voice_room_media(
+                room_id=room_id,
+            )
+
             room = (
                 _get_voice_room_for_member_or_404(
                     user=request.user,
@@ -1082,6 +1151,10 @@ class VoiceRoomVoiceView(APIView):
                     user=request.user,
                     room_id=room_id,
                 )
+            )
+
+            VoiceSessionService.reconcile_voice_room_media(
+                room_id=room_id,
             )
 
             session = (

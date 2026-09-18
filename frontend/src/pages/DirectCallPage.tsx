@@ -67,6 +67,7 @@ type PendingAction =
   | 'audio-playback'
   | 'end'
   | 'retry'
+  | 'take-over'
   | null
 
 
@@ -112,6 +113,7 @@ function DirectCallPage() {
     mutedUserIds,
     error: voiceError,
     refresh,
+    takeOverCurrentVoice,
     endDirectCall,
     setMicrophoneEnabled,
     setAudioOutputMuted,
@@ -354,6 +356,30 @@ function DirectCallPage() {
   }
 
 
+  async function handleTakeOver() {
+    if (
+      pendingAction !== null
+      || !isActiveDirectCall
+      || ownsCurrentParticipation
+    ) {
+      return
+    }
+
+    setPendingAction('take-over')
+    setActionError(null)
+
+    try {
+      await takeOverCurrentVoice()
+    } catch (error) {
+      setActionError(
+        describeError(error),
+      )
+    } finally {
+      setPendingAction(null)
+    }
+  }
+
+
   async function handleEndCall() {
     if (
       pendingAction !== null
@@ -442,7 +468,21 @@ function DirectCallPage() {
           <>
             {!ownsCurrentParticipation && (
               <div className="alert alert-info direct-call-page-notice">
-                This call is active on another tab or device. Audio controls are available from the client that owns the call.
+                <div className="mb-2">
+                  This call is active on another tab or device. Reconnect here to move the call to this browser.
+                </div>
+                <button
+                  className="btn btn-sm btn-primary"
+                  type="button"
+                  disabled={pendingAction !== null}
+                  onClick={() => {
+                    void handleTakeOver()
+                  }}
+                >
+                  {pendingAction === 'take-over'
+                    ? 'Reconnecting…'
+                    : 'Reconnect here'}
+                </button>
               </div>
             )}
 
@@ -586,6 +626,17 @@ function DirectCallPage() {
                   : `Mute @${otherUser.username}`}
               </button>
             </div>
+
+            {voiceError
+            && mediaStatus !== 'error'
+            && ownsCurrentParticipation && (
+              <div
+                className="alert alert-warning direct-call-page-notice"
+                role="alert"
+              >
+                {voiceError}
+              </div>
+            )}
 
             {mediaStatus === 'error' && ownsCurrentParticipation && (
               <div className="direct-call-page-retry">

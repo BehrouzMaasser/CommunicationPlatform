@@ -101,6 +101,43 @@ class LiveKitMediaAdminService:
         async_to_sync(cls._delete_room_async)(room_name=room_name)
 
     @classmethod
+    async def _list_participant_identities_async(
+        cls,
+        *,
+        room_name: str,
+    ) -> set[str]:
+        client = cls._client()
+        try:
+            try:
+                response = await client.room.list_participants(
+                    api.ListParticipantsRequest(room=room_name)
+                )
+            except api.ServerError as exc:
+                if exc.code == api.ServerErrorCode.NOT_FOUND:
+                    return set()
+                raise
+
+            return {
+                participant.identity
+                for participant in response.participants
+            }
+        finally:
+            await client.aclose()
+
+    @classmethod
+    def list_participant_identities(
+        cls,
+        *,
+        room_name: str,
+    ) -> set[str]:
+        if not room_name:
+            raise ValueError("room_name is required.")
+
+        return async_to_sync(cls._list_participant_identities_async)(
+            room_name=room_name,
+        )
+
+    @classmethod
     async def _list_rooms_async(cls):
         client = cls._client()
         try:

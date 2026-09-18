@@ -1,12 +1,15 @@
 import uuid
+from datetime import timedelta
 from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
 from django.test import override_settings
+from django.utils import timezone
 from django.urls import reverse
 from rest_framework.test import APITestCase
 
 from apps.voice.models import (
+    VoiceParticipation,
     VoiceRoomMembership,
     VoiceSession,
 )
@@ -129,6 +132,79 @@ class VoiceRoomVoiceApiTests(APITestCase):
             len(response.data["participants"]),
             1,
         )
+
+    def test_member_can_heartbeat_owned_active_voice(self):
+        self.join(
+            user=self.alice,
+            client_instance_id=self.alice_client,
+        )
+        participation = VoiceParticipation.objects.get(
+            user=self.alice,
+            left_at__isnull=True,
+        )
+        old_claim = timezone.now() - timedelta(minutes=5)
+        VoiceParticipation.objects.filter(pk=participation.pk).update(
+            claimed_at=old_claim,
+        )
+        self.authenticate(self.alice)
+
+        response = self.client.post(
+            reverse("voice-state-heartbeat"),
+            {
+                "client_instance_id": str(self.alice_client),
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 204)
+        participation.refresh_from_db()
+        self.assertGreater(participation.claimed_at, old_claim)
+
+    def test_member_can_take_over_active_voice_on_new_client(self):
+        joined = self.join(
+            user=self.alice,
+            client_instance_id=self.alice_client,
+        )
+        replacement_client = uuid.uuid4()
+        self.authenticate(self.alice)
+
+        response = self.client.post(
+            reverse("voice-state-take-over"),
+            {
+                "client_instance_id": str(replacement_client),
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            response.data["session"]["id"],
+            joined.data["session"]["id"],
+        )
+        self.assertEqual(
+            response.data["current_participation"][
+                "client_instance_id"
+            ],
+            str(replacement_client),
+        )
+
+    def test_member_can_release_active_voice_from_new_client(self):
+        self.join(
+            user=self.alice,
+            client_instance_id=self.alice_client,
+        )
+        self.authenticate(self.alice)
+
+        response = self.client.post(
+            reverse("voice-state-release"),
+            {},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIsNone(response.data["session"])
+        self.assertIsNone(response.data["current_participation"])
+        self.assertEqual(response.data["participants"], [])
 
     def test_two_members_join_same_session(self):
         alice = self.join(

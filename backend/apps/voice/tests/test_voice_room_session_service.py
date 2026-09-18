@@ -1,7 +1,10 @@
 import uuid
+from datetime import timedelta
+from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
-from django.test import TestCase
+from django.test import TestCase, override_settings
+from django.utils import timezone
 
 from apps.friendships.models import Friendship
 from apps.voice.exceptions import (
@@ -328,6 +331,191 @@ class VoiceRoomSessionServiceTests(TestCase):
             1,
         )
 
+
+    def test_active_participation_heartbeat_renews_ownership_lease(
+        self,
+    ):
+        participation = VoiceSessionService.join_voice_room(
+            current_user=self.alice,
+            room_id=self.room.id,
+            client_instance_id=self.alice_client,
+        )
+        old_claim = timezone.now() - timedelta(minutes=5)
+        VoiceParticipation.objects.filter(pk=participation.pk).update(
+            claimed_at=old_claim,
+        )
+
+        VoiceSessionService.heartbeat_current_participation(
+            current_user=self.alice,
+            client_instance_id=self.alice_client,
+        )
+
+        participation.refresh_from_db()
+        self.assertGreater(
+            participation.claimed_at,
+            old_claim,
+        )
+
+    @override_settings(VOICE_MEDIA_RECONCILE_GRACE_SECONDS=30)
+    @patch(
+        "apps.voice.services.voice_session.LiveKitMediaAdminService.list_participant_identities"
+    )
+    def test_heartbeat_reconciles_peer_with_expired_missing_lease(
+        self, list_identities
+    ):
+        alice = VoiceSessionService.join_voice_room(
+            current_user=self.alice,
+            room_id=self.room.id,
+            client_instance_id=self.alice_client,
+        )
+        bob = VoiceSessionService.join_voice_room(
+            current_user=self.bob,
+            room_id=self.room.id,
+            client_instance_id=self.bob_client,
+        )
+        VoiceParticipation.objects.filter(pk=bob.pk).update(
+            claimed_at=timezone.now() - timedelta(minutes=5),
+        )
+        list_identities.return_value = {
+            alice.media_participant_identity,
+        }
+
+        VoiceSessionService.heartbeat_current_participation(
+            current_user=self.alice,
+            client_instance_id=self.alice_client,
+        )
+
+        bob.refresh_from_db()
+        self.assertIsNotNone(bob.left_at)
+
+    def test_active_participation_heartbeat_rejects_other_client(
+        self,
+    ):
+        VoiceSessionService.join_voice_room(
+            current_user=self.alice,
+            room_id=self.room.id,
+            client_instance_id=self.alice_client,
+        )
+
+        with self.assertRaises(VoiceParticipationClaimed):
+            VoiceSessionService.heartbeat_current_participation(
+                current_user=self.alice,
+                client_instance_id=uuid.uuid4(),
+            )
+
+    @override_settings(VOICE_MEDIA_RECONCILE_GRACE_SECONDS=30)
+    @patch(
+        "apps.voice.services.voice_session.LiveKitMediaAdminService.list_participant_identities"
+    )
+    def test_room_reconciliation_does_not_probe_fresh_voice_lease(
+        self, list_identities
+    ):
+        VoiceSessionService.join_voice_room(
+            current_user=self.alice,
+            room_id=self.room.id,
+            client_instance_id=self.alice_client,
+        )
+
+        VoiceSessionService.reconcile_voice_room_media(
+            room_id=self.room.id,
+        )
+
+        list_identities.assert_not_called()
+
+    @patch(
+        "apps.voice.services.voice_session.VoiceMediaCleanup.remove_participant_after_commit"
+    )
+    def test_active_participation_can_be_taken_over_by_new_client(
+        self, remove_participant
+    ):
+        participation = VoiceSessionService.join_voice_room(
+            current_user=self.alice,
+            room_id=self.room.id,
+            client_instance_id=self.alice_client,
+        )
+        replacement_client = uuid.uuid4()
+
+        result = VoiceSessionService.take_over_current_participation(
+            current_user=self.alice,
+            client_instance_id=replacement_client,
+        )
+
+        result.refresh_from_db()
+        self.assertEqual(result.pk, participation.pk)
+        self.assertEqual(
+            result.client_instance_id,
+            replacement_client,
+        )
+        remove_participant.assert_called_once_with(
+            room_name=result.session.media_room_name,
+            participant_identity=result.media_participant_identity,
+        )
+
+    @patch(
+        "apps.voice.services.voice_session.VoiceMediaCleanup.remove_participant_after_commit"
+    )
+    def test_release_current_participation_works_from_other_client(
+        self, remove_participant
+    ):
+        alice = VoiceSessionService.join_voice_room(
+            current_user=self.alice,
+            room_id=self.room.id,
+            client_instance_id=self.alice_client,
+        )
+        VoiceSessionService.join_voice_room(
+            current_user=self.bob,
+            room_id=self.room.id,
+            client_instance_id=self.bob_client,
+        )
+
+        VoiceSessionService.release_current_participation(
+            current_user=self.alice,
+        )
+
+        alice.refresh_from_db()
+        alice.session.refresh_from_db()
+        self.assertIsNotNone(alice.left_at)
+        self.assertEqual(
+            alice.session.status,
+            VoiceSession.Status.ACTIVE,
+        )
+        remove_participant.assert_called_once()
+
+    @override_settings(VOICE_MEDIA_RECONCILE_GRACE_SECONDS=0)
+    @patch(
+        "apps.voice.services.voice_session.LiveKitMediaAdminService.list_participant_identities"
+    )
+    def test_room_reconciliation_removes_media_ghosts(
+        self, list_identities
+    ):
+        alice = VoiceSessionService.join_voice_room(
+            current_user=self.alice,
+            room_id=self.room.id,
+            client_instance_id=self.alice_client,
+        )
+        bob = VoiceSessionService.join_voice_room(
+            current_user=self.bob,
+            room_id=self.room.id,
+            client_instance_id=self.bob_client,
+        )
+        list_identities.return_value = {
+            alice.media_participant_identity
+        }
+
+        VoiceSessionService.reconcile_voice_room_media(
+            room_id=self.room.id,
+        )
+
+        alice.refresh_from_db()
+        bob.refresh_from_db()
+        alice.session.refresh_from_db()
+
+        self.assertIsNone(alice.left_at)
+        self.assertIsNotNone(bob.left_at)
+        self.assertEqual(
+            alice.session.status,
+            VoiceSession.Status.ACTIVE,
+        )
 
     def test_wrong_client_cannot_leave_room_voice(self):
         VoiceSessionService.join_voice_room(

@@ -58,6 +58,8 @@ type PendingVoiceAction =
   | 'microphone'
   | 'audio'
   | 'retry'
+  | 'take-over'
+  | 'release-other'
   | null
 
 
@@ -88,6 +90,8 @@ function VoiceRoomDetailPage() {
     mutedUserIds,
     error: voiceError,
     refresh: refreshGlobalVoice,
+    takeOverCurrentVoice,
+    releaseCurrentVoice,
     joinVoiceRoom,
     leaveVoiceRoom,
     setMicrophoneEnabled,
@@ -800,12 +804,12 @@ function VoiceRoomDetailPage() {
     busyInOtherVoice
   ) {
     mediaDescription =
-      'Finish your current voice session first.'
+      'Another voice session is active for your account. You can end it here before joining this room.'
   } else if (
     activeOnAnotherClient
   ) {
     mediaDescription =
-      'You joined this room on another tab or device.'
+      'This room is active on another tab or device. Reconnect here to move the voice session to this browser.'
   } else if (
     ownsThisRoomSession
   ) {
@@ -1027,12 +1031,65 @@ function VoiceRoomDetailPage() {
             )}
 
             {activeOnAnotherClient && (
+              <>
+                <button
+                  className="btn btn-primary"
+                  type="button"
+                  disabled={
+                    pendingVoiceAction !== null
+                  }
+                  onClick={() => {
+                    void runVoiceAction(
+                      'take-over',
+                      takeOverCurrentVoice,
+                    )
+                  }}
+                >
+                  {pendingVoiceAction ===
+                  'take-over'
+                    ? 'Reconnecting…'
+                    : 'Reconnect here'}
+                </button>
+
+                <button
+                  className="btn btn-outline-danger"
+                  type="button"
+                  disabled={
+                    pendingVoiceAction !== null
+                  }
+                  onClick={() => {
+                    void runVoiceAction(
+                      'release-other',
+                      releaseCurrentVoice,
+                    )
+                  }}
+                >
+                  {pendingVoiceAction ===
+                  'release-other'
+                    ? 'Ending…'
+                    : 'End other session'}
+                </button>
+              </>
+            )}
+
+            {busyInOtherVoice && (
               <button
-                className="btn btn-secondary"
+                className="btn btn-outline-danger"
                 type="button"
-                disabled
+                disabled={
+                  pendingVoiceAction !== null
+                }
+                onClick={() => {
+                  void runVoiceAction(
+                    'release-other',
+                    releaseCurrentVoice,
+                  )
+                }}
               >
-                Active elsewhere
+                {pendingVoiceAction ===
+                'release-other'
+                  ? 'Ending…'
+                  : 'End other voice session'}
               </button>
             )}
           </div>

@@ -25,6 +25,9 @@ from apps.voice.api.v1.views import (
     VoiceRoomMemberListView,
     VoiceRoomVoiceLeaveView,
     VoiceRoomVoiceView,
+    VoiceStateHeartbeatView,
+    VoiceStateReleaseView,
+    VoiceStateTakeOverView,
     VoiceStateView,
 )
 
@@ -114,6 +117,21 @@ urlpatterns = [
         "voice/state/",
         VoiceStateView.as_view(),
         name="voice-state",
+    ),
+    path(
+        "voice/state/heartbeat/",
+        VoiceStateHeartbeatView.as_view(),
+        name="voice-state-heartbeat",
+    ),
+    path(
+        "voice/state/take-over/",
+        VoiceStateTakeOverView.as_view(),
+        name="voice-state-take-over",
+    ),
+    path(
+        "voice/state/release/",
+        VoiceStateReleaseView.as_view(),
+        name="voice-state-release",
     ),
     path(
         "voice/direct-calls/",

@@ -45,6 +45,40 @@ Promise<VoiceState> {
 }
 
 
+export function heartbeatCurrentVoice(
+  clientInstanceId: string,
+): Promise<void> {
+  return apiPost<void>(
+    '/api/v1/voice/state/heartbeat/',
+    {
+      client_instance_id:
+        clientInstanceId,
+    },
+  )
+}
+
+
+export function takeOverCurrentVoice(
+  clientInstanceId: string,
+): Promise<VoiceState> {
+  return apiPost<VoiceState>(
+    '/api/v1/voice/state/take-over/',
+    {
+      client_instance_id:
+        clientInstanceId,
+    },
+  )
+}
+
+
+export function releaseCurrentVoice():
+Promise<VoiceState> {
+  return apiPost<VoiceState>(
+    '/api/v1/voice/state/release/',
+  )
+}
+
+
 export function startDirectCall(
   userId: number,
   clientInstanceId: string,

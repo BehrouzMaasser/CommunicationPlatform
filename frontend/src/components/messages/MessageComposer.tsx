@@ -2,6 +2,7 @@ import {
   type ChangeEvent,
   type FormEvent,
   type KeyboardEvent as ReactKeyboardEvent,
+  type PointerEvent as ReactPointerEvent,
   useEffect,
   useRef,
   useState,
@@ -313,6 +314,29 @@ function MessageComposer({
   }
 
 
+  function handleSendPointerDown(
+    event:
+      ReactPointerEvent<HTMLButtonElement>,
+  ) {
+    if (
+      event.pointerType === 'mouse'
+      || !event.isPrimary
+      || event.currentTarget.disabled
+    ) {
+      return
+    }
+
+    /*
+     * Mobile browsers can resize/reflow the page as the textarea loses
+     * focus, moving the button before the synthesized click arrives.
+     * Submit on the initial touch/pen pointer-down instead, while keeping
+     * normal mouse and keyboard form submission unchanged.
+     */
+    event.preventDefault()
+    event.currentTarget.form?.requestSubmit()
+  }
+
+
   async function handleSubmit(
     event:
       FormEvent<HTMLFormElement>,
@@ -566,6 +590,9 @@ function MessageComposer({
           <button
             className="btn btn-primary message-send-button px-3"
             type="submit"
+            onPointerDown={
+              handleSendPointerDown
+            }
             disabled={
               sending ||
               !canSend

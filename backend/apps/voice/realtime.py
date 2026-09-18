@@ -23,6 +23,32 @@ class VoiceRealtimePublisher:
         return value.isoformat().replace("+00:00", "Z")
 
     @classmethod
+    def participation_taken_over_after_commit(
+        cls,
+        *,
+        participation_id,
+        session_id,
+        user_id: int,
+        client_instance_id: UUID,
+    ) -> None:
+        RealtimePublisher.publish_to_users_after_commit(
+            user_ids=[user_id],
+            event_type=(
+                RealtimeEventType.VOICE_PARTICIPATION_TAKEN_OVER
+            ),
+            payload={
+                "participation_id": cls._session_id(
+                    participation_id
+                ),
+                "session_id": cls._session_id(session_id),
+                "user_id": user_id,
+                "client_instance_id": cls._client_instance_id(
+                    client_instance_id
+                ),
+            },
+        )
+
+    @classmethod
     def direct_call_ringing_after_commit(
         cls,
         *,

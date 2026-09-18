@@ -26,10 +26,13 @@ import {
   endDirectCall as endDirectCallRequest,
   getVoiceMediaCredentials,
   getVoiceState,
+  heartbeatCurrentVoice,
   joinVoiceRoom as joinVoiceRoomRequest,
   leaveVoiceRoom as leaveVoiceRoomRequest,
   rejectDirectCall as rejectDirectCallRequest,
+  releaseCurrentVoice as releaseCurrentVoiceRequest,
   startDirectCall as startDirectCallRequest,
+  takeOverCurrentVoice as takeOverCurrentVoiceRequest,
 } from '../api/voice'
 
 import {
@@ -642,26 +645,57 @@ export function VoiceProvider({
                 }
               }
 
-              await voiceMediaClient
-                .setMicrophoneEnabled(
+              try {
+                await voiceMediaClient
+                  .setMicrophoneEnabled(
+                    desiredMicrophoneEnabled,
+                  )
+
+                setMicrophoneEnabledState(
                   desiredMicrophoneEnabled,
                 )
 
-              setMicrophoneEnabledState(
-                desiredMicrophoneEnabled,
-              )
+                if (
+                  currentUserId !== undefined
+                ) {
+                  writeVoiceSessionMediaPreferences({
+                    currentUserId,
+                    sessionId: session.id,
+                    microphoneEnabled:
+                      desiredMicrophoneEnabled,
+                    audioOutputMuted:
+                      desiredOutputMuted,
+                  })
+                }
 
-              if (
-                currentUserId !== undefined
-              ) {
-                writeVoiceSessionMediaPreferences({
-                  currentUserId,
-                  sessionId: session.id,
-                  microphoneEnabled:
-                    desiredMicrophoneEnabled,
-                  audioOutputMuted:
-                    desiredOutputMuted,
-                })
+                setError(null)
+              } catch {
+                /*
+                 * Microphone capture is independent from the LiveKit
+                 * signaling/subscription connection. Browser permission
+                 * denial (or an unavailable input device) must not tear
+                 * down a perfectly usable listen-only voice session or
+                 * enter the network reconnect backoff loop.
+                 */
+                setMicrophoneEnabledState(
+                  false,
+                )
+
+                if (
+                  currentUserId !== undefined
+                ) {
+                  writeVoiceSessionMediaPreferences({
+                    currentUserId,
+                    sessionId: session.id,
+                    microphoneEnabled: false,
+                    audioOutputMuted:
+                      desiredOutputMuted,
+                  })
+                }
+
+                setError(
+                  'Microphone access is unavailable. You can still listen. Check your browser microphone permission, then tap Unmute to retry.',
+                )
               }
 
               clearMediaRetry()
@@ -669,8 +703,6 @@ export function VoiceProvider({
               setMediaStatus(
                 'connected',
               )
-
-              setError(null)
             } catch (
               mediaError
             ) {
@@ -1021,6 +1053,34 @@ export function VoiceProvider({
     )
 
 
+  const takeOverCurrentVoice =
+    useCallback(
+      async (): Promise<void> => {
+        await runStateMutation(
+          () =>
+            takeOverCurrentVoiceRequest(
+              clientInstanceId,
+            ),
+        )
+      },
+      [
+        clientInstanceId,
+        runStateMutation,
+      ],
+    )
+
+
+  const releaseCurrentVoice =
+    useCallback(
+      async (): Promise<void> => {
+        await runStateMutation(
+          releaseCurrentVoiceRequest,
+        )
+      },
+      [runStateMutation],
+    )
+
+
   const joinVoiceRoom =
     useCallback(
       async (
@@ -1153,10 +1213,16 @@ export function VoiceProvider({
         } catch (
           microphoneError
         ) {
+          setMicrophoneEnabledState(
+            false,
+          )
+
           setError(
-            errorMessage(
-              microphoneError,
-            ),
+            nextEnabled
+              ? 'Microphone access is unavailable. Check your browser microphone permission, then try Unmute again.'
+              : errorMessage(
+                  microphoneError,
+                ),
           )
 
           throw microphoneError
@@ -1691,6 +1757,76 @@ export function VoiceProvider({
   useEffect(
     () => {
       if (!enabled) {
+        return
+      }
+
+      const currentParticipation =
+        state.current_participation
+      const session = state.session
+
+      if (
+        session?.status !== 'ACTIVE'
+        || currentParticipation
+          ?.client_instance_id !== clientInstanceId
+      ) {
+        return
+      }
+
+      let stopped = false
+
+      const renewLease = async () => {
+        try {
+          await heartbeatCurrentVoice(
+            clientInstanceId,
+          )
+        } catch (heartbeatError) {
+          if (
+            stopped
+            || !navigator.onLine
+          ) {
+            return
+          }
+
+          /*
+           * A takeover or server-side cleanup can make this browser lose
+           * ownership without the realtime event reaching it. Refreshing
+           * here converges the tab back to authoritative server state.
+           * Ordinary network failures are harmless and the next heartbeat
+           * will retry.
+           */
+          if (heartbeatError instanceof ApiError) {
+            void refresh()
+          }
+        }
+      }
+
+      void renewLease()
+
+      const intervalId = window.setInterval(
+        () => {
+          void renewLease()
+        },
+        3_000,
+      )
+
+      return () => {
+        stopped = true
+        window.clearInterval(intervalId)
+      }
+    },
+    [
+      clientInstanceId,
+      enabled,
+      refresh,
+      state.current_participation,
+      state.session,
+    ],
+  )
+
+
+  useEffect(
+    () => {
+      if (!enabled) {
         desiredVoiceStateRef
           .current =
             EMPTY_VOICE_STATE
@@ -2060,6 +2196,8 @@ export function VoiceProvider({
         rejectDirectCall,
         cancelDirectCall,
         endDirectCall,
+        takeOverCurrentVoice,
+        releaseCurrentVoice,
         joinVoiceRoom,
         leaveVoiceRoom,
         setMicrophoneEnabled,
