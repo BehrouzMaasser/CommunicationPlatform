@@ -77,6 +77,39 @@ class VoiceMediaCleanupIntegrationTests(TestCase):
 
     @patch(
         "apps.voice.services.voice_session."
+        "VoiceMediaCleanup.delete_room_after_commit"
+    )
+    def test_repeated_direct_hangup_does_not_schedule_duplicate_cleanup(
+        self,
+        delete_room,
+    ):
+        self._make_friends()
+        session = VoiceSessionService.start_direct_call(
+            current_user=self.alice,
+            target_user_id=self.bob.pk,
+            client_instance_id=self.alice_client,
+        )
+        VoiceSessionService.accept_direct_call(
+            current_user=self.bob,
+            session_id=session.pk,
+            client_instance_id=self.bob_client,
+        )
+
+        VoiceSessionService.end_direct_call(
+            current_user=self.alice,
+            session_id=session.pk,
+        )
+        VoiceSessionService.end_direct_call(
+            current_user=self.bob,
+            session_id=session.pk,
+        )
+
+        delete_room.assert_called_once_with(
+            room_name=session.media_room_name,
+        )
+
+    @patch(
+        "apps.voice.services.voice_session."
         "VoiceMediaCleanup.remove_participant_after_commit"
     )
     @patch(

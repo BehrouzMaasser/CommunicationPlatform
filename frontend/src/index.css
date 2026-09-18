@@ -1219,7 +1219,7 @@ a {
     padding-bottom: 0.6rem !important;
   }
 
-  .app-shell:has(.conversation-page .message-composer-form textarea:focus) .app-mobile-bottom-nav {
+  .app-shell:has(.conversation-page .message-composer-form:focus-within) .app-mobile-bottom-nav {
     display: none;
   }
 
@@ -1848,6 +1848,28 @@ a {
   box-shadow: 0 0 0 3px rgba(248, 113, 113, 0.12);
 }
 
+.global-voice-dock.connection-ringing
+.voice-dock-connection-indicator {
+  background: #fbbf24;
+  box-shadow: 0 0 0 3px rgba(251, 191, 36, 0.14);
+  animation: voice-speaking-pulse 1.35s ease-out infinite;
+}
+
+.global-voice-dock.is-ringing,
+.global-voice-dock.is-ringing:hover {
+  background: rgba(120, 74, 9, 0.9);
+  border-color: rgba(251, 191, 36, 0.52);
+  box-shadow: 0 10px 30px rgba(120, 74, 9, 0.22);
+}
+
+.global-voice-dock.has-action-error {
+  border-color: rgba(248, 113, 113, 0.82);
+}
+
+.global-voice-dock.is-ringing .voice-dock-destination {
+  cursor: default;
+}
+
 .global-voice-dock.is-speaking,
 .global-voice-dock.is-speaking:hover {
   background: rgba(22, 101, 52, 0.88);
@@ -1909,6 +1931,32 @@ a {
   background: rgba(245, 158, 11, 0.12);
 }
 
+.voice-dock-control.is-answer {
+  color: #dcfce7;
+  background: rgba(34, 197, 94, 0.22);
+}
+
+.voice-dock-control.is-answer:hover:not(:disabled),
+.voice-dock-control.is-answer:focus-visible {
+  color: #fff;
+  background: rgba(34, 197, 94, 0.38);
+}
+
+.voice-dock-control.is-reject {
+  color: #fee2e2;
+  background: rgba(239, 68, 68, 0.2);
+}
+
+.voice-dock-control.is-reject:hover:not(:disabled),
+.voice-dock-control.is-reject:focus-visible {
+  color: #fff;
+  background: rgba(239, 68, 68, 0.36);
+}
+
+.voice-dock-control.is-reject .voice-dock-icon {
+  transform: rotate(135deg);
+}
+
 .voice-dock-control:disabled {
   cursor: default;
   opacity: 0.38;
@@ -1949,6 +1997,14 @@ a {
     background: rgba(17, 24, 39, 0.995);
   }
 
+  .app-topbar-center .global-voice-dock.is-ringing,
+  .app-topbar-center .global-voice-dock.is-ringing:hover {
+    min-width: max(15vw, 8.4rem);
+    max-width: 72vw;
+    background: rgba(92, 58, 8, 0.98);
+    border-color: rgba(251, 191, 36, 0.62);
+  }
+
   .app-topbar-center .global-voice-dock.is-speaking,
   .app-topbar-center .global-voice-dock.is-speaking:hover {
     background: rgba(20, 83, 45, 0.98);
@@ -1964,6 +2020,11 @@ a {
 
   .app-topbar-center .voice-dock-destination:active {
     cursor: grabbing;
+  }
+
+  .app-topbar-center .global-voice-dock.is-ringing
+  .voice-dock-destination {
+    cursor: grab;
   }
 
   .app-topbar-center .voice-dock-label-full {
@@ -2870,9 +2931,9 @@ a {
     max-width: 84%;
   }
 
-  .app-shell:has(.dm-conversation-page .message-composer-form textarea:focus)
+  .app-shell:has(.dm-conversation-page .message-composer-form:focus-within)
   .app-mobile-bottom-nav,
-  .app-shell:has(.group-conversation-page .message-composer-form textarea:focus)
+  .app-shell:has(.group-conversation-page .message-composer-form:focus-within)
   .app-mobile-bottom-nav {
     display: none;
   }
@@ -3831,4 +3892,339 @@ a {
   font-size: 0.68rem;
   font-weight: 750;
   white-space: nowrap;
+}
+
+/* Dedicated active direct-call surface */
+.direct-call-page {
+  display: grid;
+  height: 100%;
+  min-height: 0;
+  padding: 1rem;
+  overflow-y: auto;
+  background:
+    radial-gradient(circle at top, rgba(102, 87, 232, 0.1), transparent 34rem),
+    var(--app-surface-soft);
+}
+
+.direct-call-page-card {
+  display: flex;
+  width: min(46rem, 100%);
+  min-height: min(42rem, 100%);
+  margin: auto;
+  flex-direction: column;
+  gap: 1.25rem;
+  padding: clamp(1rem, 3vw, 2rem);
+  background: rgba(255, 255, 255, 0.98);
+  border: 1px solid var(--app-border);
+  border-radius: 1.25rem;
+  box-shadow: 0 1rem 3rem rgba(15, 23, 42, 0.08);
+}
+
+.direct-call-page-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.direct-call-page-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  color: var(--app-ink);
+  text-decoration: none;
+  font-weight: 700;
+}
+
+.direct-call-page-back:hover,
+.direct-call-page-back:focus-visible {
+  color: var(--app-primary);
+}
+
+.direct-call-page-hero {
+  display: grid;
+  justify-items: center;
+  gap: 0.8rem;
+  padding: clamp(0.6rem, 3vw, 1.6rem) 0;
+  text-align: center;
+}
+
+.direct-call-page-avatar {
+  display: grid;
+  width: 7rem;
+  height: 7rem;
+  place-items: center;
+  border: 4px solid transparent;
+  border-radius: 50%;
+  transition:
+    border-color 140ms ease,
+    box-shadow 140ms ease;
+}
+
+.direct-call-page-avatar .user-avatar-xl {
+  width: 6.2rem;
+  height: 6.2rem;
+  font-size: 1.55rem;
+}
+
+.direct-call-page-avatar.is-speaking {
+  border-color: rgba(34, 197, 94, 0.75);
+  box-shadow: 0 0 0 0.35rem rgba(34, 197, 94, 0.12);
+}
+
+.direct-call-page-identity {
+  display: grid;
+  justify-items: center;
+}
+
+.direct-call-page-status {
+  color: var(--app-muted);
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
+.direct-call-page-status.is-connected {
+  color: #15803d;
+}
+
+.direct-call-page-status.is-connecting {
+  color: #a16207;
+}
+
+.direct-call-page-status.is-error {
+  color: #b91c1c;
+}
+
+.direct-call-page-controls {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
+.direct-call-control-button {
+  display: grid;
+  min-height: 6rem;
+  place-items: center;
+  align-content: center;
+  gap: 0.45rem;
+  padding: 0.8rem;
+  color: var(--app-ink);
+  background: #f5f6fa;
+  border: 1px solid var(--app-border);
+  border-radius: 1rem;
+  font-weight: 750;
+}
+
+.direct-call-control-button:hover:not(:disabled),
+.direct-call-control-button:focus-visible:not(:disabled) {
+  color: var(--app-primary);
+  background: var(--app-primary-soft);
+  border-color: rgba(102, 87, 232, 0.28);
+}
+
+.direct-call-control-button.is-muted {
+  color: #b45309;
+  background: #fff7ed;
+  border-color: #fed7aa;
+}
+
+.direct-call-control-button.is-danger {
+  color: #b91c1c;
+  background: #fff5f5;
+  border-color: #fecaca;
+}
+
+.direct-call-control-button:disabled {
+  opacity: 0.48;
+}
+
+.direct-call-control-icon {
+  font-size: 1.45rem;
+  line-height: 1;
+}
+
+.direct-call-control-svg {
+  width: 1.55rem;
+  height: 1.55rem;
+  fill: currentColor;
+}
+
+.direct-call-page-volume-card {
+  display: grid;
+  gap: 0.85rem;
+  padding: 1rem;
+  background: #f8f9fc;
+  border: 1px solid var(--app-border);
+  border-radius: 1rem;
+}
+
+.direct-call-page-volume-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.direct-call-page-volume-slider {
+  min-height: 2rem;
+  margin: 0;
+}
+
+.direct-call-page-participant-mute {
+  min-height: 2.75rem;
+}
+
+.direct-call-page-enable-audio,
+.direct-call-page-notice,
+.direct-call-page-error,
+.direct-call-page-retry,
+.direct-call-page-ended {
+  width: 100%;
+}
+
+.direct-call-page-retry {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.8rem 1rem;
+  background: #fff7f7;
+  border: 1px solid #fecaca;
+  border-radius: 0.85rem;
+}
+
+.direct-call-page-ended {
+  margin: auto 0;
+  padding: 2rem 1rem;
+  text-align: center;
+}
+
+.direct-call-page-loading,
+.direct-call-page-state {
+  display: grid;
+  height: 100%;
+  min-height: 12rem;
+  place-content: center;
+  gap: 1rem;
+}
+
+@media (max-width: 767.98px) {
+  .direct-call-page {
+    padding: 0;
+    background: #fff;
+  }
+
+  .direct-call-page-card {
+    width: 100%;
+    min-height: 100%;
+    margin: 0;
+    padding:
+      max(0.8rem, env(safe-area-inset-top))
+      max(0.8rem, env(safe-area-inset-right))
+      calc(0.9rem + env(safe-area-inset-bottom))
+      max(0.8rem, env(safe-area-inset-left));
+    border: 0;
+    border-radius: 0;
+    box-shadow: none;
+  }
+
+  .direct-call-page-hero {
+    padding: 0.65rem 0;
+  }
+
+  .direct-call-page-controls {
+    gap: 0.55rem;
+  }
+
+  .direct-call-control-button {
+    min-height: 5.3rem;
+    padding: 0.65rem 0.35rem;
+    font-size: 0.78rem;
+  }
+}
+
+@media (max-width: 400px) {
+  .direct-call-page-card {
+    gap: 0.9rem;
+  }
+
+  .direct-call-page-header {
+    gap: 0.55rem;
+  }
+
+  .direct-call-page-back {
+    font-size: 0.82rem;
+  }
+
+  .direct-call-page-avatar {
+    width: 5.7rem;
+    height: 5.7rem;
+  }
+
+  .direct-call-page-avatar .user-avatar-xl {
+    width: 5rem;
+    height: 5rem;
+  }
+
+  .direct-call-page-controls {
+    grid-template-columns: repeat(3, 1fr);
+  }
+
+  .direct-call-control-button {
+    min-height: 4.8rem;
+  }
+
+  .direct-call-page-volume-card {
+    padding: 0.8rem;
+  }
+}
+
+
+/* Compact sent / delivered / seen state */
+.message-receipt-state {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 0.32rem;
+  line-height: 1;
+}
+
+.message-receipt-icon {
+  display: inline-flex;
+  min-width: 1.2rem;
+  height: 1.2rem;
+  align-items: center;
+  justify-content: center;
+  gap: 0.08rem;
+  color: #a3aab8;
+  border-radius: 999px;
+}
+
+.message-receipt-icon svg {
+  width: 1rem;
+  height: 1rem;
+  flex: 0 0 auto;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.message-receipt-icon.is-delivery.is-active {
+  color: var(--app-primary);
+}
+
+.message-receipt-icon.is-seen.is-active {
+  color: #16835d;
+}
+
+.message-receipt-count {
+  min-width: 0.62rem;
+  color: currentColor;
+  font-size: 0.62rem;
+  font-weight: 750;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+  text-align: center;
 }

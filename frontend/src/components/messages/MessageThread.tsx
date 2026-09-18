@@ -83,6 +83,70 @@ function getReplySummary(
 }
 
 
+function MessageReceiptIcon({
+  kind,
+  count,
+}: {
+  kind: 'delivery' | 'seen'
+  count: number
+}) {
+  const active = count > 0
+
+  const label =
+    kind === 'delivery'
+      ? (
+          active
+            ? `Delivered to ${count} ${count === 1 ? 'recipient' : 'recipients'}`
+            : 'Sent'
+        )
+      : (
+          active
+            ? `Seen by ${count} ${count === 1 ? 'recipient' : 'recipients'}`
+            : 'Not seen yet'
+        )
+
+  return (
+    <span
+      className={`message-receipt-icon is-${kind}${active ? ' is-active' : ''}`}
+      role="img"
+      aria-label={label}
+      title={label}
+    >
+      <svg
+        viewBox="0 0 24 24"
+        aria-hidden="true"
+        focusable="false"
+      >
+        {kind === 'delivery' ? (
+          active ? (
+            <>
+              <path d="m3.5 12.5 4 4 8-8" />
+              <path d="m9.5 12.5 4 4 7-7" />
+            </>
+          ) : (
+            <path d="m5 12.5 4 4 9-9" />
+          )
+        ) : (
+          <>
+            <path d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6S2.5 12 2.5 12Z" />
+            <circle cx="12" cy="12" r="2.5" />
+          </>
+        )}
+      </svg>
+
+      {active && (
+        <span
+          className="message-receipt-count"
+          aria-hidden="true"
+        >
+          {count}
+        </span>
+      )}
+    </span>
+  )
+}
+
+
 function AttachmentButton({
   attachment,
   onOpen,
@@ -428,7 +492,6 @@ function MessageThread({
 
               const showReceiptState =
                 sentByCurrentUser
-                && message.receipts.length > 0
 
               return (
                 <div
@@ -527,10 +590,18 @@ function MessageThread({
                         )}
 
                         {showReceiptState && (
-                          <span className="message-receipt-state small text-secondary text-nowrap">
-                            Delivered {deliveredCount}
-                            {' · '}
-                            Read {readCount}
+                          <span
+                            className="message-receipt-state"
+                            aria-label="Message delivery status"
+                          >
+                            <MessageReceiptIcon
+                              kind="delivery"
+                              count={deliveredCount}
+                            />
+                            <MessageReceiptIcon
+                              kind="seen"
+                              count={readCount}
+                            />
                           </span>
                         )}
                       </div>

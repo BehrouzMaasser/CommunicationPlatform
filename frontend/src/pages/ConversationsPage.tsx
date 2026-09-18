@@ -73,7 +73,7 @@ function ConversationsPage() {
   const navigate = useNavigate()
   const activeConversationMatch =
     useMatch(
-      '/messages/dm/:conversationId',
+      '/messages/dm/:conversationId/*',
     )
 
   const { getDirectUnread } =
