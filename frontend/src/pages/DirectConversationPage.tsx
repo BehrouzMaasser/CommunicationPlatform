@@ -745,6 +745,7 @@ function DirectConversationPage() {
 
           <div className="dm-conversation-actions">
             <DirectCallButton
+              conversationId={conversation.id}
               otherUser={
                 conversation.other_user
               }

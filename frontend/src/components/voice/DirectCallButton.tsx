@@ -1,6 +1,9 @@
 import {
   useState,
 } from 'react'
+import {
+  useNavigate,
+} from 'react-router-dom'
 
 import type {
   PublicUser,
@@ -14,6 +17,7 @@ import VoiceAudioSettings from './VoiceAudioSettings'
 
 
 type DirectCallButtonProps = {
+  conversationId: number
   otherUser: PublicUser
   canCall: boolean
 }
@@ -21,25 +25,20 @@ type DirectCallButtonProps = {
 
 type PendingAction =
   | 'start'
-  | 'end'
   | null
 
 
 function DirectCallButton({
+  conversationId,
   otherUser,
   canCall,
 }: DirectCallButtonProps) {
+  const navigate = useNavigate()
+
   const {
     status,
     state,
-    mediaStatus,
-    ownsCurrentParticipation,
-    mutedUserIds,
     startDirectCall,
-    endDirectCall,
-    getParticipantVolume,
-    setParticipantVolume,
-    toggleParticipantMuted,
   } = useVoice()
 
   const [pendingAction, setPendingAction] =
@@ -102,140 +101,20 @@ function DirectCallButton({
   }
 
 
-  async function handleEndCall() {
-    if (
-      busy
-      || !sameActiveDirectCall
-      || !session
-    ) {
-      return
-    }
-
-    setPendingAction('end')
-    setLocalError(null)
-
-    try {
-      await endDirectCall(
-        session.id,
-      )
-    } catch (error) {
-      setLocalError(
-        error instanceof Error
-          ? error.message
-          : 'Could not end the voice call.',
-      )
-    } finally {
-      setPendingAction(null)
-    }
-  }
-
-
-  if (
-    sameActiveDirectCall
-    && session
-  ) {
-    const volume =
-      getParticipantVolume(
-        otherUser.id,
-      )
-
-    const mediaControlsEnabled =
-      ownsCurrentParticipation
-      && mediaStatus === 'connected'
-
-    const otherUserMuted =
-      mutedUserIds.includes(
-        otherUser.id,
-      )
-
+  if (sameActiveDirectCall) {
     return (
-      <div className="direct-call-active-controls">
-        <span
-          className={`voice-remote-mute-indicator${otherUserMuted ? '' : ' invisible'}`}
-          aria-hidden={!otherUserMuted}
-          title={
-            `@${otherUser.username} muted their microphone`
-          }
-        >
-          Mic muted
-        </span>
-
-        <label
-          className="direct-call-volume-control"
-          title={`Volume for @${otherUser.username}`}
-        >
-          <span className="visually-hidden">
-            Volume for @{otherUser.username}
-          </span>
-          <input
-            className="form-range m-0"
-            type="range"
-            min="0"
-            max="100"
-            step="5"
-            value={
-              Math.round(
-                volume * 100,
-              )
-            }
-            disabled={
-              !mediaControlsEnabled
-            }
-            aria-label={
-              `Volume for @${otherUser.username}`
-            }
-            onChange={(event) => {
-              setParticipantVolume(
-                otherUser.id,
-                Number(
-                  event.target.value,
-                ) / 100,
-              )
-            }}
-          />
-        </label>
-
-        <button
-          className="btn btn-sm btn-outline-secondary text-nowrap"
-          type="button"
-          disabled={
-            !mediaControlsEnabled
-          }
-          onClick={() => {
-            toggleParticipantMuted(
-              otherUser.id,
-            )
-          }}
-        >
-          {volume === 0
-            ? 'Unmute'
-            : 'Mute'}
-        </button>
-
-        <VoiceAudioSettings />
-
-        <button
-          className="btn btn-sm btn-outline-danger text-nowrap"
-          type="button"
-          disabled={busy}
-          onClick={() => {
-            void handleEndCall()
-          }}
-        >
-          {pendingAction === 'end'
-            ? 'Ending…'
-            : 'End call'}
-        </button>
-
-        {localError && (
-          <span
-            className="small text-danger"
-            title={localError}
-          >
-            Call action failed
-          </span>
-        )}
-      </div>
+      <button
+        className="btn btn-sm btn-outline-primary text-nowrap"
+        type="button"
+        title={`Open active call with @${otherUser.username}`}
+        onClick={() => {
+          navigate(
+            `/messages/dm/${conversationId}/call`,
+          )
+        }}
+      >
+        Open call
+      </button>
     )
   }
 

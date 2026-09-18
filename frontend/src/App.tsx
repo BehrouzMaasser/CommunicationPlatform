@@ -6,6 +6,7 @@ import {
 import AppLayout from './components/AppLayout'
 import AccountPage from './pages/AccountPage'
 import ConversationsPage from './pages/ConversationsPage'
+import DirectCallPage from './pages/DirectCallPage'
 import DirectConversationPage from './pages/DirectConversationPage'
 import DirectMessagesIndexPage from './pages/DirectMessagesIndexPage'
 import FriendsPage from './pages/FriendsPage'
@@ -50,6 +51,10 @@ function App() {
           <Route
             path="dm/:conversationId"
             element={<DirectConversationPage />}
+          />
+          <Route
+            path="dm/:conversationId/call"
+            element={<DirectCallPage />}
           />
         </Route>
 

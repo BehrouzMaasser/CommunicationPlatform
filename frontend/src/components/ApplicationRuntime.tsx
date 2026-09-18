@@ -15,8 +15,6 @@ import {
   VoiceProvider,
 } from '../voice/VoiceContext'
 
-import GlobalVoiceControls from './voice/GlobalVoiceControls'
-
 
 type ApplicationRuntimeProps = {
   children: ReactNode
@@ -52,7 +50,6 @@ function ApplicationRuntime({
           currentUserId={currentUser?.id}
         >
           {children}
-          <GlobalVoiceControls />
         </ActivityProvider>
       </VoiceProvider>
     </RealtimeProvider>

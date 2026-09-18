@@ -34,6 +34,9 @@ import type {
 
 
 type PendingAction =
+  | 'accept'
+  | 'reject'
+  | 'cancel'
   | 'audio'
   | 'microphone'
   | 'navigate'
@@ -107,6 +110,7 @@ function VoiceDockIcon({
     | 'microphone-muted'
     | 'speaker'
     | 'speaker-muted'
+    | 'phone'
 }) {
   const paths = {
     microphone:
@@ -117,6 +121,8 @@ function VoiceDockIcon({
       'M4 9h4l5-4v14l-5-4H4V9Zm11.5.25a1 1 0 0 1 1.41.08 4 4 0 0 1 0 5.34 1 1 0 1 1-1.49-1.34 2 2 0 0 0 0-2.66 1 1 0 0 1 .08-1.42Zm2.92-2.68a1 1 0 0 1 1.41.08 8 8 0 0 1 0 10.7 1 1 0 1 1-1.49-1.34 6 6 0 0 0 0-8.02 1 1 0 0 1 .08-1.42Z',
     'speaker-muted':
       'M4 9h4l5-4v14l-5-4H4V9Zm12.3.3 1.7 1.7 1.7-1.7 1.4 1.4-1.7 1.7 1.7 1.7-1.4 1.4-1.7-1.7-1.7 1.7-1.4-1.4 1.7-1.7-1.7-1.7 1.4-1.4Z',
+    phone:
+      'M7.3 3.4c.42-.42 1.08-.5 1.6-.2l2.1 1.35c.5.32.7.95.47 1.5l-1.02 2.36a13.7 13.7 0 0 0 5.15 5.15l2.36-1.02c.55-.23 1.18-.03 1.5.47l1.35 2.1c.32.52.23 1.18-.2 1.6l-1.7 1.7c-.82.82-2.02 1.13-3.14.83A18.2 18.2 0 0 1 4.77 8.23c-.3-1.12.01-2.32.83-3.14l1.7-1.7Z',
   }
 
   return (
@@ -144,6 +150,9 @@ function GlobalVoiceDock() {
     microphoneEnabled,
     audioOutputMuted,
     speakingUserIds,
+    acceptDirectCall,
+    rejectDirectCall,
+    cancelDirectCall,
     setMicrophoneEnabled,
     setAudioOutputMuted,
     startAudioPlayback,
@@ -155,6 +164,12 @@ function GlobalVoiceDock() {
 
   const [pendingAction, setPendingAction] =
     useState<PendingAction>(null)
+
+  const [actionError, setActionError] =
+    useState<{
+      sessionId: string
+      message: string
+    } | null>(null)
 
   const [dragPosition, setDragPosition] =
     useState({
@@ -174,24 +189,49 @@ function GlobalVoiceDock() {
 
   const session = state.session
 
+  const actionErrorMessage =
+    actionError
+    && actionError.sessionId === session?.id
+      ? actionError.message
+      : null
+
   const activeRoomId =
     session?.kind === 'ROOM'
     && session.status === 'ACTIVE'
       ? session.voice_room_id
       : null
 
-  const directCallUser =
-    session?.status === 'ACTIVE'
+  const directCallSession =
+    session !== null
+    && session.kind === 'DIRECT'
     && session.group_id === null
     && session.caller !== null
     && session.recipient !== null
     && currentUserId !== null
+    && (
+      session.status === 'RINGING'
+      || session.status === 'ACTIVE'
+    )
+      ? session
+      : null
+
+  const directCallUser =
+    directCallSession !== null
       ? (
-          session.caller.id === currentUserId
-            ? session.recipient
-            : session.caller
+          directCallSession.caller?.id === currentUserId
+            ? directCallSession.recipient
+            : directCallSession.caller
         )
       : null
+
+  const directCallRinging =
+    directCallSession?.status === 'RINGING'
+
+  const currentUserIsCaller =
+    directCallSession?.caller?.id === currentUserId
+
+  const currentUserIsRecipient =
+    directCallSession?.recipient?.id === currentUserId
 
   const visible =
     activeRoomId !== null
@@ -208,18 +248,29 @@ function GlobalVoiceDock() {
       ? dragPosition
       : { x: 0, y: 0 }
 
-  const label =
+  const identityLabel =
     activeRoomId !== null
       ? activeRoom?.name ?? 'Voice Room'
       : directCallUser !== null
         ? `@${directCallUser.username}`
         : 'Voice'
 
+  const label =
+    directCallRinging
+    && directCallUser !== null
+      ? (
+          currentUserIsCaller
+            ? `Calling @${directCallUser.username}`
+            : `@${directCallUser.username} calling`
+        )
+      : identityLabel
+
   const initials =
-    getInitials(label)
+    getInitials(identityLabel)
 
   const speaking =
-    visible
+    !directCallRinging
+    && visible
     && state.participants.some(
       (participation) =>
         speakingUserIds.includes(
@@ -232,22 +283,29 @@ function GlobalVoiceDock() {
     )
 
   const mediaControlsEnabled =
-    ownsCurrentParticipation
+    !directCallRinging
+    && ownsCurrentParticipation
     && (
       mediaStatus === 'connected'
       || mediaStatus === 'error'
     )
 
   const connectionStatus =
-    ownsCurrentParticipation
-      ? mediaStatus
-      : 'disconnected'
+    directCallRinging
+      ? 'ringing'
+      : ownsCurrentParticipation
+        ? mediaStatus
+        : 'disconnected'
 
   const connectionLabel = {
     connected: 'Voice connection established',
     connecting: 'Voice connection is connecting',
     disconnected: 'Voice connection is disconnected',
     error: 'Voice connection has an error',
+    ringing:
+      currentUserIsCaller
+        ? 'Calling'
+        : 'Incoming call',
   }[connectionStatus]
 
   const dockStyle = {
@@ -348,6 +406,7 @@ function GlobalVoiceDock() {
     if (
       pendingAction === 'navigate'
       || !visible
+      || directCallRinging
     ) {
       return
     }
@@ -383,10 +442,52 @@ function GlobalVoiceDock() {
         )
 
       navigate(
-        `/messages/dm/${conversation.id}`,
+        `/messages/dm/${conversation.id}/call`,
       )
     } catch {
       navigate('/messages')
+    } finally {
+      setPendingAction(null)
+    }
+  }
+
+
+  async function handleRingingAction(
+    action: 'accept' | 'reject' | 'cancel',
+  ) {
+    if (
+      pendingAction !== null
+      || !directCallRinging
+      || !directCallSession
+    ) {
+      return
+    }
+
+    setPendingAction(action)
+    setActionError(null)
+
+    try {
+      if (action === 'accept') {
+        await acceptDirectCall(
+          directCallSession.id,
+        )
+      } else if (action === 'reject') {
+        await rejectDirectCall(
+          directCallSession.id,
+        )
+      } else {
+        await cancelDirectCall(
+          directCallSession.id,
+        )
+      }
+    } catch (error) {
+      setActionError({
+        sessionId: directCallSession.id,
+        message:
+          error instanceof Error
+            ? error.message
+            : 'The call action failed.',
+      })
     } finally {
       setPendingAction(null)
     }
@@ -639,17 +740,28 @@ function GlobalVoiceDock() {
       : 'Unmute microphone'
 
 
+  const destinationTitle =
+    directCallRinging
+      ? (
+          currentUserIsCaller
+            ? `Calling @${directCallUser?.username ?? 'user'}`
+            : `Incoming call from @${directCallUser?.username ?? 'user'}`
+        )
+      : 'Open active voice. On mobile, drag to move.'
+
+
   return (
     <div
       ref={dockRef}
-      className={`global-voice-dock connection-${connectionStatus}${speaking ? ' is-speaking' : ''}${mediaStatus === 'error' ? ' has-media-error' : ''}`}
+      className={`global-voice-dock connection-${connectionStatus}${directCallRinging ? ' is-ringing' : ''}${currentUserIsRecipient && directCallRinging ? ' is-incoming-call' : ''}${speaking ? ' is-speaking' : ''}${!directCallRinging && mediaStatus === 'error' ? ' has-media-error' : ''}${actionErrorMessage ? ' has-action-error' : ''}`}
       style={dockStyle}
-      aria-label={`Active voice: ${label}. ${connectionLabel}.`}
+      aria-label={`${directCallRinging ? 'Voice call' : 'Active voice'}: ${label}. ${connectionLabel}.`}
     >
       <button
         className="voice-dock-destination"
         type="button"
-        title="Open active voice. On mobile, drag to move."
+        title={destinationTitle}
+        aria-disabled={directCallRinging}
         onPointerDown={handleDragStart}
         onPointerMove={handleDragMove}
         onPointerUp={finishDrag}
@@ -682,53 +794,113 @@ function GlobalVoiceDock() {
       </button>
 
       <div className="voice-dock-controls">
-        <button
-          className={`voice-dock-control${audioOutputMuted ? ' is-muted' : ''}${audioPlaybackRequired ? ' needs-attention' : ''}`}
-          type="button"
-          title={audioTitle}
-          aria-label={audioTitle}
-          disabled={
-            !ownsCurrentParticipation
-            || (
-              !mediaControlsEnabled
-              && !audioPlaybackRequired
-            )
-          }
-          onClick={() => {
-            void handleAudioControl()
-          }}
-        >
-          <VoiceDockIcon
-            name={
-              audioOutputMuted
-                ? 'speaker-muted'
-                : 'speaker'
-            }
-          />
-        </button>
+        {directCallRinging ? (
+          <>
+            {currentUserIsRecipient && (
+              <button
+                className="voice-dock-control is-answer"
+                type="button"
+                title="Answer call"
+                aria-label={pendingAction === 'accept' ? 'Answering call' : 'Answer call'}
+                disabled={pendingAction !== null}
+                onClick={() => {
+                  void handleRingingAction('accept')
+                }}
+              >
+                <VoiceDockIcon name="phone" />
+              </button>
+            )}
 
-        <button
-          className={`voice-dock-control${microphoneEnabled ? '' : ' is-muted'}`}
-          type="button"
-          title={microphoneTitle}
-          aria-label={microphoneTitle}
-          disabled={
-            !ownsCurrentParticipation
-            || mediaStatus !== 'connected'
-          }
-          onClick={() => {
-            void handleMicrophoneControl()
-          }}
-        >
-          <VoiceDockIcon
-            name={
-              microphoneEnabled
-                ? 'microphone'
-                : 'microphone-muted'
-            }
-          />
-        </button>
+            {currentUserIsRecipient && (
+              <button
+                className="voice-dock-control is-reject"
+                type="button"
+                title="Reject call"
+                aria-label={pendingAction === 'reject' ? 'Rejecting call' : 'Reject call'}
+                disabled={pendingAction !== null}
+                onClick={() => {
+                  void handleRingingAction('reject')
+                }}
+              >
+                <VoiceDockIcon name="phone" />
+              </button>
+            )}
+
+            {currentUserIsCaller && (
+              <button
+                className="voice-dock-control is-reject"
+                type="button"
+                title="Cancel call"
+                aria-label={pendingAction === 'cancel' ? 'Cancelling call' : 'Cancel call'}
+                disabled={pendingAction !== null}
+                onClick={() => {
+                  void handleRingingAction('cancel')
+                }}
+              >
+                <VoiceDockIcon name="phone" />
+              </button>
+            )}
+          </>
+        ) : (
+          <>
+            <button
+              className={`voice-dock-control${audioOutputMuted ? ' is-muted' : ''}${audioPlaybackRequired ? ' needs-attention' : ''}`}
+              type="button"
+              title={audioTitle}
+              aria-label={audioTitle}
+              disabled={
+                !ownsCurrentParticipation
+                || (
+                  !mediaControlsEnabled
+                  && !audioPlaybackRequired
+                )
+              }
+              onClick={() => {
+                void handleAudioControl()
+              }}
+            >
+              <VoiceDockIcon
+                name={
+                  audioOutputMuted
+                    ? 'speaker-muted'
+                    : 'speaker'
+                }
+              />
+            </button>
+
+            <button
+              className={`voice-dock-control${microphoneEnabled ? '' : ' is-muted'}`}
+              type="button"
+              title={microphoneTitle}
+              aria-label={microphoneTitle}
+              disabled={
+                !ownsCurrentParticipation
+                || mediaStatus !== 'connected'
+              }
+              onClick={() => {
+                void handleMicrophoneControl()
+              }}
+            >
+              <VoiceDockIcon
+                name={
+                  microphoneEnabled
+                    ? 'microphone'
+                    : 'microphone-muted'
+                }
+              />
+            </button>
+          </>
+        )}
       </div>
+
+      {actionErrorMessage && (
+        <span
+          className="visually-hidden"
+          role="alert"
+        >
+          {actionErrorMessage}
+        </span>
+      )}
     </div>
   )
 }

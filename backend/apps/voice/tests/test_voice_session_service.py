@@ -332,6 +332,33 @@ class VoiceSessionServiceTests(TestCase):
         self.assertEqual(session.status, VoiceSession.Status.ENDED)
         self.assertEqual(session.end_reason, VoiceSession.EndReason.HANGUP)
 
+    def test_direct_hangup_is_idempotent_for_other_participant(self):
+        self._make_friends(self.alice, self.bob)
+        session = VoiceSessionService.start_direct_call(
+            current_user=self.alice,
+            target_user_id=self.bob.pk,
+            client_instance_id=self.alice_client,
+        )
+        VoiceSessionService.accept_direct_call(
+            current_user=self.bob,
+            session_id=session.pk,
+            client_instance_id=self.bob_client,
+        )
+
+        first_result = VoiceSessionService.end_direct_call(
+            current_user=self.alice,
+            session_id=session.pk,
+        )
+        second_result = VoiceSessionService.end_direct_call(
+            current_user=self.bob,
+            session_id=session.pk,
+        )
+
+        self.assertEqual(first_result.pk, session.pk)
+        self.assertEqual(second_result.pk, session.pk)
+        self.assertEqual(second_result.status, VoiceSession.Status.ENDED)
+        self.assertEqual(second_result.end_reason, VoiceSession.EndReason.HANGUP)
+
     def test_cannot_end_direct_call_while_ringing(self):
         self._make_friends(self.alice, self.bob)
         session = VoiceSessionService.start_direct_call(

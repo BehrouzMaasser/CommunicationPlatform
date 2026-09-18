@@ -568,6 +568,12 @@ class VoiceSessionService:
             }:
                 raise VoiceCallPermissionDenied
 
+            if (
+                session.status == VoiceSession.Status.ENDED
+                and session.end_reason == VoiceSession.EndReason.HANGUP
+            ):
+                return session
+
             if session.status != VoiceSession.Status.ACTIVE:
                 raise VoiceInvalidState
 
