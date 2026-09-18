@@ -66,6 +66,12 @@ export type VoiceContextValue = {
   endDirectCall:
     (sessionId: string) => Promise<void>
 
+  takeOverCurrentVoice:
+    () => Promise<void>
+
+  releaseCurrentVoice:
+    () => Promise<void>
+
   joinVoiceRoom:
     (roomId: string) => Promise<void>
 

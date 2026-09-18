@@ -44,6 +44,8 @@ class RealtimeEventType(str, Enum):
     VOICE_DIRECT_CALL_MISSED = "voice.direct_call.missed"
     VOICE_DIRECT_CALL_ENDED = "voice.direct_call.ended"
 
+    VOICE_PARTICIPATION_TAKEN_OVER = "voice.participation.taken_over"
+
     VOICE_GROUP_PARTICIPANT_JOINED = "voice.group.participant_joined"
     VOICE_GROUP_PARTICIPANT_LEFT = "voice.group.participant_left"
     VOICE_GROUP_PARTICIPANT_REVOKED = "voice.group.participant_revoked"

@@ -5,6 +5,7 @@ export const VOICE_REALTIME_EVENT_TYPES = [
   'voice.direct_call.cancelled',
   'voice.direct_call.missed',
   'voice.direct_call.ended',
+  'voice.participation.taken_over',
   'voice.group.participant_joined',
   'voice.group.participant_left',
   'voice.group.participant_revoked',

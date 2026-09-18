@@ -242,6 +242,12 @@ VOICE_DIRECT_CALL_RING_TIMEOUT_SECONDS = int(
         "45",
     )
 )
+VOICE_MEDIA_RECONCILE_GRACE_SECONDS = int(
+    os.getenv(
+        "VOICE_MEDIA_RECONCILE_GRACE_SECONDS",
+        "10",
+    )
+)
 
 
 # Email

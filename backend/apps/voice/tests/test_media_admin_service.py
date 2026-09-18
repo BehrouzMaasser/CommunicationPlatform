@@ -21,6 +21,7 @@ class LiveKitMediaAdminServiceTests(SimpleTestCase):
         client.room = Mock()
         client.room.remove_participant = AsyncMock()
         client.room.delete_room = AsyncMock()
+        client.room.list_participants = AsyncMock()
         client.room.list_rooms = AsyncMock()
         client.aclose = AsyncMock()
         return client
@@ -72,6 +73,48 @@ class LiveKitMediaAdminServiceTests(SimpleTestCase):
         client.aclose.assert_awaited_once_with()
 
     @patch("apps.voice.services.media_admin.api.LiveKitAPI")
+    def test_list_participant_identities_returns_current_media_users(
+        self, client_class
+    ):
+        client = self._client_mock()
+        client.room.list_participants.return_value = Mock(
+            participants=[
+                Mock(identity="voice_participant_1"),
+                Mock(identity="voice_participant_2"),
+            ]
+        )
+        client_class.return_value = client
+
+        result = LiveKitMediaAdminService.list_participant_identities(
+            room_name="voice_room_3"
+        )
+
+        self.assertEqual(
+            result,
+            {"voice_participant_1", "voice_participant_2"},
+        )
+        request = client.room.list_participants.await_args.args[0]
+        self.assertEqual(request.room, "voice_room_3")
+        client.aclose.assert_awaited_once_with()
+
+    @patch("apps.voice.services.media_admin.api.LiveKitAPI")
+    def test_missing_room_has_no_connected_participants(self, client_class):
+        client = self._client_mock()
+        client.room.list_participants.side_effect = api.ServerError(
+            api.ServerErrorCode.NOT_FOUND,
+            "requested room does not exist",
+            status=404,
+        )
+        client_class.return_value = client
+
+        result = LiveKitMediaAdminService.list_participant_identities(
+            room_name="already-gone"
+        )
+
+        self.assertEqual(result, set())
+        client.aclose.assert_awaited_once_with()
+
+    @patch("apps.voice.services.media_admin.api.LiveKitAPI")
     def test_list_rooms_is_authenticated_probe(self, client_class):
         client = self._client_mock()
         expected = Mock(rooms=[])
@@ -104,3 +147,8 @@ class LiveKitMediaAdminServiceTests(SimpleTestCase):
 
         with self.assertRaises(ValueError):
             LiveKitMediaAdminService.delete_room(room_name="")
+
+        with self.assertRaises(ValueError):
+            LiveKitMediaAdminService.list_participant_identities(
+                room_name=""
+            )

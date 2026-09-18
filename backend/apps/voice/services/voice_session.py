@@ -1,3 +1,4 @@
+import logging
 import uuid
 from datetime import timedelta
 
@@ -22,6 +23,7 @@ from apps.voice.exceptions import (
     VoiceParticipationNotActive,
     VoiceSessionNotFound,
     VoiceTargetUserNotFound,
+    VoiceUnavailable,
     VoiceUserBusy,
 )
 from apps.voice.models import (
@@ -30,11 +32,13 @@ from apps.voice.models import (
     VoiceSession,
 )
 from apps.voice.realtime import VoiceRealtimePublisher
+from apps.voice.services.media_admin import LiveKitMediaAdminService
 from apps.voice.services.media_cleanup import VoiceMediaCleanup
 from apps.voice.services.voice_room import VoiceRoomService
 
 
 User = get_user_model()
+logger = logging.getLogger(__name__)
 
 
 class VoiceSessionService:
@@ -225,6 +229,243 @@ class VoiceSessionService:
             and session.ring_expires_at is not None
             and session.ring_expires_at <= timezone.now()
         )
+
+    @staticmethod
+    def _media_reconcile_cutoff():
+        grace_seconds = int(
+            getattr(
+                settings,
+                "VOICE_MEDIA_RECONCILE_GRACE_SECONDS",
+                10,
+            )
+        )
+        return timezone.now() - timedelta(
+            seconds=max(grace_seconds, 0)
+        )
+
+    @staticmethod
+    def _media_participant_identities(
+        *,
+        session: VoiceSession,
+    ) -> set[str] | None:
+        try:
+            return LiveKitMediaAdminService.list_participant_identities(
+                room_name=session.media_room_name,
+            )
+        except VoiceUnavailable:
+            return None
+        except Exception:
+            # Application state must never be destroyed merely because the
+            # media-admin probe itself is temporarily unavailable.
+            logger.warning(
+                "Could not reconcile voice session %s with LiveKit.",
+                session.pk,
+                exc_info=True,
+            )
+            return None
+
+    @classmethod
+    def _reconcile_active_session_media(
+        cls,
+        *,
+        session_id,
+        connected_identities: set[str],
+    ) -> None:
+        """Close durable participations that no longer exist in LiveKit.
+
+        A short grace period protects the normal join sequence where the
+        database participation is committed just before the browser connects
+        to LiveKit. Only old, claimed participations are eligible for cleanup.
+        """
+
+        cutoff = cls._media_reconcile_cutoff()
+
+        with transaction.atomic():
+            session = (
+                VoiceSession.objects
+                .select_for_update()
+                .filter(
+                    pk=session_id,
+                    status=VoiceSession.Status.ACTIVE,
+                )
+                .first()
+            )
+
+            if session is None:
+                return
+
+            participations = list(
+                VoiceParticipation.objects
+                .select_for_update()
+                .filter(
+                    session=session,
+                    left_at__isnull=True,
+                )
+                .order_by("created_at", "pk")
+            )
+
+            stale = [
+                participation
+                for participation in participations
+                if (
+                    participation.claimed_at is not None
+                    and participation.claimed_at <= cutoff
+                    and participation.media_participant_identity
+                    not in connected_identities
+                )
+            ]
+
+            if not stale:
+                return
+
+            if session.kind == VoiceSession.Kind.DIRECT:
+                cls._finish_session_locked(
+                    session=session,
+                    end_reason=VoiceSession.EndReason.HANGUP,
+                )
+                VoiceMediaCleanup.delete_room_after_commit(
+                    room_name=session.media_room_name,
+                )
+                VoiceRealtimePublisher.direct_call_ended_after_commit(
+                    session_id=session.pk,
+                    caller_id=session.caller_id,
+                    recipient_id=session.recipient_id,
+                    end_reason=session.end_reason,
+                    ended_at=session.ended_at,
+                )
+                return
+
+            now = timezone.now()
+            for participation in stale:
+                participation.left_at = now
+                participation.save(update_fields=["left_at"])
+
+            session_ended = not VoiceParticipation.objects.filter(
+                session=session,
+                left_at__isnull=True,
+            ).exists()
+
+            if session_ended:
+                cls._finish_session_locked(
+                    session=session,
+                    end_reason=VoiceSession.EndReason.EMPTY,
+                )
+                VoiceMediaCleanup.delete_room_after_commit(
+                    room_name=session.media_room_name,
+                )
+
+            if session.kind == VoiceSession.Kind.ROOM:
+                audience_user_ids = cls._voice_room_member_user_ids(
+                    room_id=session.voice_room_id,
+                )
+                for participation in stale:
+                    VoiceRealtimePublisher.room_participant_left_after_commit(
+                        session_id=session.pk,
+                        participation_id=participation.pk,
+                        room_id=session.voice_room_id,
+                        user_id=participation.user_id,
+                        audience_user_ids=audience_user_ids,
+                        session_ended=session_ended,
+                    )
+            elif session.kind == VoiceSession.Kind.GROUP:
+                audience_user_ids = cls._group_member_user_ids(
+                    group_id=session.group_id,
+                )
+                for participation in stale:
+                    VoiceRealtimePublisher.group_participant_left_after_commit(
+                        session_id=session.pk,
+                        participation_id=participation.pk,
+                        group_id=session.group_id,
+                        user_id=participation.user_id,
+                        audience_user_ids=audience_user_ids,
+                        session_ended=session_ended,
+                    )
+
+    @classmethod
+    def _session_has_expired_media_lease(
+        cls,
+        *,
+        session_id,
+    ) -> bool:
+        return VoiceParticipation.objects.filter(
+            session_id=session_id,
+            left_at__isnull=True,
+            claimed_at__isnull=False,
+            claimed_at__lte=cls._media_reconcile_cutoff(),
+        ).exists()
+
+    @classmethod
+    def reconcile_voice_room_media(
+        cls,
+        *,
+        room_id,
+    ) -> None:
+        session = (
+            VoiceSession.objects
+            .filter(
+                kind=VoiceSession.Kind.ROOM,
+                voice_room_id=room_id,
+                status=VoiceSession.Status.ACTIVE,
+            )
+            .first()
+        )
+
+        if session is None:
+            return
+
+        if not cls._session_has_expired_media_lease(
+            session_id=session.pk,
+        ):
+            return
+
+        identities = cls._media_participant_identities(
+            session=session,
+        )
+        if identities is None:
+            return
+
+        cls._reconcile_active_session_media(
+            session_id=session.pk,
+            connected_identities=identities,
+        )
+
+    @classmethod
+    def reconcile_voice_rooms_for_user(
+        cls,
+        *,
+        current_user: User,
+    ) -> None:
+        session_ids = list(
+            VoiceSession.objects
+            .filter(
+                kind=VoiceSession.Kind.ROOM,
+                status=VoiceSession.Status.ACTIVE,
+                voice_room__memberships__user=current_user,
+                participations__left_at__isnull=True,
+                participations__claimed_at__isnull=False,
+                participations__claimed_at__lte=(
+                    cls._media_reconcile_cutoff()
+                ),
+            )
+            .values_list("pk", flat=True)
+            .distinct()
+        )
+
+        for session_id in session_ids:
+            session = VoiceSession.objects.filter(pk=session_id).first()
+            if session is None:
+                continue
+
+            identities = cls._media_participant_identities(
+                session=session,
+            )
+            if identities is None:
+                continue
+
+            cls._reconcile_active_session_media(
+                session_id=session_id,
+                connected_identities=identities,
+            )
 
     @classmethod
     def start_direct_call(
@@ -604,7 +845,7 @@ class VoiceSessionService:
         *,
         current_user: User,
     ) -> VoiceParticipation | None:
-        """Expire stale rings and return the account's current voice state."""
+        """Expire stale rings/media and return the account's voice state."""
 
         with transaction.atomic():
             cls._lock_users(
@@ -614,7 +855,7 @@ class VoiceSessionService:
                 user_ids=[current_user.pk],
             )
 
-            return (
+            participation = (
                 VoiceParticipation.objects
                 .select_related(
                     "session",
@@ -630,6 +871,280 @@ class VoiceSessionService:
                 )
                 .first()
             )
+
+        if (
+            participation is not None
+            and participation.session.status == VoiceSession.Status.ACTIVE
+            and participation.claimed_at is not None
+            and participation.claimed_at <= cls._media_reconcile_cutoff()
+        ):
+            identities = cls._media_participant_identities(
+                session=participation.session,
+            )
+            if identities is not None:
+                cls._reconcile_active_session_media(
+                    session_id=participation.session_id,
+                    connected_identities=identities,
+                )
+
+        return (
+            VoiceParticipation.objects
+            .select_related(
+                "session",
+                "session__caller",
+                "session__recipient",
+                "session__group",
+                "session__voice_room",
+                "user",
+            )
+            .filter(
+                user=current_user,
+                left_at__isnull=True,
+            )
+            .first()
+        )
+
+    @classmethod
+    def heartbeat_current_participation(
+        cls,
+        *,
+        current_user: User,
+        client_instance_id,
+    ) -> VoiceParticipation:
+        """Renew the owning browser's active voice participation lease.
+
+        ``claimed_at`` doubles as the ownership lease timestamp after the
+        initial claim. Keeping the lease fresh lets media reconciliation
+        distinguish an abandoned browser from a short LiveKit reconnect.
+        """
+
+        client_instance_id = cls.normalize_client_instance_id(
+            client_instance_id
+        )
+
+        with transaction.atomic():
+            cls._lock_users(
+                user_ids=[current_user.pk],
+            )
+
+            participation = (
+                VoiceParticipation.objects
+                .select_for_update()
+                .select_related("session")
+                .filter(
+                    user=current_user,
+                    left_at__isnull=True,
+                )
+                .first()
+            )
+
+            if participation is None:
+                raise VoiceParticipationNotActive
+
+            if participation.session.status != VoiceSession.Status.ACTIVE:
+                raise VoiceInvalidState
+
+            cls._require_client_owner(
+                participation=participation,
+                client_instance_id=client_instance_id,
+            )
+
+            participation.claimed_at = timezone.now()
+            participation.save(update_fields=["claimed_at"])
+            session = participation.session
+
+        # A healthy participant's heartbeat also gives us a cheap trigger to
+        # retire peers whose leases have expired. We only contact LiveKit if
+        # the database actually contains an expired lease, avoiding an admin
+        # API request on every heartbeat during normal operation.
+        if cls._session_has_expired_media_lease(
+            session_id=session.pk,
+        ):
+            identities = cls._media_participant_identities(
+                session=session,
+            )
+            if identities is not None:
+                cls._reconcile_active_session_media(
+                    session_id=session.pk,
+                    connected_identities=identities,
+                )
+
+        return participation
+
+    @classmethod
+    def take_over_current_participation(
+        cls,
+        *,
+        current_user: User,
+        client_instance_id,
+    ) -> VoiceParticipation:
+        """Move the account's active voice participation to this client."""
+
+        client_instance_id = cls.normalize_client_instance_id(
+            client_instance_id
+        )
+
+        with transaction.atomic():
+            cls._lock_users(
+                user_ids=[current_user.pk],
+            )
+
+            participation = (
+                VoiceParticipation.objects
+                .select_for_update()
+                .select_related("session")
+                .filter(
+                    user=current_user,
+                    left_at__isnull=True,
+                )
+                .first()
+            )
+
+            if participation is None:
+                raise VoiceParticipationNotActive
+
+            if participation.session.status != VoiceSession.Status.ACTIVE:
+                raise VoiceInvalidState
+
+            if participation.client_instance_id == client_instance_id:
+                return participation
+
+            # Disconnect the previous browser instance before the response is
+            # returned. The replacement browser cannot obtain fresh media
+            # credentials until this ownership update has committed.
+            VoiceMediaCleanup.remove_participant_after_commit(
+                room_name=participation.session.media_room_name,
+                participant_identity=participation.media_participant_identity,
+            )
+
+            participation.client_instance_id = client_instance_id
+            participation.claimed_at = timezone.now()
+            participation.save(
+                update_fields=[
+                    "client_instance_id",
+                    "claimed_at",
+                ]
+            )
+
+            VoiceRealtimePublisher.participation_taken_over_after_commit(
+                participation_id=participation.pk,
+                session_id=participation.session_id,
+                user_id=current_user.pk,
+                client_instance_id=client_instance_id,
+            )
+
+            return participation
+
+    @classmethod
+    def release_current_participation(
+        cls,
+        *,
+        current_user: User,
+    ) -> None:
+        """End/leave the account's current voice state from any client."""
+
+        with transaction.atomic():
+            cls._lock_users(
+                user_ids=[current_user.pk],
+            )
+
+            participation = (
+                VoiceParticipation.objects
+                .select_for_update()
+                .select_related("session")
+                .filter(
+                    user=current_user,
+                    left_at__isnull=True,
+                )
+                .first()
+            )
+
+            if participation is None:
+                return
+
+            session = (
+                VoiceSession.objects
+                .select_for_update()
+                .get(pk=participation.session_id)
+            )
+
+            if session.kind == VoiceSession.Kind.DIRECT:
+                if session.status == VoiceSession.Status.RINGING:
+                    reason = (
+                        VoiceSession.EndReason.CANCELLED
+                        if session.caller_id == current_user.pk
+                        else VoiceSession.EndReason.REJECTED
+                    )
+                elif session.status == VoiceSession.Status.ACTIVE:
+                    reason = VoiceSession.EndReason.HANGUP
+                else:
+                    return
+
+                cls._finish_session_locked(
+                    session=session,
+                    end_reason=reason,
+                )
+                VoiceMediaCleanup.delete_room_after_commit(
+                    room_name=session.media_room_name,
+                )
+                VoiceRealtimePublisher.direct_call_ended_after_commit(
+                    session_id=session.pk,
+                    caller_id=session.caller_id,
+                    recipient_id=session.recipient_id,
+                    end_reason=session.end_reason,
+                    ended_at=session.ended_at,
+                )
+                return
+
+            if session.status != VoiceSession.Status.ACTIVE:
+                participation.left_at = timezone.now()
+                participation.save(update_fields=["left_at"])
+                return
+
+            participation.left_at = timezone.now()
+            participation.save(update_fields=["left_at"])
+
+            session_ended = not VoiceParticipation.objects.filter(
+                session=session,
+                left_at__isnull=True,
+            ).exists()
+
+            if session_ended:
+                cls._finish_session_locked(
+                    session=session,
+                    end_reason=VoiceSession.EndReason.EMPTY,
+                )
+                VoiceMediaCleanup.delete_room_after_commit(
+                    room_name=session.media_room_name,
+                )
+            else:
+                VoiceMediaCleanup.remove_participant_after_commit(
+                    room_name=session.media_room_name,
+                    participant_identity=participation.media_participant_identity,
+                )
+
+            if session.kind == VoiceSession.Kind.ROOM:
+                VoiceRealtimePublisher.room_participant_left_after_commit(
+                    session_id=session.pk,
+                    participation_id=participation.pk,
+                    room_id=session.voice_room_id,
+                    user_id=current_user.pk,
+                    audience_user_ids=cls._voice_room_member_user_ids(
+                        room_id=session.voice_room_id,
+                    ),
+                    session_ended=session_ended,
+                )
+            elif session.kind == VoiceSession.Kind.GROUP:
+                VoiceRealtimePublisher.group_participant_left_after_commit(
+                    session_id=session.pk,
+                    participation_id=participation.pk,
+                    group_id=session.group_id,
+                    user_id=current_user.pk,
+                    audience_user_ids=cls._group_member_user_ids(
+                        group_id=session.group_id,
+                    ),
+                    session_ended=session_ended,
+                )
 
     @classmethod
     def join_group_voice(
