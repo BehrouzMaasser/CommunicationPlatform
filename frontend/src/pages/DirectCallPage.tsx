@@ -182,10 +182,11 @@ function DirectCallPage() {
     return (
       <section className="direct-call-page direct-call-page-state">
         <Link
-          className="btn btn-link px-0"
+          className="btn btn-sm btn-outline-secondary"
           to="/messages"
         >
-          ← Back to direct messages
+          <span aria-hidden="true">←</span>{' '}
+          Back to direct messages
         </Link>
 
         <div className="alert alert-danger mb-0">
@@ -216,10 +217,11 @@ function DirectCallPage() {
     return (
       <section className="direct-call-page direct-call-page-state">
         <Link
-          className="btn btn-link px-0"
+          className="btn btn-sm btn-outline-secondary"
           to="/messages"
         >
-          ← Back to direct messages
+          <span aria-hidden="true">←</span>{' '}
+          Back to direct messages
         </Link>
 
         <div className="alert alert-danger mb-0">
@@ -411,7 +413,7 @@ function DirectCallPage() {
       <div className="direct-call-page-card">
         <header className="direct-call-page-header">
           <Link
-            className="direct-call-page-back"
+            className="btn btn-sm btn-outline-secondary direct-call-page-back"
             to={`/messages/dm/${conversation.id}`}
           >
             <span aria-hidden="true">←</span>

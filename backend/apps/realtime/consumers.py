@@ -371,12 +371,12 @@ class RealtimeConsumer(
             )
 
     @database_sync_to_async
-    def _friend_user_ids(
+    def _presence_user_ids(
         self,
     ) -> list[int]:
         return (
             RealtimeEphemeralSelector
-            .friend_user_ids(
+            .presence_user_ids(
                 user_id=self.user.pk,
             )
         )
@@ -422,11 +422,11 @@ class RealtimeConsumer(
         *,
         expires_at: float | None,
     ) -> None:
-        friend_ids = (
-            await self._friend_user_ids()
+        viewer_user_ids = (
+            await self._presence_user_ids()
         )
 
-        if not friend_ids:
+        if not viewer_user_ids:
             return
 
         event = build_realtime_event(
@@ -447,12 +447,12 @@ class RealtimeConsumer(
             },
         )
 
-        for friend_id in friend_ids:
+        for viewer_user_id in viewer_user_ids:
             await (
                 self.channel_layer
                 .group_send(
                     user_group_name(
-                        friend_id
+                        viewer_user_id
                     ),
                     {
                         "type":
@@ -466,15 +466,15 @@ class RealtimeConsumer(
     async def _send_presence_snapshot(
         self,
     ) -> None:
-        friend_ids = (
-            await self._friend_user_ids()
+        visible_user_ids = (
+            await self._presence_user_ids()
         )
 
-        for friend_id in friend_ids:
+        for visible_user_id in visible_user_ids:
             expires_at = (
                 await PresenceStore
                 .online_until(
-                    user_id=friend_id,
+                    user_id=visible_user_id,
                 )
             )
 
@@ -486,7 +486,7 @@ class RealtimeConsumer(
                     ),
                     payload={
                         "user_id":
-                            friend_id,
+                            visible_user_id,
                         "online":
                             expires_at
                             is not None,

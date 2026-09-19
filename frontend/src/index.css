@@ -1900,6 +1900,10 @@ a {
   padding-right: 0.3rem;
 }
 
+.global-voice-dock.is-ringing .voice-dock-controls {
+  gap: 0.58rem;
+}
+
 .voice-dock-control {
   display: inline-grid;
   width: 2rem;
@@ -3138,6 +3142,10 @@ a {
   font-weight: 700;
 }
 
+.directory-user-state.is-offline {
+  color: var(--bs-secondary-color);
+}
+
 .directory-empty {
   display: grid;
   justify-items: center;
@@ -3341,6 +3349,18 @@ a {
   color: #188557;
   font-size: 0.68rem;
   font-weight: 720;
+}
+
+.voice-participant-presence {
+  display: block;
+  margin-top: 0.05rem;
+  color: #188557;
+  font-size: 0.68rem;
+  font-weight: 720;
+}
+
+.voice-participant-presence.is-offline {
+  color: var(--bs-secondary-color);
 }
 
 @media (max-width: 991.98px) {
@@ -3786,6 +3806,19 @@ a {
   flex: 0 0 auto;
 }
 
+.voice-audio-settings-trigger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+}
+
+.voice-audio-settings-trigger-icon {
+  width: 1rem;
+  height: 1rem;
+  flex: 0 0 auto;
+}
+
 .voice-audio-settings-layer {
   position: fixed;
   inset: 0;
@@ -3894,6 +3927,73 @@ a {
   white-space: nowrap;
 }
 
+/* Group details responsive layout */
+.group-detail-page {
+  min-width: 0;
+}
+
+.group-detail-header,
+.group-detail-header > *,
+.group-detail-avatar-settings,
+.group-detail-avatar-settings > *,
+.group-detail-list-row > * {
+  min-width: 0;
+}
+
+.group-detail-header-actions {
+  flex: 0 0 auto;
+}
+
+.group-detail-avatar-settings .flex-grow-1 {
+  min-width: 0;
+}
+
+.group-detail-page .input-group > .form-control {
+  min-width: 0;
+}
+
+@media (max-width: 575.98px) {
+  .group-detail-header-actions {
+    width: 100%;
+  }
+
+  .group-detail-header-actions > .btn {
+    flex: 1 1 9rem;
+  }
+
+  .group-detail-avatar-settings {
+    flex-direction: column;
+    align-items: flex-start !important;
+  }
+
+  .group-detail-avatar-settings .flex-grow-1,
+  .group-detail-avatar-form,
+  .group-detail-avatar-form .form-control,
+  .group-detail-avatar-form .btn,
+  .group-detail-rename-form,
+  .group-detail-rename-form .btn {
+    width: 100%;
+  }
+
+  .group-detail-rename-form {
+    flex-direction: column;
+  }
+
+  .group-detail-list-row {
+    flex-direction: column;
+    align-items: stretch !important;
+  }
+
+  .group-detail-list-row > .btn {
+    width: 100%;
+  }
+
+  .group-detail-page .card-body {
+    padding: 0.9rem;
+  }
+}
+
+
 /* Dedicated active direct-call surface */
 .direct-call-page {
   display: grid;
@@ -3931,14 +4031,7 @@ a {
   display: inline-flex;
   align-items: center;
   gap: 0.45rem;
-  color: var(--app-ink);
-  text-decoration: none;
   font-weight: 700;
-}
-
-.direct-call-page-back:hover,
-.direct-call-page-back:focus-visible {
-  color: var(--app-primary);
 }
 
 .direct-call-page-hero {

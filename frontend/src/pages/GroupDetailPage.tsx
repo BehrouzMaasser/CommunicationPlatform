@@ -15,6 +15,7 @@ import {
 
 import { ApiError } from '../api/client'
 import GroupAvatar from '../components/groups/GroupAvatar'
+import Avatar from '../components/users/Avatar'
 import { useActivity } from '../activity/useActivity'
 import { getFriends } from '../api/friendships'
 import {
@@ -34,7 +35,10 @@ import {
   updateGroupAvatar,
 } from '../api/groups'
 import { getCurrentUser } from '../api/session'
-import { useRealtimeEvent } from '../realtime/useRealtime'
+import {
+  useRealtime,
+  useRealtimeEvent,
+} from '../realtime/useRealtime'
 import type {
   GroupInvitationEventPayload,
   GroupMemberEventPayload,
@@ -112,6 +116,8 @@ function GroupDetailPage() {
   const parsedGroupId = Number(groupId)
   const { getGroupUnread } =
     useActivity()
+  const { isUserOnline } =
+    useRealtime()
 
   const [group, setGroup] =
     useState<GroupConversation | null>(null)
@@ -566,6 +572,8 @@ function GroupDetailPage() {
       return
     }
 
+    const form = event.currentTarget
+
     setBusy('avatar')
     setError(null)
     setNotice(null)
@@ -577,7 +585,7 @@ function GroupDetailPage() {
       )
       setGroup(updated)
       setAvatarFile(null)
-      event.currentTarget.reset()
+      form.reset()
       setNotice('Group avatar updated.')
     } catch (requestError) {
       setError(errorText(requestError))
@@ -822,9 +830,13 @@ function GroupDetailPage() {
 
   if (error && !group) {
     return (
-      <section>
-        <Link to="/groups">
-          ← Back to groups
+      <section className="group-detail-page">
+        <Link
+          className="btn btn-sm btn-outline-secondary mb-3"
+          to="/groups"
+        >
+          <span aria-hidden="true">←</span>{' '}
+          Back to groups
         </Link>
         <div className="alert alert-danger mt-3">
           {error}
@@ -842,15 +854,16 @@ function GroupDetailPage() {
     : null
 
   return (
-    <section>
+    <section className="group-detail-page">
       <Link
-        className="btn btn-link px-0 mb-3"
+        className="btn btn-sm btn-outline-secondary mb-3"
         to="/groups"
       >
-        ← Back to groups
+        <span aria-hidden="true">←</span>{' '}
+        Back to groups
       </Link>
 
-      <div className="d-flex justify-content-between align-items-start gap-3 mb-4">
+      <div className="group-detail-header d-flex flex-column flex-md-row justify-content-between align-items-md-start gap-3 mb-4">
         <div className="d-flex align-items-center gap-3">
           <GroupAvatar
             name={group.name}
@@ -864,7 +877,7 @@ function GroupDetailPage() {
           </div>
         </div>
 
-        <div className="d-flex gap-2">
+        <div className="group-detail-header-actions d-flex flex-wrap gap-2">
           <Link
             className="btn btn-primary"
             to={`/groups/${group.id}/messages`}
@@ -930,7 +943,7 @@ function GroupDetailPage() {
               Group settings
             </h2>
 
-            <div className="d-flex align-items-center gap-3 mb-4">
+            <div className="group-detail-avatar-settings d-flex align-items-center gap-3 mb-4">
               <GroupAvatar
                 name={group.name}
                 avatarUrl={group.avatar_url}
@@ -939,7 +952,7 @@ function GroupDetailPage() {
 
               <div className="flex-grow-1">
                 <form
-                  className="d-flex flex-column flex-sm-row gap-2"
+                  className="group-detail-avatar-form d-flex flex-column flex-sm-row gap-2"
                   onSubmit={handleAvatarUpload}
                 >
                   <input
@@ -985,7 +998,7 @@ function GroupDetailPage() {
             </div>
 
             <form
-              className="d-flex gap-2"
+              className="group-detail-rename-form d-flex gap-2"
               onSubmit={handleRename}
             >
               <input
@@ -1023,38 +1036,66 @@ function GroupDetailPage() {
 
               <div className="list-group list-group-flush">
                 {members.map(
-                  (membership) => (
-                    <div
-                      className="list-group-item px-0 d-flex justify-content-between align-items-center gap-3"
-                      key={membership.user.id}
-                    >
-                      <div>
-                        <div className="fw-semibold">
-                          @{membership.user.username}
-                        </div>
-                        <div className="small text-secondary">
-                          {membership.role === 'OWNER'
-                            ? 'Owner'
-                            : 'Member'}
-                        </div>
-                      </div>
+                  (membership) => {
+                    const online =
+                      membership.user.id ===
+                        currentUser?.id
+                      || isUserOnline(
+                        membership.user.id,
+                      )
 
-                      {isOwner &&
-                        membership.role !== 'OWNER' && (
-                          <button
-                            className="btn btn-sm btn-outline-danger"
-                            disabled={busy !== null}
-                            onClick={() =>
-                              void handleRemove(
-                                membership,
-                              )
-                            }
-                          >
-                            Remove
-                          </button>
-                        )}
-                    </div>
-                  ),
+                    return (
+                      <div
+                        className="group-detail-list-row list-group-item px-0 d-flex justify-content-between align-items-center gap-3"
+                        key={membership.user.id}
+                      >
+                        <div className="directory-user-identity">
+                          <span className="directory-user-avatar-wrap">
+                            <Avatar
+                              user={membership.user}
+                              size="sm"
+                              alt=""
+                            />
+                            <span
+                              className={`directory-presence-dot${online ? ' is-online' : ''}`}
+                              title={online ? 'Online' : 'Offline'}
+                              aria-hidden="true"
+                            />
+                          </span>
+
+                          <span className="directory-user-copy">
+                            <span className="directory-user-name">
+                              @{membership.user.username}
+                            </span>
+                            <span
+                              className={`directory-user-state${online ? '' : ' is-offline'}`}
+                            >
+                              {membership.role === 'OWNER'
+                                ? 'Owner'
+                                : 'Member'}
+                              {' · '}
+                              {online ? 'Online' : 'Offline'}
+                            </span>
+                          </span>
+                        </div>
+
+                        {isOwner &&
+                          membership.role !== 'OWNER' && (
+                            <button
+                              className="btn btn-sm btn-outline-danger"
+                              disabled={busy !== null}
+                              onClick={() =>
+                                void handleRemove(
+                                  membership,
+                                )
+                              }
+                            >
+                              Remove
+                            </button>
+                          )}
+                      </div>
+                    )
+                  },
                 )}
               </div>
             </div>
@@ -1079,7 +1120,7 @@ function GroupDetailPage() {
                       {inviteCandidates.map(
                         (friend) => (
                           <div
-                            className="list-group-item px-0 d-flex justify-content-between align-items-center gap-3"
+                            className="group-detail-list-row list-group-item px-0 d-flex justify-content-between align-items-center gap-3"
                             key={friend.id}
                           >
                             <span>
