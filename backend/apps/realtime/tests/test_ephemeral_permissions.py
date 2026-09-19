@@ -12,6 +12,10 @@ from apps.realtime.ephemeral import (
     RealtimeEphemeralSelector,
 )
 from apps.realtime.presence import PresenceStore
+from apps.voice.models import (
+    VoiceRoom,
+    VoiceRoomMembership,
+)
 
 
 User = get_user_model()
@@ -48,6 +52,11 @@ class RealtimeEphemeralTests(TestCase):
         self.charlie = User.objects.create_user(
             username="charlie",
             email="charlie@example.com",
+            password="password-123",
+        )
+        self.dave = User.objects.create_user(
+            username="dave",
+            email="dave@example.com",
             password="password-123",
         )
 
@@ -90,6 +99,23 @@ class RealtimeEphemeralTests(TestCase):
             role=(
                 GroupMembership.Role.MEMBER
             ),
+        )
+
+        self.voice_room = (
+            VoiceRoom.objects.create(
+                name="Voice Study",
+                owner=self.alice,
+            )
+        )
+
+        VoiceRoomMembership.objects.create(
+            room=self.voice_room,
+            user=self.alice,
+        )
+
+        VoiceRoomMembership.objects.create(
+            room=self.voice_room,
+            user=self.charlie,
         )
 
     def test_dm_typing_requires_active_friendship(self):
@@ -166,6 +192,31 @@ class RealtimeEphemeralTests(TestCase):
                 )
             ),
             {self.alice.pk},
+        )
+
+    def test_presence_audience_includes_shared_members(self):
+        self.friendship.delete()
+
+        self.assertEqual(
+            set(
+                RealtimeEphemeralSelector
+                .presence_user_ids(
+                    user_id=self.alice.pk,
+                )
+            ),
+            {
+                self.bob.pk,
+                self.charlie.pk,
+            },
+        )
+
+    def test_presence_audience_excludes_unrelated_users(self):
+        self.assertNotIn(
+            self.dave.pk,
+            RealtimeEphemeralSelector
+            .presence_user_ids(
+                user_id=self.alice.pk,
+            ),
         )
 
     def test_presence_is_multi_connection_safe(self):

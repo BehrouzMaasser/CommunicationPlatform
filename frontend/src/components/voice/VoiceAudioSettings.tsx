@@ -20,6 +20,33 @@ type VoiceAudioSettingsProps = {
 }
 
 
+function AudioSettingsIcon() {
+  return (
+    <svg
+      className="voice-audio-settings-trigger-icon"
+      viewBox="0 0 24 24"
+      aria-hidden="true"
+    >
+      <circle
+        cx="12"
+        cy="12"
+        r="3.25"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2"
+      />
+      <path
+        d="M12 2.75v2.1M12 19.15v2.1M2.75 12h2.1M19.15 12h2.1M5.46 5.46l1.48 1.48M17.06 17.06l1.48 1.48M18.54 5.46l-1.48 1.48M6.94 17.06l-1.48 1.48"
+        fill="none"
+        stroke="currentColor"
+        strokeLinecap="round"
+        strokeWidth="2"
+      />
+    </svg>
+  )
+}
+
+
 function VoiceAudioSettings({
   buttonSize = 'sm',
 }: VoiceAudioSettingsProps) {
@@ -496,9 +523,11 @@ function VoiceAudioSettings({
             buttonSize === 'sm'
               ? 'btn-sm '
               : ''
-          }btn-outline-secondary text-nowrap`
+          }btn-outline-secondary text-nowrap voice-audio-settings-trigger`
         }
         type="button"
+        aria-label="Audio settings"
+        title="Audio settings"
         aria-expanded={open}
         onClick={() => {
           const nextOpen = !open
@@ -511,7 +540,8 @@ function VoiceAudioSettings({
           }
         }}
       >
-        Audio
+        <AudioSettingsIcon />
+        <span>Audio</span>
       </button>
 
       {settingsPanel}

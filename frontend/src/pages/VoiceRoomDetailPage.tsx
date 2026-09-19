@@ -27,6 +27,7 @@ import {
   updateVoiceRoomAvatar,
 } from '../api/voice'
 import {
+  useRealtime,
   useRealtimeEvent,
 } from '../realtime/useRealtime'
 import {
@@ -77,6 +78,8 @@ function errorText(error: unknown): string {
 function VoiceRoomDetailPage() {
   const { roomId } = useParams()
   const navigate = useNavigate()
+  const { isUserOnline } =
+    useRealtime()
 
   const {
     currentUserId,
@@ -496,6 +499,8 @@ function VoiceRoomDetailPage() {
       return
     }
 
+    const form = event.currentTarget
+
     setRoomSettingsBusy('avatar')
     setRoomSettingsError(null)
     setRoomSettingsNotice(null)
@@ -507,7 +512,7 @@ function VoiceRoomDetailPage() {
       )
       setRoom(updated)
       setAvatarFile(null)
-      event.currentTarget.reset()
+      form.reset()
       setRoomSettingsNotice('Voice Room avatar updated.')
     } catch (requestError) {
       setRoomSettingsError(errorText(requestError))
@@ -1111,6 +1116,12 @@ function VoiceRoomDetailPage() {
                       participation.user.id ===
                         currentUserId
 
+                    const online =
+                      isCurrentUser
+                      || isUserOnline(
+                        participation.user.id,
+                      )
+
                     const volumePercent =
                       Math.round(
                         getParticipantVolume(
@@ -1145,11 +1156,18 @@ function VoiceRoomDetailPage() {
                         key={participation.id}
                       >
                         <div className="voice-participant-identity">
-                          <Avatar
-                            user={participation.user}
-                            size="sm"
-                            alt=""
-                          />
+                          <span className="directory-user-avatar-wrap">
+                            <Avatar
+                              user={participation.user}
+                              size="sm"
+                              alt=""
+                            />
+                            <span
+                              className={`directory-presence-dot${online ? ' is-online' : ''}`}
+                              title={online ? 'Online' : 'Offline'}
+                              aria-hidden="true"
+                            />
+                          </span>
 
                           <div className="min-width-0">
                             <div className="fw-semibold text-truncate">
@@ -1158,6 +1176,12 @@ function VoiceRoomDetailPage() {
                                 ? ' · you'
                                 : ''}
                             </div>
+
+                            <span
+                              className={`voice-participant-presence${online ? '' : ' is-offline'}`}
+                            >
+                              {online ? 'Online' : 'Offline'}
+                            </span>
 
                             <span
                               className={`voice-participant-state${isMuted ? ' voice-participant-state-muted' : ''}${isMuted || isSpeaking ? '' : ' invisible'}`}
@@ -1463,60 +1487,78 @@ function VoiceRoomDetailPage() {
           ) : (
             <div className="list-group">
               {members.map(
-                (membership) => (
-                  <div
-                    className="list-group-item"
-                    key={membership.id}
-                  >
-                    <div className="d-flex justify-content-between align-items-center gap-3">
-                      <div className="directory-user-identity">
-                        <Avatar
-                          user={membership.user}
-                          size="sm"
-                          alt=""
-                        />
+                (membership) => {
+                  const online =
+                    membership.user.id ===
+                      currentUserId
+                    || isUserOnline(
+                      membership.user.id,
+                    )
 
-                        <span className="directory-user-copy">
-                          <span className="directory-user-name">
-                            @{membership.user.username}
+                  return (
+                    <div
+                      className="list-group-item"
+                      key={membership.id}
+                    >
+                      <div className="d-flex justify-content-between align-items-center gap-3">
+                        <div className="directory-user-identity">
+                          <span className="directory-user-avatar-wrap">
+                            <Avatar
+                              user={membership.user}
+                              size="sm"
+                              alt=""
+                            />
+                            <span
+                              className={`directory-presence-dot${online ? ' is-online' : ''}`}
+                              title={online ? 'Online' : 'Offline'}
+                              aria-hidden="true"
+                            />
                           </span>
 
-                          {membership.user.id ===
-                            room.owner.id && (
-                            <span className="directory-user-state">
-                              Owner
+                          <span className="directory-user-copy">
+                            <span className="directory-user-name">
+                              @{membership.user.username}
                             </span>
-                          )}
-                        </span>
-                      </div>
+                            <span
+                              className={`directory-user-state${online ? '' : ' is-offline'}`}
+                            >
+                              {membership.user.id ===
+                                room.owner.id
+                                ? 'Owner · '
+                                : ''}
+                              {online ? 'Online' : 'Offline'}
+                            </span>
+                          </span>
+                        </div>
 
-                      {currentUserId ===
-                        room.owner.id
-                        &&
-                        membership.user.id !==
-                          room.owner.id && (
-                        <button
-                          className="btn btn-sm btn-outline-danger"
-                          type="button"
-                          disabled={
-                            pendingMembershipAction !==
-                              null
-                          }
-                          onClick={() =>
-                            void handleRemoveMember(
-                              membership.user.id,
-                            )
-                          }
-                        >
-                          {pendingMembershipAction ===
-                          `remove-${membership.user.id}`
-                            ? 'Removing…'
-                            : 'Remove'}
-                        </button>
-                      )}
+                        {currentUserId ===
+                          room.owner.id
+                          &&
+                          membership.user.id !==
+                            room.owner.id && (
+                          <button
+                            className="btn btn-sm btn-outline-danger"
+                            type="button"
+                            disabled={
+                              pendingMembershipAction !==
+                                null
+                            }
+                            onClick={() =>
+                              void handleRemoveMember(
+                                membership.user.id,
+                              )
+                            }
+                          >
+                            {pendingMembershipAction ===
+                            `remove-${membership.user.id}`
+                              ? 'Removing…'
+                              : 'Remove'}
+                          </button>
+                        )}
+                      </div>
                     </div>
-                  </div>
-                ),
+                  )
+                },
               )}
             </div>
           )}
